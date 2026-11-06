@@ -45,7 +45,7 @@ struct Vehicle {
     float forwardSpeed() const { return dot(vel, forward()); }
     mat4 chassisMatrix() const;  // ground-aligned frame
     mat4 bodyMatrix() const;     // + roll/pitch
-    mat4 wheelMatrix(const CarModel& m, int i) const;
+    mat4 wheelMatrix(const CarModel& m, int i, bool spin = true) const;
     void placeAt(vec3 p, float heading, const World& w);
 };
 

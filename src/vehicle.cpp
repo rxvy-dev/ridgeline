@@ -292,12 +292,13 @@ mat4 Vehicle::bodyMatrix() const {
     return chassisMatrix() * translate(vec3(0, 0.02f, 0)) * rotateX(bodyPitch) * rotateZ(bodyRoll);
 }
 
-mat4 Vehicle::wheelMatrix(const CarModel& m, int i) const {
+mat4 Vehicle::wheelMatrix(const CarModel& m, int i, bool spin) const {
     bool front = i < 2, rightSide = (i % 2) == 1;
     mat4 M = chassisMatrix() * translate(m.wheelPos[i]);
     if (front) M = M * rotateY(-wheelSteer);
-    if (rightSide) M = M * rotateY(PI) * rotateX(-wheelSpin);
-    else M = M * rotateX(wheelSpin);
+    float a = spin ? wheelSpin : 0.f;
+    if (rightSide) M = M * rotateY(PI) * rotateX(-a);
+    else M = M * rotateX(a);
     return M * scale(vec3(m.wheelW, m.wheelR, m.wheelR));
 }
 

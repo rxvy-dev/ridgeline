@@ -38,55 +38,104 @@ CarRatings rateCar(const CarSpec& s) {
 }
 
 // ---------------------------------------------------------------- body shapes
-struct Shape { float clear, nose, belt, tail, roof, sA, sB, sC, sD, roofRatio, hip; };
+struct Shape { float clear, nose, belt, tail, roof, sA, sB, sC, sD, roofRatio, hip, flare; int spokes; };
 
 static Shape shapeFor(int body) {
     switch (body) {
-        case BODY_HATCH:     return {0.11f, 0.43f, 0.63f, 0.66f, 0.98f, 0.22f, 0.42f, 0.86f, 1.00f, 0.82f, 0.00f};
-        case BODY_RALLY:     return {0.13f, 0.44f, 0.63f, 0.67f, 0.98f, 0.22f, 0.42f, 0.85f, 1.00f, 0.83f, 0.03f};
-        case BODY_MUSCLE:    return {0.10f, 0.55f, 0.66f, 0.64f, 0.98f, 0.40f, 0.53f, 0.70f, 0.87f, 0.74f, 0.03f};
-        case BODY_COUPE:     return {0.09f, 0.42f, 0.65f, 0.68f, 0.98f, 0.34f, 0.50f, 0.64f, 0.88f, 0.72f, 0.04f};
-        case BODY_MIDENGINE: return {0.08f, 0.36f, 0.64f, 0.76f, 0.98f, 0.20f, 0.40f, 0.52f, 0.80f, 0.66f, 0.05f};
-        case BODY_TRUCK:     return {0.17f, 0.57f, 0.68f, 0.68f, 0.98f, 0.28f, 0.40f, 0.93f, 1.00f, 0.88f, 0.02f};
-        case BODY_GT:        return {0.08f, 0.46f, 0.66f, 0.70f, 0.98f, 0.42f, 0.56f, 0.68f, 0.90f, 0.68f, 0.04f};
-        case BODY_HYPER:     return {0.07f, 0.34f, 0.64f, 0.82f, 0.98f, 0.18f, 0.40f, 0.48f, 0.78f, 0.60f, 0.06f};
+        case BODY_HATCH:     return {0.11f, 0.45f, 0.63f, 0.68f, 0.98f, 0.22f, 0.43f, 0.86f, 1.00f, 0.84f, 0.00f, 0.02f, 7};
+        case BODY_RALLY:     return {0.13f, 0.46f, 0.63f, 0.69f, 0.98f, 0.22f, 0.43f, 0.85f, 1.00f, 0.84f, 0.02f, 0.05f, 6};
+        case BODY_MUSCLE:    return {0.10f, 0.56f, 0.67f, 0.66f, 0.98f, 0.40f, 0.54f, 0.70f, 0.88f, 0.74f, 0.03f, 0.04f, 5};
+        case BODY_COUPE:     return {0.09f, 0.44f, 0.66f, 0.70f, 0.98f, 0.34f, 0.51f, 0.64f, 0.89f, 0.72f, 0.04f, 0.04f, 10};
+        case BODY_MIDENGINE: return {0.08f, 0.37f, 0.64f, 0.77f, 0.98f, 0.20f, 0.41f, 0.52f, 0.81f, 0.66f, 0.05f, 0.06f, 10};
+        case BODY_TRUCK:     return {0.17f, 0.58f, 0.69f, 0.69f, 0.98f, 0.28f, 0.41f, 0.93f, 1.00f, 0.88f, 0.02f, 0.06f, 6};
+        case BODY_GT:        return {0.08f, 0.47f, 0.66f, 0.71f, 0.98f, 0.42f, 0.57f, 0.68f, 0.91f, 0.68f, 0.04f, 0.05f, 5};
+        case BODY_HYPER:     return {0.07f, 0.35f, 0.64f, 0.83f, 0.98f, 0.18f, 0.41f, 0.48f, 0.79f, 0.60f, 0.06f, 0.07f, 10};
     }
     return shapeFor(BODY_COUPE);
 }
 
-static void buildWheelMesh(MeshBuilder& b) {
-    const int S = 24;
-    vec4 rubber(0.06f, 0.06f, 0.065f, 0), dark(0.09f, 0.09f, 0.1f, 0), chrome(0.7f, 0.7f, 0.72f, 4);
+// ---------------------------------------------------------------- wheels
+// Unit wheel: radius 1, width 1 along x, outer face at +x.
+static void buildWheelMesh(MeshBuilder& b, int spokes, bool darkRim) {
+    const int S = 48;
+    vec4 rubber(1, 1, 1, 8), alloy = darkRim ? vec4(0.2f, 0.2f, 0.22f, 9) : vec4(1, 1, 1, 7), lip(1, 1, 1, 4), dark(0.05f, 0.05f, 0.06f, 9), disc(0.42f, 0.42f, 0.42f, 0);
+    auto ring = [&](float a) { return vec3(0, std::cos(a), std::sin(a)); };
+    // tyre: revolve a rounded profile (x, r)
+    const float prof[][2] = {{-0.50f, 0.66f}, {-0.50f, 0.80f}, {-0.46f, 0.93f}, {-0.38f, 0.99f}, {0.38f, 0.99f}, {0.46f, 0.93f}, {0.50f, 0.80f}, {0.50f, 0.66f}};
+    const int P = 8;
+    uint32_t base = uint32_t(b.v.size());
+    for (int i = 0; i <= S; i++) {
+        float a = i / float(S) * 2 * PI;
+        vec3 d = ring(a);
+        for (int k = 0; k < P; k++) {
+            int kp = std::max(k - 1, 0), kn = std::min(k + 1, P - 1);
+            vec2 t(prof[kn][0] - prof[kp][0], prof[kn][1] - prof[kp][1]);
+            vec3 n = normalize(vec3(0, 0, 0) + vec3(t.y, 0, 0) * -1.f + d * t.x);
+            float groove = (k >= 3 && k <= 4) ? (0.85f + 0.15f * ((i % 3) == 0)) : 1.f;
+            b.add(vec3(prof[k][0], 0, 0) + d * prof[k][1], normalize(n), vec4(groove, groove, groove, 8));
+        }
+    }
+    for (int i = 0; i < S; i++)
+        for (int k = 0; k + 1 < P; k++) {
+            uint32_t a0 = base + i * P + k, a1 = base + (i + 1) * P + k;
+            b.tri(a0, a0 + 1, a1 + 1);
+            b.tri(a0, a1 + 1, a1);
+        }
+    (void)rubber;
     for (int i = 0; i < S; i++) {
         float a0 = i / float(S) * 2 * PI, a1 = (i + 1) / float(S) * 2 * PI;
-        vec3 d0(0, std::cos(a0), std::sin(a0)), d1(0, std::cos(a1), std::sin(a1));
-        // tread (smooth normals)
-        uint32_t i0 = b.add(d0 + vec3(0.5f, 0, 0), d0, rubber), i1 = b.add(d1 + vec3(0.5f, 0, 0), d1, rubber);
-        uint32_t i2 = b.add(d1 + vec3(-0.5f, 0, 0), d1, rubber), i3 = b.add(d0 + vec3(-0.5f, 0, 0), d0, rubber);
-        b.tri(i0, i2, i1);
-        b.tri(i0, i3, i2);
-        // outer sidewall (+x)
-        b.flatQuad(vec3(0.5f, 0, 0) + d0, vec3(0.5f, 0, 0) + d1, vec3(0.5f, 0, 0) + d1 * 0.7f, vec3(0.5f, 0, 0) + d0 * 0.7f, rubber);
-        // inner sidewall (-x)
-        b.flatQuad(vec3(-0.5f, 0, 0) + d0, vec3(-0.5f, 0, 0) + d0 * 0.2f, vec3(-0.5f, 0, 0) + d1 * 0.2f, vec3(-0.5f, 0, 0) + d1, dark);
-        // rim lip
-        b.flatQuad(vec3(0.46f, 0, 0) + d0 * 0.7f, vec3(0.46f, 0, 0) + d1 * 0.7f, vec3(0.46f, 0, 0) + d1 * 0.62f, vec3(0.46f, 0, 0) + d0 * 0.62f, chrome);
-        // spokes / recesses
-        bool spoke = (i % 4) < 2;
-        float x = spoke ? 0.44f : 0.36f;
-        b.flatQuad(vec3(x, 0, 0) + d0 * 0.62f, vec3(x, 0, 0) + d1 * 0.62f, vec3(x, 0, 0) + d1 * 0.2f, vec3(x, 0, 0) + d0 * 0.2f, spoke ? chrome : dark);
-        // hub
-        b.flatTri(vec3(0.45f, 0, 0), vec3(0.45f, 0, 0) + d0 * 0.2f, vec3(0.45f, 0, 0) + d1 * 0.2f, chrome);
+        vec3 d0 = ring(a0), d1 = ring(a1);
+        // rim lip and inner barrel
+        b.flatQuad(vec3(0.48f, 0, 0) + d0 * 0.66f, vec3(0.48f, 0, 0) + d1 * 0.66f, vec3(0.46f, 0, 0) + d1 * 0.61f, vec3(0.46f, 0, 0) + d0 * 0.61f, lip);
+        b.flatQuad(vec3(0.46f, 0, 0) + d0 * 0.61f, vec3(0.46f, 0, 0) + d1 * 0.61f, vec3(-0.3f, 0, 0) + d1 * 0.61f, vec3(-0.3f, 0, 0) + d0 * 0.61f, dark);
+        b.flatQuad(vec3(-0.3f, 0, 0) + d0 * 0.61f, vec3(-0.3f, 0, 0) + d1 * 0.61f, vec3(-0.3f, 0, 0) + d1 * 0.1f, vec3(-0.3f, 0, 0) + d0 * 0.1f, dark);
+        // brake disc
+        b.flatQuad(vec3(0.02f, 0, 0) + d0 * 0.56f, vec3(0.02f, 0, 0) + d1 * 0.56f, vec3(0.02f, 0, 0) + d1 * 0.24f, vec3(0.02f, 0, 0) + d0 * 0.24f, disc);
+        // hub cap
+        b.flatTri(vec3(0.47f, 0, 0), vec3(0.45f, 0, 0) + d0 * 0.16f, vec3(0.45f, 0, 0) + d1 * 0.16f, lip);
+        b.flatQuad(vec3(0.45f, 0, 0) + d0 * 0.16f, vec3(0.42f, 0, 0) + d0 * 0.22f, vec3(0.42f, 0, 0) + d1 * 0.22f, vec3(0.45f, 0, 0) + d1 * 0.16f, alloy);
+    }
+    // spokes: tapered prisms from hub to rim
+    for (int sp = 0; sp < spokes; sp++) {
+        float a = sp / float(spokes) * 2 * PI;
+        float wHub = spokes > 7 ? 0.05f : 0.09f, wRim = spokes > 7 ? 0.035f : 0.075f;
+        vec3 d = ring(a), t = ring(a + PI * 0.5f);
+        vec3 h0 = d * 0.2f - t * wHub, h1 = d * 0.2f + t * wHub, r0 = d * 0.62f - t * wRim, r1 = d * 0.62f + t * wRim;
+        float xf = 0.44f, xb = 0.30f;
+        auto X = [&](vec3 p, float x) { return p + vec3(x, 0, 0); };
+        b.flatQuad(X(h0, xf), X(h1, xf), X(r1, xf + 0.02f), X(r0, xf + 0.02f), alloy);
+        b.flatQuad(X(h1, xf), X(h1, xb), X(r1, xb), X(r1, xf + 0.02f), vec4(0.6f, 0.6f, 0.6f, alloy.w));
+        b.flatQuad(X(h0, xb), X(h0, xf), X(r0, xf + 0.02f), X(r0, xb), vec4(0.6f, 0.6f, 0.6f, alloy.w));
+        // lug nut
+        vec3 ln = ring(a + PI / spokes) * 0.12f + vec3(0.46f, 0, 0);
+        b.box(ln, vec3(0.012f, 0.022f, 0.022f), lip);
     }
 }
 
+static void buildCaliper(MeshBuilder& b) {
+    // a curved block hugging the disc, towards the rear-top
+    const int K = 6;
+    vec4 red(1, 1, 1, 11);
+    for (int k = 0; k < K; k++) {
+        float a0 = lerpf(1.95f, 2.75f, k / float(K)), a1 = lerpf(1.95f, 2.75f, (k + 1) / float(K));
+        vec3 d0(0, std::cos(a0), std::sin(a0)), d1(0, std::cos(a1), std::sin(a1));
+        b.flatQuad(vec3(0.12f, 0, 0) + d0 * 0.58f, vec3(0.12f, 0, 0) + d1 * 0.58f, vec3(0.12f, 0, 0) + d1 * 0.40f, vec3(0.12f, 0, 0) + d0 * 0.40f, red);
+        b.flatQuad(vec3(0.12f, 0, 0) + d0 * 0.58f, vec3(-0.08f, 0, 0) + d0 * 0.58f, vec3(-0.08f, 0, 0) + d1 * 0.58f, vec3(0.12f, 0, 0) + d1 * 0.58f, red);
+    }
+}
+
+// ---------------------------------------------------------------- body
 void CarModel::build(const CarSpec& s) {
     Shape sh = shapeFor(s.body);
     const float L = s.length, W = s.width, H = s.height;
-    const int NS = 30, NP = 9;
     float zf = L * 0.5f;
     float axF = s.wheelbase * 0.5f, axR = -s.wheelbase * 0.5f;
-    float sRear = (zf - axR) / L;
+    if (s.body == BODY_MIDENGINE || s.body == BODY_HYPER) { axF += 0.08f; axR += 0.08f; }
+    float sFront = (zf - axF) / L, sRear = (zf - axR) / L;
+    wheelR = s.wheelR;
+    wheelW = s.body == BODY_TRUCK ? 0.33f : (s.body == BODY_HYPER || s.body == BODY_MIDENGINE ? 0.30f : 0.26f);
+    float track = W * 0.5f - wheelW * 0.5f - 0.035f;
+    float archR = wheelR * 1.13f;
 
     auto cf = [&](float t) { return smoothstepf(sh.sA, sh.sB, t) * (1.f - smoothstepf(sh.sC, std::max(sh.sD, sh.sC + 0.01f), t)); };
     auto belt = [&](float t) {
@@ -95,182 +144,330 @@ void CarModel::build(const CarSpec& s) {
         y = lerpf(y, sh.tail, smoothstepf(0.72f, 1.0f, t));
         return y * H;
     };
+    auto gauss = [](float x, float w) { return std::exp(-(x * x) / (w * w)); };
     auto halfW = [&](float t) {
-        float w = W * 0.5f * (0.80f + 0.20f * std::sqrt(smoothstepf(0.f, 0.14f, t))) * (0.86f + 0.14f * (1.f - smoothstepf(0.88f, 1.f, t)));
-        w += sh.hip * W * 0.5f * std::exp(-std::pow((t - sRear) / 0.09f, 2.f));
+        float e0 = std::sqrt(smoothstepf(0.f, 0.11f, t)), e1 = std::sqrt(smoothstepf(0.f, 0.08f, 1.f - t));
+        float w = W * 0.5f * (0.70f + 0.30f * e0) * (0.80f + 0.20f * e1);
+        w += sh.hip * W * 0.5f * gauss(t - sRear, 0.1f);
         return w;
     };
-    auto bottomY = [&](float t) { return (sh.clear + 0.05f * (1.f - smoothstepf(0.f, 0.1f, t)) + 0.06f * smoothstepf(0.9f, 1.f, t)) * H; };
-    auto topY = [&](float t) { float b = belt(t); return b + cf(t) * (sh.roof * H - b); };
+    auto endRound = [&](float t) {  // 0 at the very ends, 1 a little way in
+        return std::sqrt(smoothstepf(0.f, 0.07f, t)) * std::sqrt(smoothstepf(0.f, 0.05f, 1.f - t));
+    };
+    auto bottomY = [&](float t) { return (sh.clear + 0.06f * (1.f - smoothstepf(0.f, 0.09f, t)) + 0.07f * smoothstepf(0.9f, 1.f, t)) * H + (1.f - endRound(t)) * 0.05f * H; };
+    auto topY = [&](float t) { float b = belt(t) - (1.f - endRound(t)) * 0.06f * H; return b + cf(t) * (sh.roof * H - b); };
+    auto archY = [&](float z) {
+        float best = -1e9f;
+        for (float az : {axF, axR}) {
+            float dz = z - az;
+            if (std::fabs(dz) < archR) best = std::max(best, wheelR + std::sqrt(archR * archR - dz * dz));
+        }
+        return best;
+    };
 
-    vec3 P[NS][NP];
-    float cfs[NS];
+    // ---- stations, with thin rows at the door shut lines
+    std::vector<float> ts;
+    const int NSU = 96;
+    for (int i = 0; i < NSU; i++) ts.push_back(i / float(NSU - 1));
+    for (float az : {axF, axR}) {
+        float tc = (zf - az) / L, span = archR * 1.25f / L;
+        for (int k = -40; k <= 40; k++) ts.push_back(tc + span * k / 40.f);
+    }
+    std::vector<float> seams;
+    float seamFront = sh.sA + 0.03f;
+    float seamRear = std::min(sh.sC - 0.02f, sRear - archR / L - 0.03f);
+    bool doors = s.body != BODY_HYPER;
+    if (doors && seamRear > seamFront + 0.15f) { seams.push_back(seamFront); seams.push_back(seamRear); }
+    for (float sm : seams) { ts.push_back(sm - 0.0016f); ts.push_back(sm + 0.0016f); }
+    std::sort(ts.begin(), ts.end());
+    for (auto& t : ts) t = clampf(t, 0.f, 1.f);
+    ts.erase(std::unique(ts.begin(), ts.end(), [](float a, float b) { return std::fabs(a - b) < 0.0008f; }), ts.end());
+    const int NS = int(ts.size());
+    auto isSeam = [&](float t0, float t1) {
+        for (float sm : seams) if (t0 >= sm - 0.0017f && t1 <= sm + 0.0017f) return true;
+        return false;
+    };
+
+    // ---- profile: 9 control points per section, refined with Catmull-Rom
+    const int NC = 9;
+    const int sub[NC - 1] = {3, 3, 4, 3, 4, 4, 3, 2};
+    int NP = 1;
+    for (int k : sub) NP += k;
+    std::vector<int> segOf(NP, 0);
+    {
+        int j = 0;
+        for (int sgi = 0; sgi < NC - 1; sgi++) for (int k = 0; k < sub[sgi]; k++) segOf[j++] = sgi;
+        segOf[NP - 1] = NC - 2;
+    }
+    std::vector<vec3> P(NS * NP), N(NS * NP, vec3(0, 0, 0));
+    std::vector<float> cfs(NS);
+    auto at = [&](int i, int j) -> vec3& { return P[i * NP + j]; };
     for (int i = 0; i < NS; i++) {
-        float t = i / float(NS - 1);
+        float t = ts[i];
         float z = zf - t * L;
-        float w = halfW(t), b = belt(t), top = topY(t), bot = bottomY(t), c = cf(t);
-        float wTop = lerpf(w * 0.86f, w * sh.roofRatio, c);
-        float crown = (0.025f + 0.02f * c) * H;
-        float stripeX = std::min(0.2f, wTop * 0.32f);
-        P[i][0] = vec3(0, top + crown, z);
-        P[i][1] = vec3(stripeX, top + crown * 0.8f, z);
-        P[i][2] = vec3(wTop, top - 0.01f, z);
-        P[i][3] = vec3(w * 0.97f, b, z);
-        P[i][4] = vec3(w, b - 0.1f * H, z);
-        P[i][5] = vec3(w, lerpf(b - 0.1f * H, bot, 0.55f), z);
-        P[i][6] = vec3(w * 0.96f, bot + 0.08f * H, z);
-        P[i][7] = vec3(w * 0.82f, bot, z);
-        P[i][8] = vec3(0, bot, z);
+        float w = halfW(t), b = belt(t) - (1.f - endRound(t)) * 0.06f * H, top = topY(t), bot = bottomY(t), c = cf(t);
+        float wTop = lerpf(w * 0.84f, w * sh.roofRatio, c);
+        float crown = (0.03f + 0.025f * c) * H;
+        float flare = 1.f + sh.flare * (gauss(t - sFront, 0.075f) + gauss(t - sRear, 0.085f));
+        vec2 C[NC] = {
+            {0, top + crown},
+            {wTop * 0.55f, top + crown * 0.75f},
+            {wTop, top - 0.012f},
+            {w * 0.96f, b + 0.01f},
+            {w * flare, b - 0.09f * H},
+            {w * flare * 0.995f, lerpf(b - 0.09f * H, bot, 0.5f)},
+            {w * 0.95f, bot + 0.07f * H},
+            {w * 0.78f, bot},
+            {0, bot},
+        };
+        int j = 0;
+        for (int sgi = 0; sgi < NC - 1; sgi++) {
+            vec2 p0 = C[std::max(sgi - 1, 0)], p1 = C[sgi], p2 = C[sgi + 1], p3 = C[std::min(sgi + 2, NC - 1)];
+            for (int k = 0; k < sub[sgi]; k++) {
+                float u = k / float(sub[sgi]);
+                float u2 = u * u, u3 = u2 * u;
+                vec2 q = (p1 * 2.f + (p2 - p0) * u + (p0 * 2.f - p1 * 5.f + p2 * 4.f - p3) * u2 + (p1 * 3.f - p0 - p2 * 3.f + p3) * u3) * 0.5f;
+                if (sgi == 0 || sgi == NC - 2) q.y = lerpf(p1.y, p2.y, u);  // keep roof/floor centre flat
+                at(i, j++) = vec3(std::max(q.x, 0.f), q.y, z);
+            }
+        }
+        at(i, NP - 1) = vec3(0, bot, z);
         cfs[i] = c;
     }
     // smooth normals for the +x half
-    vec3 N[NS][NP];
-    for (auto& row : N) for (auto& n : row) n = vec3(0, 0, 0);
     for (int i = 0; i + 1 < NS; i++)
         for (int j = 0; j + 1 < NP; j++) {
-            vec3 A = P[i][j], B = P[i + 1][j], C = P[i + 1][j + 1], D = P[i][j + 1];
+            vec3 A = at(i, j), B = at(i + 1, j), C = at(i + 1, j + 1), D = at(i, j + 1);
             vec3 n = cross(D - A, C - A) + cross(C - A, B - A);
-            N[i][j] += n; N[i + 1][j] += n; N[i + 1][j + 1] += n; N[i][j + 1] += n;
+            N[i * NP + j] += n; N[(i + 1) * NP + j] += n; N[(i + 1) * NP + j + 1] += n; N[i * NP + j + 1] += n;
         }
-    for (auto& row : N) for (auto& n : row) n = normalize(n);
+    for (auto& n : N) n = normalize(n);
+    // wheel-arch cut-outs: lift the lower side up around each wheel (normals keep the panel shape)
+    for (int i = 0; i < NS; i++) {
+        float ay = archY(at(i, 0).z);
+        int k = 0;
+        for (int jj = 0; jj < NP; jj++) {
+            if (segOf[jj] < 4) continue;
+            vec3& q = at(i, jj);
+            if (ay > q.y) {
+                q.y = ay + 0.002f * k++;
+                if (segOf[jj] >= 6) N[i * NP + jj] = vec3(0, -1, 0);
+            }
+        }
+    }
 
     MeshBuilder b;
-    vec4 paint(1, 1, 1, 1), stripe(1, 1, 1, 5), glass(0, 0, 0, 2), under(0.05f, 0.05f, 0.055f, 0), trim(0.08f, 0.08f, 0.09f, 0);
     float pillarS = (sh.sB + sh.sC) * 0.5f;
+    auto aoAt = [&](vec3 p) {
+        float ao = lerpf(0.55f, 1.f, smoothstepf(bottomY(0.5f), bottomY(0.5f) + 0.35f * H, p.y));
+        if (archY(p.z) > 0) ao *= lerpf(0.6f, 1.f, smoothstepf(archY(p.z) - 0.05f, archY(p.z) + 0.25f, p.y));
+        return ao;
+    };
     for (int i = 0; i + 1 < NS; i++) {
-        float t0 = i / float(NS - 1), t1 = (i + 1) / float(NS - 1);
+        float t0 = ts[i], t1 = ts[i + 1];
         float cAvg = (cfs[i] + cfs[i + 1]) * 0.5f;
         bool slope = cfs[i] > 0.03f && cfs[i + 1] > 0.03f && (cfs[i] < 0.97f || cfs[i + 1] < 0.97f);
-        bool pillar = std::fabs((t0 + t1) * 0.5f - pillarS) < 0.025f && s.body != BODY_TRUCK;
+        bool pillar = std::fabs((t0 + t1) * 0.5f - pillarS) < 0.022f && s.body != BODY_TRUCK;
+        bool seam = isSeam(t0, t1);
         for (int j = 0; j + 1 < NP; j++) {
-            vec4 m = paint;
-            if (j <= 1) m = slope ? glass : ((j == 0 && s.stripes) ? stripe : paint);
-            else if (j == 2) m = (cAvg > 0.5f && !pillar) ? glass : paint;
-            else if (j == 7) m = under;
-            else if (j == 6 && (s.body == BODY_TRUCK || s.body == BODY_RALLY)) m = trim;
+            int sg = segOf[j];
+            float matId = 1;
+            if (sg <= 1) matId = slope ? 2 : ((sg == 0 && s.stripes) ? 5 : 1);
+            else if (sg == 2) matId = cAvg > 0.5f ? (pillar ? 9 : 2) : 1;
+            else if (sg == 3 && j == 0 + (sub[0] + sub[1] + sub[2]) && cAvg > 0.5f) matId = 4;  // chrome window trim
+            else if (sg >= 7) matId = 9;
+            else if (sg == 6 && (s.body == BODY_TRUCK || s.body == BODY_RALLY)) matId = 9;
+            if (seam && sg >= 3 && sg <= 6) matId = 6;
+            // the underside of an arch lift becomes the dark wheel well
+            if (sg >= 4 && archY(at(i, j).z) > 0 && at(i, j + 1).y > bottomY(t0) + 0.15f && at(i, j).y > bottomY(t0) + 0.15f &&
+                std::fabs(at(i, j).y - at(i, j + 1).y) < 0.02f) matId = 9;
             for (int side = 0; side < 2; side++) {
                 float sx = side == 0 ? 1.f : -1.f;
-                auto V = [&](int a, int c) { return vec3(P[a][c].x * sx, P[a][c].y, P[a][c].z); };
-                auto Nn = [&](int a, int c) { return vec3(N[a][c].x * sx, N[a][c].y, N[a][c].z); };
-                uint32_t A = b.add(V(i, j), Nn(i, j), m), B = b.add(V(i + 1, j), Nn(i + 1, j), m);
-                uint32_t C = b.add(V(i + 1, j + 1), Nn(i + 1, j + 1), m), D = b.add(V(i, j + 1), Nn(i, j + 1), m);
+                auto V = [&](int a, int c) { vec3 q = at(a, c); return vec3(q.x * sx, q.y, q.z); };
+                auto Nn = [&](int a, int c) { vec3 q = N[a * NP + c]; return vec3(q.x * sx, q.y, q.z); };
+                auto col = [&](int a, int c) { float ao = aoAt(at(a, c)); return vec4(ao, ao, ao, matId); };
+                uint32_t A = b.add(V(i, j), Nn(i, j), col(i, j)), B = b.add(V(i + 1, j), Nn(i + 1, j), col(i + 1, j));
+                uint32_t C = b.add(V(i + 1, j + 1), Nn(i + 1, j + 1), col(i + 1, j + 1)), D = b.add(V(i, j + 1), Nn(i, j + 1), col(i, j + 1));
                 if (side == 0) { b.tri(A, D, C); b.tri(A, C, B); }
                 else { b.tri(A, C, D); b.tri(A, B, C); }
             }
         }
     }
-    // end caps
+    // ---- end caps
     for (int cap = 0; cap < 2; cap++) {
         int i = cap == 0 ? 0 : NS - 1;
-        float zc = P[i][0].z;
-        float yc = (P[i][0].y + P[i][8].y) * 0.5f;
+        float zc = at(i, 0).z;
+        float yc = (at(i, 0).y + at(i, NP - 1).y) * 0.5f;
         vec3 n(0, 0, cap == 0 ? 1.f : -1.f);
-        uint32_t c = b.add(vec3(0, yc, zc), n, paint);
+        uint32_t c = b.add(vec3(0, yc, zc), n, vec4(1, 1, 1, 1));
         uint32_t first = uint32_t(b.v.size());
-        for (int j = 0; j < NP; j++) b.add(P[i][j], n, paint);
-        for (int j = 0; j < NP; j++) b.add(vec3(-P[i][j].x, P[i][j].y, P[i][j].z), n, paint);
+        for (int j = 0; j < NP; j++) b.add(at(i, j), n, vec4(1, 1, 1, segOf[j] >= 7 ? 9 : 1));
+        for (int j = 0; j < NP; j++) b.add(vec3(-at(i, j).x, at(i, j).y, at(i, j).z), n, vec4(1, 1, 1, segOf[j] >= 7 ? 9 : 1));
         for (int j = 0; j + 1 < NP; j++) {
             uint32_t a = first + j, a1 = first + j + 1, m = first + NP + j, m1 = first + NP + j + 1;
             if (cap == 0) { b.tri(c, a1, a); b.tri(c, m, m1); }
             else { b.tri(c, a, a1); b.tri(c, m1, m); }
         }
     }
-    // lights and grille
+
+    // ---- surface patches (lights) that follow the body
+    auto stationAt = [&](float t) {
+        for (int i = 0; i + 1 < NS; i++)
+            if (t <= ts[i + 1]) return i + (t - ts[i]) / std::max(ts[i + 1] - ts[i], 1e-5f);
+        return float(NS - 1);
+    };
+    auto surf = [&](float fi, float fj, vec3& pos, vec3& nrm) {
+        int i0 = std::clamp(int(fi), 0, NS - 2), j0 = std::clamp(int(fj), 0, NP - 2);
+        float ti = clampf(fi - i0, 0.f, 1.f), tj = clampf(fj - j0, 0.f, 1.f);
+        auto L2 = [&](const std::vector<vec3>& G) {
+            return lerp(lerp(G[i0 * NP + j0], G[(i0 + 1) * NP + j0], ti), lerp(G[i0 * NP + j0 + 1], G[(i0 + 1) * NP + j0 + 1], ti), tj);
+        };
+        pos = L2(P);
+        nrm = normalize(L2(N));
+    };
+    int jBelt = sub[0] + sub[1] + sub[2];
+    int jShoulder = jBelt + sub[3];
+    auto patch = [&](float t0, float t1, float j0, float j1, float off, vec4 col, int nt, int nu) {
+        float i0 = stationAt(t0), i1 = stationAt(t1);
+        for (int side = 0; side < 2; side++) {
+            float sx = side == 0 ? 1.f : -1.f;
+            std::vector<vec3> pp((nt + 1) * (nu + 1)), nn((nt + 1) * (nu + 1));
+            for (int a = 0; a <= nt; a++)
+                for (int c = 0; c <= nu; c++) {
+                    vec3 p, n;
+                    surf(lerpf(i0, i1, a / float(nt)), lerpf(j0, j1, c / float(nu)), p, n);
+                    p += n * off;
+                    pp[a * (nu + 1) + c] = vec3(p.x * sx, p.y, p.z);
+                    nn[a * (nu + 1) + c] = vec3(n.x * sx, n.y, n.z);
+                }
+            for (int a = 0; a < nt; a++)
+                for (int c = 0; c < nu; c++) {
+                    int k00 = a * (nu + 1) + c, k10 = (a + 1) * (nu + 1) + c, k11 = k10 + 1, k01 = k00 + 1;
+                    uint32_t A = b.add(pp[k00], nn[k00], col), B = b.add(pp[k10], nn[k10], col);
+                    uint32_t C = b.add(pp[k11], nn[k11], col), D = b.add(pp[k01], nn[k01], col);
+                    if (side == 0) { b.tri(A, D, C); b.tri(A, C, B); }
+                    else { b.tri(A, C, D); b.tri(A, B, C); }
+                }
+        }
+    };
+    // headlights: lens housing + bright inner element
+    patch(0.004f, 0.075f, jBelt - 1.2f, jShoulder + 1.5f, 0.004f, vec4(1, 1, 1, 10), 5, 4);
+    patch(0.016f, 0.034f, jBelt + 0.1f, jShoulder - 0.2f, 0.008f, vec4(0.75f, 0.73f, 0.66f, 3), 2, 2);
+    patch(0.042f, 0.060f, jBelt + 0.1f, jShoulder - 0.2f, 0.008f, vec4(0.75f, 0.73f, 0.66f, 3), 2, 2);
+    // tail lights
+    patch(0.935f, 0.997f, jBelt - 0.6f, jShoulder + 1.3f, 0.004f, vec4(0.85f, 0.04f, 0.03f, 3), 4, 4);
+    // side indicator + door handles
+    if (doors) {
+        float th = (seamFront + seamRear) * 0.5f + 0.06f;
+        patch(th, th + 0.025f, jShoulder + 0.4f, jShoulder + 0.9f, 0.006f, vec4(1, 1, 1, 4), 1, 1);
+    }
+
+    // ---- front & rear faces
     {
-        float zF = P[0][0].z + 0.012f, zR = P[NS - 1][0].z - 0.012f;
-        float w0 = P[0][4].x, wT = P[NS - 1][4].x;
-        float yN = P[0][3].y, yT = P[NS - 1][3].y;
-        float bN = P[0][8].y, bT = P[NS - 1][8].y;
-        vec4 head(1.0f, 0.97f, 0.88f, 3), tail(0.95f, 0.05f, 0.03f, 3), black(0.03f, 0.03f, 0.035f, 0);
-        for (int side = -1; side <= 1; side += 2) {
-            float x0 = side * w0 * 0.45f, x1 = side * w0 * 0.88f;
-            float y0 = yN - 0.13f, y1 = yN - 0.035f;
-            if (side > 0) b.flatQuad(vec3(x1, y0, zF), vec3(x1, y1, zF), vec3(x0, y1, zF), vec3(x0, y0, zF), head);
-            else b.flatQuad(vec3(x0, y0, zF), vec3(x0, y1, zF), vec3(x1, y1, zF), vec3(x1, y0, zF), head);
-            float tx0 = side * wT * 0.5f, tx1 = side * wT * 0.92f;
-            float ty0 = yT - 0.13f, ty1 = yT - 0.03f;
-            if (side > 0) b.flatQuad(vec3(tx0, ty0, zR), vec3(tx0, ty1, zR), vec3(tx1, ty1, zR), vec3(tx1, ty0, zR), tail);
-            else b.flatQuad(vec3(tx1, ty0, zR), vec3(tx1, ty1, zR), vec3(tx0, ty1, zR), vec3(tx0, ty0, zR), tail);
+        float zF = at(0, 0).z + 0.006f, zR = at(NS - 1, 0).z - 0.006f;
+        float w0 = at(0, jShoulder).x, wT = at(NS - 1, jShoulder).x;
+        float yTopF = at(0, jBelt).y, yBotF = at(0, NP - 1).y;
+        float yTopR = at(NS - 1, jBelt).y, yBotR = at(NS - 1, NP - 1).y;
+        vec4 black(1, 1, 1, 9), plate(1, 1, 1, 12), chrome(1, 1, 1, 4);
+        auto faceQ = [&](float x0, float x1, float y0, float y1, float z, bool front, vec4 col) {
+            if (y1 <= y0 + 0.01f) return;
+            if (front) b.flatQuad(vec3(x1, y0, z), vec3(x1, y1, z), vec3(x0, y1, z), vec3(x0, y0, z), col);
+            else b.flatQuad(vec3(x0, y0, z), vec3(x0, y1, z), vec3(x1, y1, z), vec3(x1, y0, z), col);
+        };
+        float fh = yTopF - yBotF;
+        bool bigGrille = s.body == BODY_MUSCLE || s.body == BODY_TRUCK || s.body == BODY_GT;
+        float gw = w0 * (bigGrille ? 0.55f : 0.36f);
+        float gy0 = yBotF + fh * 0.30f, gy1 = yBotF + fh * (bigGrille ? 0.86f : 0.62f);
+        faceQ(-gw, gw, gy0, gy1, zF, true, black);
+        if (bigGrille) for (int k = 1; k < 4; k++) {
+            float yy = lerpf(gy0, gy1, k / 4.f);
+            faceQ(-gw, gw, yy - 0.006f, yy + 0.006f, zF + 0.002f, true, chrome);
         }
-        float gw = w0 * (s.body == BODY_MUSCLE || s.body == BODY_TRUCK ? 0.42f : 0.34f);
-        float gy0 = bN + 0.05f, gy1 = std::max(gy0 + 0.06f, yN - 0.15f);
-        b.flatQuad(vec3(gw, gy0, zF), vec3(gw, gy1, zF), vec3(-gw, gy1, zF), vec3(-gw, gy0, zF), black);
-        b.flatQuad(vec3(-wT * 0.48f, yT - 0.12f, zR), vec3(-wT * 0.48f, yT - 0.04f, zR), vec3(wT * 0.48f, yT - 0.04f, zR), vec3(wT * 0.48f, yT - 0.12f, zR), black);
-        // diffuser / bumper shadow
-        b.flatQuad(vec3(-wT * 0.6f, bT, zR), vec3(-wT * 0.6f, bT + 0.07f, zR), vec3(wT * 0.6f, bT + 0.07f, zR), vec3(wT * 0.6f, bT, zR), black);
-    }
-    // wheel arches (dark discs on the body sides; the wheels sit flush over them)
-    wheelR = s.wheelR;
-    wheelW = s.body == BODY_TRUCK ? 0.32f : 0.26f;
-    float track = W * 0.5f - wheelW * 0.5f + 0.02f;
-    float zs[2] = {axF, axR};
-    for (int a = 0; a < 2; a++) {
-        float t = (zf - zs[a]) / L;
-        float wx = halfW(t) + 0.006f;
-        float bot = bottomY(t);
-        float R = wheelR * 1.16f;
-        float ths = std::asin(clampf((bot - wheelR) / R, -1.f, 1.f));
-        const int K = 14;
-        vec4 arch(0.02f, 0.02f, 0.025f, 0);
-        for (int side = -1; side <= 1; side += 2) {
-            vec3 c(side * wx, wheelR, zs[a]);
-            for (int k = 0; k < K; k++) {
-                float a0 = lerpf(ths, PI - ths, k / float(K)), a1 = lerpf(ths, PI - ths, (k + 1) / float(K));
-                vec3 p0 = c + vec3(0, std::sin(a0) * R, std::cos(a0) * R), p1 = c + vec3(0, std::sin(a1) * R, std::cos(a1) * R);
-                if (side > 0) b.flatTri(c, p1, p0, arch);
-                else b.flatTri(c, p0, p1, arch);
-            }
+        faceQ(-w0 * 0.7f, w0 * 0.7f, yBotF + fh * 0.04f, yBotF + fh * 0.2f, zF, true, black);  // lower intake
+        float rh = yTopR - yBotR;
+        faceQ(-wT * 0.6f, wT * 0.6f, yBotR, yBotR + rh * 0.18f, zR, false, black);           // diffuser
+        faceQ(-0.26f, 0.26f, yBotR + rh * 0.3f, yBotR + rh * 0.3f + 0.11f, zR, false, plate);  // plate
+        faceQ(-wT * 0.5f, wT * 0.5f, yTopR - rh * 0.22f, yTopR - rh * 0.1f, zR, false, black);
+        // exhaust tips
+        float ex = s.body == BODY_HATCH ? 0.f : wT * 0.55f;
+        for (int k = (s.body == BODY_HATCH ? 1 : -1); k <= 1; k += 2) {
+            float x = k * ex + (s.body == BODY_HATCH ? -wT * 0.5f : 0.f);
+            vec3 ep(x, yBotR + 0.07f, zR + 0.02f);
+            b.tube(ep + vec3(0, 0, 0.12f), ep - vec3(0, 0, 0.06f), 0.045f, 0.05f, 12, chrome);
+            b.flatQuad(ep - vec3(0.04f, 0.04f, 0.055f), ep + vec3(-0.04f, 0.04f, -0.055f), ep + vec3(0.04f, 0.04f, -0.055f), ep + vec3(0.04f, -0.04f, -0.055f), vec4(0.02f, 0.02f, 0.02f, 0));
         }
     }
+
     wheelPos[0] = vec3(track, wheelR, axF);
     wheelPos[1] = vec3(-track, wheelR, axF);
     wheelPos[2] = vec3(track, wheelR, axR);
     wheelPos[3] = vec3(-track, wheelR, axR);
 
-    // mirrors
+    // ---- mirrors
     {
         float t = sh.sA + 0.05f;
-        float z = zf - t * L, w = halfW(t) * 0.97f, y = belt(t) + 0.05f;
-        b.box(vec3(w + 0.06f, y, z), vec3(0.06f, 0.035f, 0.05f), paint);
-        b.box(vec3(-w - 0.06f, y, z), vec3(0.06f, 0.035f, 0.05f), paint);
+        vec3 p, n;
+        surf(stationAt(t), float(jBelt), p, n);
+        for (int side = -1; side <= 1; side += 2) {
+            vec3 c(side * (p.x + 0.09f), p.y + 0.07f, p.z);
+            MeshBuilder pod;
+            pod.sphere(vec3(0, 0, 0), 1.f, 2, vec4(1, 1, 1, 1));
+            b.append(pod, translate(c) * scale(vec3(0.09f, 0.055f, 0.065f)));
+            b.box(c + vec3(0, 0, -0.058f), vec3(0.065f, 0.035f, 0.004f), vec4(1, 1, 1, 4));
+            b.box(vec3(side * (p.x + 0.02f), p.y + 0.04f, p.z + 0.01f), vec3(0.03f, 0.02f, 0.03f), vec4(1, 1, 1, 9));
+        }
     }
-    // spoiler
+    // ---- spoiler
     if (s.spoiler) {
-        float t = 0.95f;
-        float z = zf - t * L + 0.05f, y = topY(t) + 0.02f;
-        bool tall = s.body == BODY_RALLY || s.body == BODY_HYPER || s.body == BODY_COUPE;
-        float hgt = tall ? 0.24f : 0.08f;
-        vec4 wing = (s.body == BODY_HYPER || s.body == BODY_MIDENGINE) ? trim : paint;
-        b.box(vec3(0, y + hgt + 0.03f, z), vec3(W * 0.43f, 0.025f, 0.16f), wing);
-        b.box(vec3(W * 0.28f, y + hgt * 0.5f, z), vec3(0.025f, hgt * 0.5f + 0.02f, 0.06f), trim);
-        b.box(vec3(-W * 0.28f, y + hgt * 0.5f, z), vec3(0.025f, hgt * 0.5f + 0.02f, 0.06f), trim);
+        float t = 0.955f;
+        float z = zf - t * L + 0.06f, y = topY(t) + 0.02f;
+        bool tall = s.body == BODY_RALLY || s.body == BODY_HYPER || s.body == BODY_COUPE || s.body == BODY_MIDENGINE;
+        float hgt = tall ? 0.22f : 0.06f;
+        vec4 wing = (s.body == BODY_HYPER || s.body == BODY_MIDENGINE) ? vec4(1, 1, 1, 9) : vec4(1, 1, 1, 1);
+        float span = W * 0.44f;
+        b.box(vec3(0, y + hgt + 0.03f, z), vec3(span, 0.022f, 0.17f), wing);
+        b.box(vec3(0, y + hgt + 0.06f, z - 0.15f), vec3(span, 0.012f, 0.025f), wing);  // gurney lip
+        for (int side = -1; side <= 1; side += 2) {
+            b.box(vec3(side * span, y + hgt + 0.04f, z), vec3(0.01f, 0.07f, 0.2f), wing);    // end plate
+            b.box(vec3(side * W * 0.27f, y + hgt * 0.5f, z), vec3(0.02f, hgt * 0.5f + 0.02f, 0.05f), vec4(1, 1, 1, 9));
+        }
     }
-    // body-specific extras
+    // ---- body-specific extras
     if (s.body == BODY_MUSCLE) {
         float t = 0.2f;
-        b.box(vec3(0, belt(t) + 0.04f, zf - t * L), vec3(0.28f, 0.05f, 0.35f), paint);
+        vec3 p, n;
+        surf(stationAt(t), 0.5f, p, n);
+        MeshBuilder bulge;
+        bulge.sphere(vec3(0, 0, 0), 1.f, 2, vec4(1, 1, 1, 1));
+        b.append(bulge, translate(vec3(0, p.y - 0.01f, p.z)) * scale(vec3(0.32f, 0.06f, 0.55f)));
     }
     if (s.body == BODY_TRUCK) {
-        float y = sh.roof * H + 0.06f;
-        b.box(vec3(0, y, zf - 0.55f * L), vec3(W * 0.42f, 0.03f, 0.03f), trim);
-        b.box(vec3(0, y, zf - 0.78f * L), vec3(W * 0.42f, 0.03f, 0.03f), trim);
-        b.box(vec3(W * 0.38f, y, zf - 0.66f * L), vec3(0.03f, 0.03f, 0.75f), trim);
-        b.box(vec3(-W * 0.38f, y, zf - 0.66f * L), vec3(0.03f, 0.03f, 0.75f), trim);
-        b.box(vec3(0, sh.nose * H * 0.55f, zf + 0.08f), vec3(W * 0.4f, 0.12f, 0.05f), trim);
+        float y = sh.roof * H + 0.07f;
+        vec4 rack(1, 1, 1, 9);
+        b.box(vec3(0, y, zf - 0.52f * L), vec3(W * 0.42f, 0.025f, 0.03f), rack);
+        b.box(vec3(0, y, zf - 0.80f * L), vec3(W * 0.42f, 0.025f, 0.03f), rack);
+        b.box(vec3(W * 0.38f, y, zf - 0.66f * L), vec3(0.025f, 0.025f, 0.72f), rack);
+        b.box(vec3(-W * 0.38f, y, zf - 0.66f * L), vec3(0.025f, 0.025f, 0.72f), rack);
+        b.box(vec3(0, sh.nose * H * 0.45f, zf + 0.09f), vec3(W * 0.38f, 0.1f, 0.04f), rack);
+        for (int side = -1; side <= 1; side += 2) b.box(vec3(side * W * 0.3f, sh.nose * H * 0.6f, zf + 0.09f), vec3(0.04f, 0.22f, 0.04f), rack);
     }
     if (s.body == BODY_RALLY) {
         for (int side = -1; side <= 1; side += 2)
-            for (int a = 0; a < 2; a++)
-                b.box(vec3(side * track, 0.16f, zs[a] - wheelR - 0.06f), vec3(0.14f, 0.12f, 0.01f), trim);
+            for (float az : {axF, axR})
+                b.box(vec3(side * track, 0.17f, az - wheelR - 0.08f), vec3(0.15f, 0.12f, 0.008f), vec4(1, 1, 1, 9));
+        float y = sh.roof * H + 0.02f;
+        b.box(vec3(0, y + 0.03f, zf - 0.55f * L), vec3(0.18f, 0.04f, 0.16f), vec4(1, 1, 1, 1));  // roof scoop
     }
     if (s.body == BODY_HYPER || s.body == BODY_MIDENGINE) {
-        float t = sRear - 0.12f;
-        float z = zf - t * L, w = halfW(t) + 0.004f, y = belt(t) - 0.2f * H;
-        b.flatQuad(vec3(w, y - 0.12f, z + 0.25f), vec3(w, y - 0.12f, z - 0.25f), vec3(w, y + 0.06f, z - 0.25f), vec3(w, y + 0.06f, z + 0.15f), trim);
-        b.flatQuad(vec3(-w, y - 0.12f, z + 0.25f), vec3(-w, y + 0.06f, z + 0.15f), vec3(-w, y + 0.06f, z - 0.25f), vec3(-w, y - 0.12f, z - 0.25f), trim);
+        // side intakes ahead of the rear wheels
+        float t0 = sRear - archR / L - 0.11f, t1 = sRear - archR / L - 0.015f;
+        patch(t0, t1, jShoulder + 0.6f, jShoulder + 3.2f, 0.003f, vec4(1, 1, 1, 9), 3, 3);
     }
     b.build(body);
     MeshBuilder wb;
-    buildWheelMesh(wb);
+    buildWheelMesh(wb, sh.spokes, s.body == BODY_TRUCK || s.body == BODY_RALLY);
     wb.build(wheel);
+    MeshBuilder cb;
+    buildCaliper(cb);
+    cb.build(caliper);
 }

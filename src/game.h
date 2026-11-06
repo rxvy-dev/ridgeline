@@ -22,6 +22,7 @@ struct Settings {
     int drawDist = 1;   // 0 low, 1 medium, 2 high
     bool vsync = true;
     bool assists = true;
+    bool grass = true;
 };
 
 struct Toast { std::string text; vec4 col; float t; };
@@ -34,6 +35,7 @@ struct Options {
     int car = -1;
     int width = 1280, height = 720;
     float simSeconds = 0;  // simulate before shot
+    float look = 0;        // initial camera orbit (testing)
 };
 
 class Game {
@@ -94,9 +96,12 @@ private:
     float shake = 0;
     bool lookBack = false;
     float fovSm = 1.1f;
+    float lookYaw = 0, lookPitch = 0, lookZoom = 1.f, lookIdle = 10.f;
+    bool padLooking = false;
     float titleCut = 0;
     int titleShot = 0;
     Racer titleCar;
+    Atmosphere dayAtmo, titleAtmo;
 
     // misc runtime
     float physAcc = 0;
@@ -150,6 +155,8 @@ private:
     void drawRaceHud();
     void drawResults();
     void drawTitle();
+    void setupTitle();
+    int nextRaceEvent() const;
     void saveShot(const std::string& path);
 
     // persistence

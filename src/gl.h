@@ -92,6 +92,9 @@ typedef ptrdiff_t GLintptr;
 #define GL_RENDERER 0x1F01
 #define GL_VERSION 0x1F02
 #define GL_MAX_SAMPLES 0x8D57
+#define GL_R32F 0x822E
+#define GL_SAMPLE_ALPHA_TO_COVERAGE 0x809E
+#define GL_TEXTURE_LOD_BIAS 0x8501
 
 #define GL_FUNCS(X) \
     X(void, glClear, (GLbitfield)) \
@@ -150,6 +153,7 @@ typedef ptrdiff_t GLintptr;
     X(void, glTexImage2D, (GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void*)) \
     X(void, glTexParameteri, (GLenum, GLenum, GLint)) \
     X(void, glTexParameterfv, (GLenum, GLenum, const GLfloat*)) \
+    X(void, glTexParameterf, (GLenum, GLenum, GLfloat)) \
     X(void, glTexParameteriv, (GLenum, GLenum, const GLint*)) \
     X(void, glGenerateMipmap, (GLenum)) \
     X(void, glActiveTexture, (GLenum)) \

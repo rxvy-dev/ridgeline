@@ -21,7 +21,7 @@ struct TreeTrunk { float x, z, r; };
 
 struct World {
     static constexpr float HALF = 1500.f;   // world spans [-HALF, HALF] on x and z
-    static constexpr int N = 601;           // heightmap vertices per side
+    static constexpr int N = 1201;          // heightmap vertices per side (2.5 m grid)
     static constexpr float CELL = 2 * HALF / (N - 1);
     float waterLevel = 6.f;
     vec3 lakeCenter = vec3(380, 0, -300);
@@ -44,10 +44,14 @@ struct World {
     // GPU resources
     struct Chunk { Mesh mesh; vec3 center; };
     std::vector<Chunk> chunks;
-    Mesh roadMesh, waterMesh, hubMesh;
-    Mesh pineMesh, leafMesh, rockMesh, postMesh;
-    InstanceField pines, leafy, rocks, posts;
-    GLuint mapTex = 0;
+    Mesh roadMesh, waterMesh, hubMesh, propsMesh;
+    Mesh pineMesh, pineLod, leafMesh, leafLod, rockMesh, grassMesh;
+    InstanceField pines, leafy, rocks;
+    GLuint mapTex = 0, heightTex = 0, roadTex = 0;
+    GLuint grassBuf = 0;
+    int grassCount = 0;
+    float grassSpacing = 0.85f, grassRadius = 55.f;
+    void buildGrass();
     static constexpr int MAP_RES = 1024;
 
     void generate(uint32_t seed);
@@ -74,5 +78,6 @@ private:
     void carveTerrain();
     void scatter(uint32_t seed);
     void buildMapTexture();
-    std::vector<Instance> pineInst, leafInst, rockInst, postInst;
+    std::vector<Instance> pineInst, leafInst, rockInst;
+    MeshBuilder props;  // marker posts + guardrails
 };

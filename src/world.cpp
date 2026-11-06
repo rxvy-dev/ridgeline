@@ -276,7 +276,7 @@ void World::scatter(uint32_t seed) {
     const vec3 autumn[] = {{0.98f, 0.50f, 0.12f}, {0.97f, 0.72f, 0.18f}, {0.82f, 0.24f, 0.08f},
                            {0.70f, 0.66f, 0.20f}, {0.38f, 0.50f, 0.18f}, {0.93f, 0.40f, 0.10f}};
     const float autumnW[] = {0.26f, 0.22f, 0.14f, 0.14f, 0.12f, 0.12f};
-    const float step = 7.5f;
+    const float step = 6.5f;
     for (float gz = -HALF + 10; gz < HALF - 10; gz += step)
         for (float gx = -HALF + 10; gx < HALF - 10; gx += step) {
             float x = gx + rng.range(-step * 0.45f, step * 0.45f);
@@ -285,69 +285,140 @@ void World::scatter(uint32_t seed) {
             float h = heightAt(x, z);
             if (h < waterLevel + 1.2f) continue;
             float rd = roadDistAt(x, z);
-            if (rd < 5.f) continue;
+            if (rd < 5.5f) continue;
             float hubD = std::hypot(x - hubPos.x, z - hubPos.z);
             if (hubD < 95.f) continue;
             if (ccDist(x, z) < 20.f) continue;
             vec3 n = normalAt(x, z);
             float forest = forestAt(x, z);
-            float dens = forest * 0.55f + 0.025f;
+            float dens = forest * 0.55f + 0.03f;
             dens += smoothstepf(1050.f, 1350.f, std::max(std::fabs(x), std::fabs(z))) * 0.25f;
-            dens *= 1.f - smoothstepf(210.f, 260.f, h);         // tree line
-            dens *= smoothstepf(5.f, 16.f, rd);                 // thin out near roads
+            dens *= 1.f - smoothstepf(230.f, 290.f, h);         // tree line
+            dens *= smoothstepf(5.5f, 18.f, rd);                // thin out near roads
             if (ccDist(x, z) < 45.f) dens *= 0.3f;
-            if (n.y < 0.72f) {  // steep: rocks
+            if (n.y < 0.72f) {  // steep: rocks and the odd hardy pine
                 if (roll < 0.05f) {
-                    float s = rng.range(0.8f, 2.6f);
-                    rockInst.push_back({vec3(x, h - 0.3f * s, z), s, vec3(1, 1, 1), rng.range(0, 6.28f)});
-                    addTrunk(x, z, 1.0f * s);
+                    float sc = rng.range(0.8f, 2.6f);
+                    rockInst.push_back({vec3(x, h - 0.3f * sc, z), sc, vec3(1, 1, 1) * rng.range(0.85f, 1.1f), rng.range(0, 6.28f)});
+                    addTrunk(x, z, 1.0f * sc);
+                } else if (roll < 0.05f + dens * 0.4f) {
+                    float sc = rng.range(0.55f, 1.0f);
+                    pineInst.push_back({vec3(x, h - 0.4f, z), sc, vec3(0.95f, 1.0f, 0.92f), rng.range(0, 6.28f)});
+                    addTrunk(x, z, 0.35f * sc);
                 }
                 continue;
             }
             if (roll < 0.0025f) {
-                float s = rng.range(0.6f, 1.9f);
-                rockInst.push_back({vec3(x, h - 0.3f * s, z), s, vec3(1, 1, 1), rng.range(0, 6.28f)});
-                addTrunk(x, z, 1.0f * s);
+                float sc = rng.range(0.6f, 1.9f);
+                rockInst.push_back({vec3(x, h - 0.3f * sc, z), sc, vec3(1, 1, 1) * rng.range(0.85f, 1.1f), rng.range(0, 6.28f)});
+                addTrunk(x, z, 1.0f * sc);
                 continue;
             }
             if (roll > dens) continue;
-            float pineP = clampf(0.22f + (h - 50.f) / 140.f + fbm(x / 200.f, z / 200.f, 2, 91) * 0.5f, 0.08f, 0.95f);
+            float pineP = clampf(0.30f + (h - 50.f) / 140.f + fbm(x / 200.f, z / 200.f, 2, 91) * 0.5f, 0.12f, 0.96f);
             if (rng.f() < pineP) {
-                float s = rng.range(0.75f, 1.6f);
-                float v = rng.range(0.82f, 1.12f);
-                vec3 tint = vec3(0.17f, 0.30f, 0.16f) * v;
-                pineInst.push_back({vec3(x, h - 0.2f, z), s, tint, rng.range(0, 6.28f)});
-                addTrunk(x, z, 0.32f * s);
+                float sc = rng.range(0.65f, 1.35f);
+                float v = rng.range(0.85f, 1.12f);
+                vec3 tint = vec3(rng.range(0.92f, 1.05f), 1.0f, rng.range(0.85f, 1.0f)) * v;
+                pineInst.push_back({vec3(x, h - 0.3f, z), sc, tint, rng.range(0, 6.28f)});
+                addTrunk(x, z, 0.38f * sc);
             } else {
-                float s = rng.range(0.75f, 1.35f);
+                float sc = rng.range(0.7f, 1.25f);
                 float pick = rng.f(), acc = 0;
                 vec3 tint = autumn[0];
                 for (int k = 0; k < 6; k++) { acc += autumnW[k]; if (pick <= acc) { tint = autumn[k]; break; } }
-                tint = tint * rng.range(0.85f, 1.08f);
-                leafInst.push_back({vec3(x, h - 0.2f, z), s, tint, rng.range(0, 6.28f)});
-                addTrunk(x, z, 0.38f * s);
+                tint = tint * rng.range(0.95f, 1.2f);
+                leafInst.push_back({vec3(x, h - 0.3f, z), sc, tint, rng.range(0, 6.28f)});
+                addTrunk(x, z, 0.32f * sc);
             }
         }
-    // marker posts along paved roads
-    for (auto& r : roads) {
+
+    // ---- roadside props: marker posts and guardrails (built straight into a static mesh)
+    props = MeshBuilder();
+    vec4 white(0.92f, 0.92f, 0.88f, 0), red(0.9f, 0.18f, 0.08f, 3), wood(0.30f, 0.24f, 0.18f, 0), steel(1, 1, 1, 7);
+    int railSegs = 0;
+    for (int ri = 0; ri < int(roads.size()); ri++) {
+        const Road& r = roads[ri];
         if (r.surface != SURF_ASPHALT) continue;
+        int m = int(r.pts.size());
+        float hw = r.width * 0.5f;
+        // which samples need a rail on each side?
+        for (int side = -1; side <= 1; side += 2) {
+            std::vector<char> need(m, 0);
+            for (int i = 0; i < m; i++) {
+                vec3 t = r.tan[i], right(-t.z, 0, t.x);
+                vec3 q = r.pts[i] + right * (side * (hw + 8.f));
+                float drop = r.pts[i].y - heightAt(q.x, q.z);
+                int ip = r.closed ? (i - 4 + m) % m : std::max(i - 4, 0);
+                int in = r.closed ? (i + 4) % m : std::min(i + 4, m - 1);
+                float turn = wrapAngle(std::atan2(r.tan[in].x, r.tan[in].z) - std::atan2(r.tan[ip].x, r.tan[ip].z));
+                bool outside = (turn > 0.18f && side < 0) || (turn < -0.18f && side > 0);
+                need[i] = drop > 2.0f || outside;
+                vec3 rp = r.pts[i] + right * (side * (hw + 1.5f));
+                if (std::hypot(rp.x - hubPos.x, rp.z - hubPos.z) < 80.f) need[i] = 0;
+                // keep junctions open
+                int cx = int((rp.x + HALF) / RGRID), cz = int((rp.z + HALF) / RGRID);
+                for (int gz = cz - 1; gz <= cz + 1 && need[i]; gz++)
+                    for (int gx = cx - 1; gx <= cx + 1 && need[i]; gx++) {
+                        if (gx < 0 || gz < 0 || gx >= rgN || gz >= rgN) continue;
+                        for (auto& rs : roadGrid[gz * rgN + gx])
+                            if (rs.first != ri && std::hypot(roads[rs.first].pts[rs.second].x - rp.x, roads[rs.first].pts[rs.second].z - rp.z) < 22.f) { need[i] = 0; break; }
+                    }
+            }
+            // remove short runs, then emit
+            for (int i = 0; i < m;) {
+                if (!need[i]) { i++; continue; }
+                int j = i;
+                while (j < m && need[j]) j++;
+                if (j - i >= 6) {
+                    railSegs++;
+                    for (int k = i; k < j; k++) {
+                        int k2 = k + 1;
+                        if (k2 >= m) { if (!r.closed) break; k2 = 0; }
+                        if (k2 >= j && !(r.closed && j == m && k2 == 0)) break;
+                        vec3 t0 = r.tan[k], t1 = r.tan[k2];
+                        vec3 r0(-t0.z, 0, t0.x), r1(-t1.z, 0, t1.x);
+                        vec3 a = r.pts[k] + r0 * (side * (hw + 1.5f)), bb = r.pts[k2] + r1 * (side * (hw + 1.5f));
+                        const float prof[5][2] = {{0.f, 0.52f}, {0.07f, 0.60f}, {0.f, 0.68f}, {0.07f, 0.76f}, {0.f, 0.84f}};
+                        for (int q = 0; q < 4; q++) {
+                            vec3 a0 = a + r0 * (side * prof[q][0]) + vec3(0, prof[q][1], 0);
+                            vec3 a1 = a + r0 * (side * prof[q + 1][0]) + vec3(0, prof[q + 1][1], 0);
+                            vec3 b0 = bb + r1 * (side * prof[q][0]) + vec3(0, prof[q][1], 0);
+                            vec3 b1 = bb + r1 * (side * prof[q + 1][0]) + vec3(0, prof[q + 1][1], 0);
+                            props.flatQuad(a0, b0, b1, a1, steel);
+                        }
+                        // post every sample (~4 m), sunk into the ground
+                        vec3 pp = a + r0 * (side * 0.22f);
+                        float gh = heightAt(pp.x, pp.z);
+                        mat4 xf = basis(r0, vec3(0, 1, 0), t0, vec3(pp.x, 0, pp.z));
+                        float top = r.pts[k].y + 0.82f;
+                        props.box(vec3(0, (gh - 0.4f + top) * 0.5f, 0), vec3(0.07f, (top - gh + 0.4f) * 0.5f, 0.09f), wood, &xf);
+                        addTrunk(a.x, a.z, 0.35f);
+                    }
+                }
+                i = j;
+            }
+        }
+        // white marker posts every 50 m where there is no rail
         float next = 0;
-        for (size_t i = 0; i < r.pts.size(); i++) {
+        for (int i = 0; i < m; i++) {
             if (r.dist[i] < next) continue;
-            next = r.dist[i] + 45.f;
+            next = r.dist[i] + 50.f;
             vec3 t = r.tan[i], right(-t.z, 0, t.x);
             for (int side = -1; side <= 1; side += 2) {
-                vec3 p = r.pts[i] + right * (side * (r.width * 0.5f + 1.3f));
+                vec3 p = r.pts[i] + right * (side * (hw + 1.4f));
                 if (std::hypot(p.x - hubPos.x, p.z - hubPos.z) < 70.f) continue;
-                float h = heightAt(p.x, p.z);
-                postInst.push_back({vec3(p.x, h - 0.05f, p.z), 1.f, vec3(1, 1, 1), std::atan2(t.x, t.z)});
+                float gh = heightAt(p.x, p.z);
+                mat4 xf = basis(right, vec3(0, 1, 0), t, vec3(p.x, gh - 0.1f, p.z));
+                props.box(vec3(0, 0.6f, 0), vec3(0.06f, 0.6f, 0.06f), white, &xf);
+                props.box(vec3(0, 1.0f, side * -0.065f), vec3(0.045f, 0.07f, 0.008f), red, &xf);
             }
         }
     }
     float roadKm = 0;
     for (auto& r : roads) roadKm += r.length / 1000.f;
-    SDL_Log("World: %.1f km of road", roadKm);
-    SDL_Log("World: %zu pines, %zu autumn trees, %zu rocks, %zu posts", pineInst.size(), leafInst.size(), rockInst.size(), postInst.size());
+    SDL_Log("World: %.1f km of road, %d guardrail runs", roadKm, railSegs);
+    SDL_Log("World: %zu pines, %zu autumn trees, %zu rocks", pineInst.size(), leafInst.size(), rockInst.size());
 }
 
 // ---------------------------------------------------------------- generate
@@ -439,24 +510,82 @@ void World::generate(uint32_t seed) {
 }
 
 // ---------------------------------------------------------------- GPU
-static void buildPine(MeshBuilder& b) {
-    b.cylinder(vec3(0, 0, 0), 0.22f, 2.4f, 6, vec4(0.32f, 0.23f, 0.16f, 0));
-    const float tiers[][3] = {{1.5f, 2.4f, 3.4f}, {3.4f, 1.95f, 3.0f}, {5.1f, 1.45f, 2.7f}, {6.7f, 0.9f, 2.2f}};
-    for (int i = 0; i < 4; i++) {
-        float v = 0.88f + i * 0.06f;
-        b.cone(vec3(0, tiers[i][0], 0), tiers[i][1], tiers[i][2], 9, vec4(v, v, v, 1));
+// Conifer: tapered bark trunk + whorls of drooping needle-branch cards. Nominal height ~16 m.
+static void buildPine(MeshBuilder& b, bool lod) {
+    Rng r(lod ? 5 : 3);
+    b.tube(vec3(0, -0.6f, 0), vec3(0, 15.8f, 0), 0.40f, 0.05f, lod ? 5 : 10, vec4(0, 0, 0.95f, 2));
+    int whorls = lod ? 9 : 24;
+    for (int k = 0; k < whorls; k++) {
+        float t = k / float(whorls - 1);
+        float y = lerpf(2.2f, 15.4f, t);
+        float L = lerpf(4.8f, 0.8f, std::pow(t, 0.85f)) * r.range(0.85f, 1.1f);
+        int nb = lod ? 3 : (t < 0.5f ? 6 : 5);
+        for (int i = 0; i < nb; i++) {
+            float a = k * 2.4f + i * 2 * PI / nb + r.range(-0.3f, 0.3f);
+            vec3 dir(std::cos(a), 0, std::sin(a));
+            float droop = r.range(0.22f, 0.42f);
+            vec3 base = vec3(0, y, 0) + dir * 0.1f;
+            vec3 tip = base + dir * L + vec3(0, -L * droop, 0);
+            vec3 side = normalize(vec3(-dir.z, 0.22f, dir.x));
+            float w = L * (lod ? 0.85f : 0.62f) + 0.5f;
+            vec3 n = normalize(dir * 0.7f + vec3(0, 0.75f, 0));
+            float sh = clampf(0.6f + 0.4f * t + r.range(-0.05f, 0.05f), 0.f, 1.2f);
+            b.quad4(base - side * (w * 0.2f), base + side * (w * 0.2f), tip + side * (w * 0.5f), tip - side * (w * 0.5f), n,
+                    vec4(0, 0, sh, 1), vec4(1, 0, sh, 1), vec4(1, 1, sh, 1), vec4(0, 1, sh, 1));
+            if (!lod) {
+                vec3 bd = normalize(tip - base);
+                vec3 side2 = normalize(cross(bd, side));
+                float w2 = w * 0.42f;
+                b.quad4(base - side2 * (w2 * 0.2f), base + side2 * (w2 * 0.2f), tip + side2 * (w2 * 0.5f), tip - side2 * (w2 * 0.5f), n,
+                        vec4(0, 0, sh * 0.85f, 1), vec4(1, 0, sh * 0.85f, 1), vec4(1, 1, sh * 0.85f, 1), vec4(0, 1, sh * 0.85f, 1));
+            }
+        }
+    }
+    // spire
+    for (int i = 0; i < 2; i++) {
+        float a = i * PI * 0.5f;
+        vec3 sd(std::cos(a) * 0.8f, 0, std::sin(a) * 0.8f);
+        vec3 lo(0, 14.2f, 0), hi(0, 17.6f, 0);
+        b.quad4(lo - sd, lo + sd, hi + sd * 0.15f, hi - sd * 0.15f, vec3(0, 1, 0), vec4(0, 1, 1.1f, 1), vec4(1, 1, 1.1f, 1), vec4(1, 0, 1.1f, 1), vec4(0, 0, 1.1f, 1));
     }
 }
-static void buildLeafy(MeshBuilder& b) {
-    b.cylinder(vec3(0, 0, 0), 0.27f, 3.4f, 6, vec4(0.30f, 0.22f, 0.16f, 0));
-    const float blobs[][4] = {{0, 4.7f, 0, 2.5f}, {1.4f, 4.1f, 0.5f, 1.9f}, {-1.3f, 4.3f, -0.6f, 2.0f},
-                              {0.2f, 6.0f, -0.3f, 1.8f}, {-0.3f, 3.9f, 1.4f, 1.6f}, {0.6f, 5.2f, -1.3f, 1.5f}};
-    for (int i = 0; i < 6; i++) b.sphere(vec3(blobs[i][0], blobs[i][1], blobs[i][2]), blobs[i][3], 1, vec4(1, 1, 1, 1), 0.16f, 11 + i);
+
+// Broadleaf: trunk, a few limbs and a crown made of leaf-cluster cards. Nominal height ~11 m.
+static void buildLeafy(MeshBuilder& b, bool lod) {
+    Rng r(lod ? 9 : 7);
+    b.tube(vec3(0, -0.6f, 0), vec3(0.15f, 5.6f, 0.1f), 0.34f, 0.17f, lod ? 5 : 9, vec4(0, 0, 0.9f, 2));
+    int limbs = lod ? 3 : 6;
+    for (int i = 0; i < limbs; i++) {
+        float a = i * 2 * PI / limbs + r.range(-0.3f, 0.3f);
+        vec3 from(0.1f, r.range(3.2f, 5.0f), 0.05f);
+        vec3 to = from + vec3(std::cos(a) * 2.6f, r.range(1.6f, 2.6f), std::sin(a) * 2.6f);
+        b.tube(from, to, 0.13f, 0.04f, 5, vec4(0, 0, 0.85f, 2));
+    }
+    vec3 c(0, 6.8f, 0), rad(3.9f, 3.1f, 3.9f);
+    int cards = lod ? 28 : 95;
+    for (int i = 0; i < cards; i++) {
+        vec3 d;
+        do { d = vec3(r.range(-1, 1), r.range(-1, 1), r.range(-1, 1)); } while (dot(d, d) > 1.f || dot(d, d) < 0.01f);
+        d = normalize(d);
+        float rr = std::pow(r.f(), 0.35f);
+        vec3 p = c + d * rad * rr;
+        float sz = (lod ? 3.6f : 2.5f) * r.range(0.8f, 1.2f);
+        vec3 nn = normalize(d + vec3(r.range(-0.8f, 0.8f), r.range(-0.4f, 0.8f), r.range(-0.8f, 0.8f)));
+        vec3 t1 = normalize(cross(nn, std::fabs(nn.y) < 0.9f ? vec3(0, 1, 0) : vec3(1, 0, 0)));
+        vec3 t2 = cross(nn, t1);
+        float rot = r.range(0, 6.28f);
+        vec3 u = t1 * std::cos(rot) + t2 * std::sin(rot), v = cross(nn, u);
+        vec3 ln = normalize(d * 0.85f + vec3(0, 0.35f, 0));
+        float sh = 0.5f + 0.5f * rr + 0.12f * d.y;
+        float h = sz * 0.5f;
+        b.quad4(p - u * h - v * h, p + u * h - v * h, p + u * h + v * h, p - u * h + v * h, ln,
+                vec4(0, 0, sh, 1), vec4(1, 0, sh, 1), vec4(1, 1, sh, 1), vec4(0, 1, sh, 1));
+    }
 }
 
 void World::buildGPU() {
     // ---- terrain chunks
-    const int CH = 10, CS = (N - 1) / CH;
+    const int CH = 20, CS = (N - 1) / CH;
     std::vector<vec3> nrm(N * N);
     for (int iz = 0; iz < N; iz++)
         for (int ix = 0; ix < N; ix++) {
@@ -610,24 +739,69 @@ void World::buildGPU() {
         b.build(hubMesh);
     }
 
-    // ---- foliage / rocks / posts
+    // ---- foliage / rocks / props
     {
-        MeshBuilder pb; buildPine(pb); pb.build(pineMesh);
-        MeshBuilder lb; buildLeafy(lb); lb.build(leafMesh);
+        MeshBuilder pb; buildPine(pb, false); pb.build(pineMesh);
+        MeshBuilder pl; buildPine(pl, true); pl.build(pineLod);
+        MeshBuilder lb; buildLeafy(lb, false); lb.build(leafMesh);
+        MeshBuilder ll; buildLeafy(ll, true); ll.build(leafLod);
         MeshBuilder rb, tmp;
-        tmp.sphere(vec3(0, 0, 0), 1.2f, 1, vec4(0.52f, 0.50f, 0.47f, 0), 0.32f, 5);
-        rb.append(tmp, scale(vec3(1.2f, 0.75f, 1.0f)));
+        tmp.sphere(vec3(0, 0, 0), 1.2f, 2, vec4(0, 0, 1, 3), 0.28f, 5);
+        rb.append(tmp, scale(vec3(1.25f, 0.72f, 1.0f)));
         rb.build(rockMesh);
-        MeshBuilder ob;
-        ob.box(vec3(0, 0.55f, 0), vec3(0.07f, 0.55f, 0.07f), vec4(0.93f, 0.93f, 0.9f, 0));
-        ob.box(vec3(0, 0.95f, 0), vec3(0.075f, 0.06f, 0.075f), vec4(0.85f, 0.15f, 0.1f, 0));
-        ob.build(postMesh);
-        pines.build(&pineMesh, pineInst, HALF, 150.f);
-        leafy.build(&leafMesh, leafInst, HALF, 150.f);
-        rocks.build(&rockMesh, rockInst, HALF, 150.f);
-        posts.build(&postMesh, postInst, HALF, 150.f);
+        pines.build(&pineMesh, &pineLod, pineInst, HALF, 125.f);
+        leafy.build(&leafMesh, &leafLod, leafInst, HALF, 125.f);
+        rocks.build(&rockMesh, nullptr, rockInst, HALF, 125.f);
+        props.build(propsMesh);
+        props = MeshBuilder();
     }
+    // ---- height / road-distance textures for GPU grass placement
+    {
+        auto mk = [&](const std::vector<float>& data) {
+            GLuint t;
+            glGenTextures(1, &t);
+            glBindTexture(GL_TEXTURE_2D, t);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, N, N, 0, GL_RED, GL_FLOAT, data.data());
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            return t;
+        };
+        heightTex = mk(height);
+        roadTex = mk(roadDist);
+    }
+    buildGrass();
     buildMapTexture();
+}
+
+void World::buildGrass() {
+    MeshBuilder b;
+    const float w = 0.95f, h = 0.62f;
+    for (int i = 0; i < 3; i++) {
+        float a = i * PI / 3.f;
+        vec3 d(std::cos(a) * w * 0.5f, 0, std::sin(a) * w * 0.5f);
+        b.quad4(-d, d, d + vec3(0, h, 0), -d + vec3(0, h, 0), vec3(0, 1, 0), vec4(0, 1, 1, 1), vec4(1, 1, 1, 1), vec4(1, 0, 1, 1), vec4(0, 0, 1, 1));
+    }
+    b.build(grassMesh);
+    std::vector<float> offs;
+    int n = int(grassRadius / grassSpacing);
+    for (int z = -n; z <= n; z++)
+        for (int x = -n; x <= n; x++) {
+            if (x * x + z * z > n * n) continue;
+            offs.push_back(x * grassSpacing);
+            offs.push_back(z * grassSpacing);
+        }
+    grassCount = int(offs.size() / 2);
+    glGenBuffers(1, &grassBuf);
+    glBindBuffer(GL_ARRAY_BUFFER, grassBuf);
+    glBufferData(GL_ARRAY_BUFFER, offs.size() * 4, offs.data(), GL_STATIC_DRAW);
+    glBindVertexArray(grassMesh.vao);
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 8, (void*)0);
+    glVertexAttribDivisor(3, 1);
+    glBindVertexArray(0);
 }
 
 void World::buildMapTexture() {

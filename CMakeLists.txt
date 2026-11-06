@@ -18,6 +18,7 @@ add_executable(ridgeline
   src/main.cpp
   src/gl.cpp
   src/render.cpp
+  src/textures.cpp
   src/world.cpp
   src/cars.cpp
   src/vehicle.cpp

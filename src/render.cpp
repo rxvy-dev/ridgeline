@@ -101,9 +101,21 @@ void Mesh::destroy() {
 }
 
 // ------------------------------------------------------------------ InstanceField
-void InstanceField::build(Mesh* m, std::vector<Instance>& inst, float worldHalf, float tile) {
+static void setupInstanceAttribs(Mesh* m) {
+    if (!m || !m->vao) return;
+    glBindVertexArray(m->vao);
+    glEnableVertexAttribArray(3);
+    glVertexAttribDivisor(3, 1);
+    glEnableVertexAttribArray(4);
+    glVertexAttribDivisor(4, 1);
+    glBindVertexArray(0);
+}
+
+void InstanceField::build(Mesh* m, Mesh* lodMesh, std::vector<Instance>& inst, float worldHalf, float tile) {
     mesh = m;
+    lod = lodMesh ? lodMesh : m;
     tileSize = tile;
+    total = inst.size();
     int nt = int(std::ceil(worldHalf * 2 / tile));
     auto tileOf = [&](const Instance& i) {
         int tx = std::clamp(int((i.pos.x + worldHalf) / tile), 0, nt - 1);
@@ -122,27 +134,31 @@ void InstanceField::build(Mesh* m, std::vector<Instance>& inst, float worldHalf,
     }
     glGenBuffers(1, &ibuf);
     glBindBuffer(GL_ARRAY_BUFFER, ibuf);
-    glBufferData(GL_ARRAY_BUFFER, inst.size() * sizeof(Instance), inst.data(), GL_STATIC_DRAW);
-    glBindVertexArray(m->vao);
-    glEnableVertexAttribArray(3);
-    glVertexAttribDivisor(3, 1);
-    glEnableVertexAttribArray(4);
-    glVertexAttribDivisor(4, 1);
-    glBindVertexArray(0);
+    glBufferData(GL_ARRAY_BUFFER, std::max<size_t>(inst.size(), 1) * sizeof(Instance), inst.data(), GL_STATIC_DRAW);
+    setupInstanceAttribs(mesh);
+    if (lod != mesh) setupInstanceAttribs(lod);
 }
 
-void InstanceField::draw(vec3 eye, float range) const {
-    if (!mesh || !mesh->vao) return;
-    glBindVertexArray(mesh->vao);
-    glBindBuffer(GL_ARRAY_BUFFER, ibuf);
+void InstanceField::draw(vec3 eye, float range, float lodDist) const {
+    if (!mesh || !mesh->vao || tiles.empty()) return;
     float r = range + tileSize * 0.75f;
-    for (auto& t : tiles) {
-        float dx = t.center.x - eye.x, dz = t.center.z - eye.z;
-        if (dx * dx + dz * dz > r * r) continue;
-        size_t off = size_t(t.first) * sizeof(Instance);
-        glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(Instance), (void*)off);
-        glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(Instance), (void*)(off + 16));
-        glDrawElementsInstanced(GL_TRIANGLES, mesh->count, GL_UNSIGNED_INT, nullptr, t.count);
+    float l = lodDist + tileSize * 0.5f;
+    for (int pass = 0; pass < 2; pass++) {
+        const Mesh* m = pass == 0 ? mesh : lod;
+        if (pass == 1 && lod == mesh) break;
+        glBindVertexArray(m->vao);
+        glBindBuffer(GL_ARRAY_BUFFER, ibuf);
+        for (auto& t : tiles) {
+            float dx = t.center.x - eye.x, dz = t.center.z - eye.z;
+            float d2 = dx * dx + dz * dz;
+            if (d2 > r * r) continue;
+            bool nearTile = d2 <= l * l || lod == mesh;
+            if ((pass == 0) != nearTile) continue;
+            size_t off = size_t(t.first) * sizeof(Instance);
+            glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(Instance), (void*)off);
+            glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(Instance), (void*)(off + 16));
+            glDrawElementsInstanced(GL_TRIANGLES, m->count, GL_UNSIGNED_INT, nullptr, t.count);
+        }
     }
 }
 
@@ -157,6 +173,34 @@ void MeshBuilder::flatQuad(vec3 a, vec3 b, vec3 c, vec3 d, vec4 col) {
     uint32_t i0 = add(a, n, col), i1 = add(b, n, col), i2 = add(c, n, col), i3 = add(d, n, col);
     tri(i0, i1, i2);
     tri(i0, i2, i3);
+}
+void MeshBuilder::quad4(vec3 a, vec3 b, vec3 c, vec3 d, vec3 n, vec4 ca, vec4 cb, vec4 cc, vec4 cd) {
+    uint32_t i0 = add(a, n, ca), i1 = add(b, n, cb), i2 = add(c, n, cc), i3 = add(d, n, cd);
+    tri(i0, i1, i2);
+    tri(i0, i2, i3);
+}
+void MeshBuilder::tube(vec3 a, vec3 b, float ra, float rb, int seg, vec4 col) {
+    vec3 ax = normalize(b - a);
+    vec3 t = std::fabs(ax.y) < 0.9f ? normalize(cross(ax, vec3(0, 1, 0))) : normalize(cross(ax, vec3(1, 0, 0)));
+    vec3 bt = cross(ax, t);
+    uint32_t start = uint32_t(v.size());
+    float len = length(b - a);
+    for (int i = 0; i <= seg; i++) {
+        float ang = i / float(seg) * 2 * PI;
+        vec3 d = t * std::cos(ang) + bt * std::sin(ang);
+        vec4 ca = col, cb = col;
+        if (col.w > 1.5f && col.w < 2.5f) {  // bark: uv
+            ca = vec4(i / float(seg) * 2.f, 0, col.z, col.w);
+            cb = vec4(i / float(seg) * 2.f, len / 2.5f, col.z, col.w);
+        }
+        add(a + d * ra, d, ca);
+        add(b + d * rb, d, cb);
+    }
+    for (int i = 0; i < seg; i++) {
+        uint32_t s0 = start + i * 2;
+        tri(s0, s0 + 1, s0 + 3);
+        tri(s0, s0 + 3, s0 + 2);
+    }
 }
 void MeshBuilder::box(vec3 c, vec3 h, vec4 col, const mat4* xf) {
     vec3 p[8];
@@ -263,37 +307,49 @@ bool Renderer::init() {
     ok &= road.build("road", kLitVS, kRoadFS, true);
     ok &= object.build("object", kLitVS, kObjectFS, true);
     ok &= tree.build("tree", kTreeVS, kTreeFS, true);
+    ok &= grass.build("grass", kGrassVS, kGrassFS, true);
     ok &= water.build("water", kLitVS, kWaterFS, true);
     ok &= unlit.build("unlit", kLitVS, kUnlitFS, true);
     ok &= depth.build("depth", kDepthVS, kDepthFS, false);
-    ok &= depthTree.build("depthTree", kDepthTreeVS, kDepthFS, false);
+    ok &= depthTree.build("depthTree", kDepthTreeVS, kDepthTreeFS, false);
     ok &= sky.build("sky", kFullscreenVS, kSkyFS, true);
     ok &= post.build("post", kFullscreenVS, kPostFS, false);
     ok &= hud.build("hud", kHudVS, kHudFS, false);
+    ok &= bright.build("bright", kFullscreenVS, kBrightFS, false);
+    ok &= blur.build("blur", kFullscreenVS, kBlurFS, false);
     if (!ok) return false;
     glGenVertexArrays(1, &emptyVao);
+    tex.generate();
+    setShadowQuality(2048);
+    return true;
+}
 
-    // shadow map
-    glGenTextures(1, &shadowTex);
-    glBindTexture(GL_TEXTURE_2D, shadowTex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, shadowSize, shadowSize, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
-    glGenFramebuffers(1, &shadowFbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTex, 0);
-    glDrawBuffer(0);
-    glReadBuffer(0);
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        SDL_Log("Shadow framebuffer incomplete, shadows disabled");
-        shadows = false;
+void Renderer::setShadowQuality(int nearSize) {
+    shadowSize[0] = nearSize;
+    shadowSize[1] = 2048;
+    for (int i = 0; i < 2; i++) {
+        if (shadowTex[i]) glDeleteTextures(1, &shadowTex[i]);
+        if (shadowFbo[i]) glDeleteFramebuffers(1, &shadowFbo[i]);
+        glGenTextures(1, &shadowTex[i]);
+        glBindTexture(GL_TEXTURE_2D, shadowTex[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, shadowSize[i], shadowSize[i], 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+        glGenFramebuffers(1, &shadowFbo[i]);
+        glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo[i]);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTex[i], 0);
+        glDrawBuffer(0);
+        glReadBuffer(0);
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+            SDL_Log("Shadow framebuffer incomplete, shadows disabled");
+            shadows = false;
+        }
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    return true;
 }
 
 void Renderer::destroyTargets() {
@@ -303,7 +359,24 @@ void Renderer::destroyTargets() {
     if (msFbo) glDeleteFramebuffers(1, &msFbo);
     if (msColor) glDeleteRenderbuffers(1, &msColor);
     if (msDepth) glDeleteRenderbuffers(1, &msDepth);
+    for (int i = 0; i < 2; i++) {
+        if (bloomFbo[i]) glDeleteFramebuffers(1, &bloomFbo[i]);
+        if (bloomTex[i]) glDeleteTextures(1, &bloomTex[i]);
+        bloomFbo[i] = bloomTex[i] = 0;
+    }
     sceneFbo = sceneTex = sceneDepth = msFbo = msColor = msDepth = 0;
+}
+
+static GLuint makeColorTex(int w, int h) {
+    GLuint t;
+    glGenTextures(1, &t);
+    glBindTexture(GL_TEXTURE_2D, t);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_HALF_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    return t;
 }
 
 void Renderer::resize(int w, int h) {
@@ -311,13 +384,7 @@ void Renderer::resize(int w, int h) {
     height = std::max(h, 16);
     destroyTargets();
     usePost = true;
-    glGenTextures(1, &sceneTex);
-    glBindTexture(GL_TEXTURE_2D, sceneTex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, width, height, 0, GL_RGBA, GL_HALF_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    sceneTex = makeColorTex(width, height);
     glGenRenderbuffers(1, &sceneDepth);
     glBindRenderbuffer(GL_RENDERBUFFER, sceneDepth);
     glRenderbufferStorageMultisample(GL_RENDERBUFFER, 0, GL_DEPTH_COMPONENT24, width, height);
@@ -328,6 +395,14 @@ void Renderer::resize(int w, int h) {
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
         SDL_Log("Scene framebuffer incomplete, post-processing disabled");
         usePost = false;
+    }
+    bw = std::max(width / 4, 8);
+    bh = std::max(height / 4, 8);
+    for (int i = 0; i < 2; i++) {
+        bloomTex[i] = makeColorTex(bw, bh);
+        glGenFramebuffers(1, &bloomFbo[i]);
+        glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo[i]);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bloomTex[i], 0);
     }
     if (msaa > 1 && usePost) {
         GLint maxS = 0;
@@ -368,41 +443,57 @@ void Renderer::setCommon(Shader& s, const Camera& cam) {
     s.set("uFogDensity", atmo.fogDensity);
     s.set("uTime", time);
     s.set("uShadows", shadows ? 1 : 0);
-    s.set("uShadowMat", shadowMat);
-    s.set("uShadowTexel", 1.f / shadowSize);
-    s.set("uShadowMap", 3);
+    s.set("uShadowMat0", shadowMat[0]);
+    s.set("uShadowMat1", shadowMat[1]);
+    s.set("uShadowTexel", vec2(1.f / shadowSize[0], 1.f / shadowSize[1]));
+    s.set("uShadow0", int(U_SHADOW0));
+    s.set("uShadow1", int(U_SHADOW1));
     s.set("uModel", mat4());
+    s.set("tGrass", int(U_GRASS));
+    s.set("tDirt", int(U_DIRT));
+    s.set("tRock", int(U_ROCK));
+    s.set("tRockN", int(U_ROCKN));
+    s.set("tAsphalt", int(U_ASPHALT));
+    s.set("tAsphaltN", int(U_ASPHALTN));
+    s.set("tBark", int(U_BARK));
+    s.set("tFoliage", int(U_PINE));
+    s.set("tBlades", int(U_BLADES));
+    s.set("tHeight", int(U_HEIGHT));
+    s.set("tRoadDist", int(U_ROADDIST));
+    s.set("tFlakes", int(U_FLAKES));
 }
 
-void Renderer::beginShadowPass(vec3 focus, float extent) {
+void Renderer::beginShadowPass(int c, vec3 focus, float extent, float depthRange) {
     vec3 eye = atmo.sunDir * 1000.f;
     mat4 lv = lookAt(eye, vec3(0, 0, 0), vec3(0, 1, 0));
     vec3 f = lv.transformPoint(focus);
-    float texel = 2 * extent / shadowSize;
+    float texel = 2 * extent / shadowSize[c];
     f.x = std::floor(f.x / texel) * texel;
     f.y = std::floor(f.y / texel) * texel;
-    mat4 lp = ortho(f.x - extent, f.x + extent, f.y - extent, f.y + extent, -f.z - 900.f, -f.z + 900.f);
+    mat4 lp = ortho(f.x - extent, f.x + extent, f.y - extent, f.y + extent, -f.z - depthRange, -f.z + depthRange);
     mat4 lvp = lp * lv;
-    mat4 bias;  // identity; shader maps [-1,1] -> [0,1] itself
-    shadowMat = bias * lvp;
-    glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo);
-    glViewport(0, 0, shadowSize, shadowSize);
+    shadowMat[c] = lvp;
+    glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo[c]);
+    glViewport(0, 0, shadowSize[c], shadowSize[c]);
     glClear(GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
     glEnable(GL_POLYGON_OFFSET_FILL);
-    glPolygonOffset(2.0f, 4.0f);
+    glPolygonOffset(2.0f, 3.0f);
     depth.use();
     depth.set("uViewProj", lvp);
     depth.set("uModel", mat4());
     depthTree.use();
     depthTree.set("uViewProj", lvp);
+    depthTree.set("tFoliage", int(U_PINE));
 }
 
-void Renderer::endShadowPass() {
+void Renderer::endShadowPasses() {
     glDisable(GL_POLYGON_OFFSET_FILL);
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, shadowTex);
+    glActiveTexture(GL_TEXTURE0 + U_SHADOW0);
+    glBindTexture(GL_TEXTURE_2D, shadowTex[0]);
+    glActiveTexture(GL_TEXTURE0 + U_SHADOW1);
+    glBindTexture(GL_TEXTURE_2D, shadowTex[1]);
     glActiveTexture(GL_TEXTURE0);
 }
 
@@ -416,9 +507,8 @@ void Renderer::beginScene() {
     glDepthFunc(GL_LEQUAL);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, shadowTex);
-    glActiveTexture(GL_TEXTURE0);
+    tex.bindAll();
+    endShadowPasses();
 }
 
 void Renderer::drawSky(const Camera& cam) {
@@ -434,23 +524,51 @@ void Renderer::drawSky(const Camera& cam) {
     glEnable(GL_DEPTH_TEST);
 }
 
-void Renderer::endScene(float blur, float flash) {
+void Renderer::endScene(float blurAmt, float flash) {
     if (!usePost) return;
     if (msFbo) {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, msFbo);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, sceneFbo);
         glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
     }
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, width, height);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
-    post.use();
-    post.set("uScene", 0);
-    post.set("uBlur", blur);
-    post.set("uFlash", flash);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, sceneTex);
+    glDisable(GL_BLEND);
     glBindVertexArray(emptyVao);
+    // bloom: bright pass at quarter res, then separable blur
+    glViewport(0, 0, bw, bh);
+    glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo[0]);
+    bright.use();
+    bright.set("uSrc", int(U_SCENE));
+    bright.set("uTexel", vec2(1.f / width, 1.f / height) * 2.f);
+    glActiveTexture(GL_TEXTURE0 + U_SCENE);
+    glBindTexture(GL_TEXTURE_2D, sceneTex);
     glDrawArrays(GL_TRIANGLES, 0, 3);
+    blur.use();
+    blur.set("uSrc", int(U_BLOOM));
+    for (int it = 0; it < 2; it++) {
+        glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo[1]);
+        glActiveTexture(GL_TEXTURE0 + U_BLOOM);
+        glBindTexture(GL_TEXTURE_2D, bloomTex[0]);
+        blur.set("uDir", vec2(1.f / bw, 0));
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo[0]);
+        glBindTexture(GL_TEXTURE_2D, bloomTex[1]);
+        blur.set("uDir", vec2(0, 1.f / bh));
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, width, height);
+    post.use();
+    post.set("uScene", int(U_SCENE));
+    post.set("uBloom", int(U_BLOOM));
+    post.set("uBlur", blurAmt);
+    post.set("uFlash", flash);
+    post.set("uBloomAmt", bloomAmount);
+    glActiveTexture(GL_TEXTURE0 + U_BLOOM);
+    glBindTexture(GL_TEXTURE_2D, bloomTex[0]);
+    glActiveTexture(GL_TEXTURE0 + U_SCENE);
+    glBindTexture(GL_TEXTURE_2D, sceneTex);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glActiveTexture(GL_TEXTURE0);
 }

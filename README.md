@@ -2,25 +2,27 @@
 
 **A free, open-source open-world festival racer for Linux.** Drive anywhere across a procedurally generated autumn valley, race AI drivers on highways, mountain passes, dirt trails and open fields, earn credits, and buy and paint new cars at the festival dealership.
 
-Written in C++17 with **SDL3** and OpenGL 3.3. No engine, no downloaded assets: every car, tree, road and mountain is generated in code, in a chunky early-2000s console style.
+Written in C++17 with **SDL3** and OpenGL 3.3. No engine and no downloaded assets: every car, texture, tree, road and mountain is generated in code when the game starts.
 
 ![Racing on the Ridge Highway](docs/screenshots/race.jpg)
 
 | | |
 |---|---|
-| ![Title](docs/screenshots/title.jpg) | ![Dirt trail](docs/screenshots/trail.jpg) |
-| ![Dealership](docs/screenshots/dealer.jpg) | ![World map](docs/screenshots/map.jpg) |
+| ![Sunset title screen](docs/screenshots/title.jpg) | ![Dirt trail](docs/screenshots/trail.jpg) |
+| ![Free-look camera](docs/screenshots/freelook.jpg) | ![Mountain pass](docs/screenshots/mountain.jpg) |
+| ![Dealership](docs/screenshots/dealer.jpg) | ![Festival menu](docs/screenshots/menu.jpg) |
 
 ## Features
 
-- **Open world**: a 3 × 3 km valley with rolling hills, a lake with a causeway, snow-capped mountains, about 25,000 autumn and pine trees, and over 10 km of roads you can leave whenever you want.
+- **Open world**: a 3 × 3 km valley with rolling hills, rock cliffs, a lake with a causeway, snow-capped mountains, about 38,000 pines and autumn trees, and over 10 km of roads you can leave whenever you want.
 - **8 race events** against 5 AI drivers: circuits, point-to-point sprints, a mountain climb, a dirt-trail scramble and an off-road cross-country race through checkpoints.
 - **Smart bots**: they brake for corners based on the road's curvature, overtake by changing lanes, recover when stuck, and use light rubber-banding so races stay close. Your opponents always drive cars from your car's class.
 - **10 fictional cars** in 5 classes (D, C, B, A, S): hatchbacks, a rally car, a muscle car, an off-road SUV, sports coupés, mid-engine supercars, a V12 GT and a hypercar. Each has its own power, weight, gearing, grip, drivetrain (FWD/RWD/AWD) and off-road ability.
 - **Economy**: win credits from race prizes (top 3 pay out, everyone else gets a participation bonus) and from **drift chains** and **jumps** anywhere in the world.
 - **Dealership and garage**: buy cars, choose from 12 paint colours, toggle racing stripes and switch between the cars you own.
 - **Driving physics**: tyre slip and grip limits, weight transfer, a 6-speed automatic gearbox, handbrake drifts, jumps and landings, grip that changes between asphalt, dirt, grass and water, and collisions with trees, rocks and other cars. Traction control and a stability assist are on by default and can be turned off.
-- **Graphics**: shadow mapping, sky with drifting clouds, distance and height fog, glossy paint reflections, animated water, trees that sway in the wind, speed-based motion blur, MSAA and tone mapping.
+- **Graphics**: golden-hour lighting with two shadow cascades, bloom, filmic colour grading, sky with lit clouds, distance and height fog, and speed-based motion blur. Terrain is textured with dry grass, dirt and layered rock cliffs, and close to the camera there are thousands of swaying grass tufts. Pines are built from needle-branch cards, autumn trees from leaf clusters, and both have a distant level of detail. Roads are textured asphalt with double yellow centre lines and steel guardrails. Cars have smooth bodies with wheel-arch cut-outs, panel gaps, chrome trim, shaped lights, multi-spoke alloys with brake discs and calipers, and metallic clearcoat paint that reflects the sky and tree line. Every texture is generated procedurally at startup.
+- **Free-look camera**: orbit around your car with the mouse or right stick, zoom with the scroll wheel. It re-centres behind you automatically.
 - **HUD**: rev-light speedometer, rotating minimap with route and opponents, live race standings, world map with fast travel.
 - **Procedural audio**: an engine synthesised from RPM, throttle and cylinder count, tyre squeal, wind, impact sounds and UI beeps.
 - **Keyboard and gamepad** (Xbox, PlayStation, Switch Pro and other SDL-supported controllers), with hot-plugging.
@@ -73,6 +75,8 @@ cmake --build build -j
 | Steer | `A` `D` / `←` `→` | Left stick |
 | Handbrake | `Space` | `A` / `✕` |
 | Start event / enter hub | `Enter` | `Y` / `△` |
+| Look around (orbit the camera) | move the mouse | Right stick |
+| Zoom camera | mouse wheel | |
 | Change camera (chase far, chase near, hood, bumper) | `C` | `RB` / `R1` |
 | Look back | hold `B` | hold `B` / `○` |
 | Reset to road | `R` | `X` / `□` |
@@ -81,16 +85,18 @@ cmake --build build -j
 | Fullscreen | `F11` | |
 | Screenshot (saved next to your save file) | `F12` | |
 
-Menus: arrow keys or D-pad to move, `Enter` or `A` to select, `Esc` or `B` to go back, `←` `→` to change values and paint colours, `X` to toggle stripes in the garage.
+While driving the mouse is captured for free look. Press `Esc` to get the cursor back. Menus: arrow keys or D-pad to move, `Enter` or `A` to select, `Esc` or `B` to go back, `←` `→` to change values and paint colours, `X` to toggle stripes in the garage.
 
 ## How to play
 
+- The title screen shows your best car parked at a lookout at sunset.
 - You start at the **Festival Hub** (pink beacon) with **CR 25,000** and a Kito Pulsar hatchback.
 - **Events** are the tall coloured light beams: orange for circuits, blue for sprints, green for cross-country. Drive into one, stop, and press `Enter` to race. You can also fast-travel to any event from the **World Map**.
 - Finish **1st, 2nd or 3rd** to win the event's prize. Your best result for each event is shown on the map.
 - **Drift** (handbrake into a corner and hold the slide) to build a chain. Keep sliding to raise the multiplier. Stop for a moment to bank it as credits. Crashing breaks the chain.
 - **Jumps**: stay in the air for more than half a second to earn credits.
-- Spend credits at the **Dealership** (pause menu, or drive into the hub and press `Enter`). Faster cars put you up against faster opponents, because bots always come from your car's class.
+- Press `Esc` for the **Festival menu**: resume, world map, dealership, garage, **Next Race** (jumps to the first event you haven't won), settings, and save & exit.
+- Spend credits at the **Dealership** (Festival menu, or drive into the hub and press `Enter`). Faster cars put you up against faster opponents, because bots always come from your car's class.
 - Fell in the lake or stuck in the trees? Press `R`.
 
 ### Events
@@ -125,13 +131,13 @@ All makes and models are invented for this game.
 
 ## Settings
 
-Speed units (km/h or mph), motion blur, shadows, anti-aliasing (off, 2x, 4x, 8x MSAA), draw distance, fullscreen, V-Sync, volume, and driving assists. If the game runs slowly, turn shadows off, lower the draw distance and anti-aliasing.
+Speed units (km/h or mph), motion blur, shadows, anti-aliasing (off, 2x, 4x, 8x MSAA), draw distance, fullscreen, V-Sync, volume, driving assists and grass. If the game runs slowly, turn off grass and shadows, and lower the draw distance and anti-aliasing.
 
 ## Requirements
 
 - Linux on x86_64 or ARM64, with X11 or Wayland
-- A GPU with **OpenGL 3.3** (any GPU from about the last 12 years, including Intel integrated graphics with Mesa)
-- About 200 MB of RAM
+- A GPU with **OpenGL 3.3**. A dedicated GPU is recommended for High draw distance. Integrated graphics run well with grass and shadows off.
+- About 500 MB of RAM
 
 Your save file and screenshots are in `~/.local/share/rxvy/ridgeline/`.
 
@@ -153,7 +159,8 @@ src/
   cars.*         car database and procedural car and wheel meshes
   vehicle.*      car physics (tyres, gearbox, terrain, collisions)
   race.*         events, routes, AI drivers, progress tracking
-  render.*       shaders, meshes, instancing, shadow map, post-processing
+  render.*       shaders, meshes, instancing + LOD, shadow cascades, bloom, post-processing
+  textures.*     procedural texture generator (grass, rock, asphalt, bark, needles, leaves)
   shaders.h      all GLSL shaders
   hud.*          2D drawing and text
   audio.*        procedural engine and effects synth

@@ -2,6 +2,7 @@
 #pragma once
 #include "gl.h"
 #include "mathx.h"
+#include "textures.h"
 #include <vector>
 #include <string>
 #include <unordered_map>
@@ -9,7 +10,7 @@
 struct Vertex {
     vec3 p;
     vec3 n;
-    vec4 c;  // rgb + material id (or uv data for roads)
+    vec4 c;  // rgb + material id (or uv/shade/mode data for roads and trees)
 };
 
 struct Shader {
@@ -42,16 +43,18 @@ struct Instance {
     vec3 tint; float rot;
 };
 
-// Instances grouped into square tiles so far-away tiles can be skipped.
+// Instances grouped into square tiles so far-away tiles can be skipped or drawn with a LOD mesh.
 struct InstanceField {
     Mesh* mesh = nullptr;
+    Mesh* lod = nullptr;
     GLuint ibuf = 0;
-    float tileSize = 200.f;
+    float tileSize = 150.f;
     struct Tile { vec3 center; int first, count; };
     std::vector<Tile> tiles;
-    void build(Mesh* m, std::vector<Instance>& inst, float worldHalf, float tile);
-    // Draw every tile whose center lies within `range` of `eye`.
-    void draw(vec3 eye, float range) const;
+    size_t total = 0;
+    void build(Mesh* m, Mesh* lodMesh, std::vector<Instance>& inst, float worldHalf, float tile);
+    // Tiles within `lodDist` use the full mesh, the rest (up to `range`) the LOD mesh.
+    void draw(vec3 eye, float range, float lodDist) const;
 };
 
 struct MeshBuilder {
@@ -59,20 +62,23 @@ struct MeshBuilder {
     std::vector<uint32_t> idx;
     uint32_t add(vec3 p, vec3 n, vec4 c) { v.push_back({p, n, c}); return uint32_t(v.size() - 1); }
     void tri(uint32_t a, uint32_t b, uint32_t c) { idx.push_back(a); idx.push_back(b); idx.push_back(c); }
-    // Flat-shaded triangle/quad (counter-clockwise when viewed from the front).
     void flatTri(vec3 a, vec3 b, vec3 c, vec4 col);
     void flatQuad(vec3 a, vec3 b, vec3 c, vec3 d, vec4 col);
+    // quad with explicit per-vertex colour data (used for uv-mapped cards)
+    void quad4(vec3 a, vec3 b, vec3 c, vec3 d, vec3 n, vec4 ca, vec4 cb, vec4 cc, vec4 cd);
     void box(vec3 center, vec3 half, vec4 col, const mat4* xf = nullptr);
     void cylinder(vec3 base, float r, float h, int seg, vec4 col, bool caps = true);
     void cone(vec3 base, float r, float h, int seg, vec4 col);
     void sphere(vec3 c, float r, int detail, vec4 col, float jitter = 0.f, uint32_t seed = 1);
+    // tube along an arbitrary axis, smooth normals
+    void tube(vec3 a, vec3 b, float ra, float rb, int seg, vec4 col);
     void append(const MeshBuilder& o, const mat4& xf);
     void build(Mesh& m) const { m.upload(v, idx); }
 };
 
 struct Camera {
     vec3 pos, target;
-    float fov = 1.1f, aspect = 1.77f, nearZ = 0.3f, farZ = 4000.f;
+    float fov = 1.1f, aspect = 1.77f, nearZ = 0.25f, farZ = 4000.f;
     mat4 view, proj, viewProj;
     void update() {
         view = lookAt(pos, target, vec3(0, 1, 0));
@@ -82,38 +88,43 @@ struct Camera {
 };
 
 struct Atmosphere {
-    vec3 sunDir = normalize(vec3(-0.45f, 0.55f, -0.62f));
-    vec3 sunColor = vec3(1.45f, 1.27f, 1.02f);
-    vec3 skyAmb = vec3(0.40f, 0.47f, 0.60f);
-    vec3 groundAmb = vec3(0.34f, 0.29f, 0.22f);
-    vec3 skyTop = vec3(0.24f, 0.45f, 0.80f);
-    vec3 skyHorizon = vec3(0.72f, 0.80f, 0.88f);
-    vec3 fogColor = vec3(0.70f, 0.77f, 0.84f);
+    vec3 sunDir = normalize(vec3(-0.52f, 0.40f, -0.75f));
+    vec3 sunColor = vec3(1.75f, 1.42f, 1.02f);
+    vec3 skyAmb = vec3(0.42f, 0.46f, 0.54f);
+    vec3 groundAmb = vec3(0.30f, 0.25f, 0.17f);
+    vec3 skyTop = vec3(0.17f, 0.38f, 0.72f);
+    vec3 skyHorizon = vec3(0.70f, 0.78f, 0.84f);
+    vec3 fogColor = vec3(0.68f, 0.74f, 0.78f);
     float fogDensity = 0.0011f;
 };
 
 struct Renderer {
-    Shader terrain, road, object, tree, water, unlit, depth, depthTree, sky, post, hud;
+    Shader terrain, road, object, tree, grass, water, unlit, depth, depthTree, sky, post, hud, bright, blur;
+    Textures tex;
     int width = 1280, height = 720;
     int msaa = 4;
     bool usePost = true;
     bool shadows = true;
-    int shadowSize = 2048;
-    GLuint shadowFbo = 0, shadowTex = 0;
+    int shadowSize[2] = {2048, 2048};
+    GLuint shadowFbo[2] = {0, 0}, shadowTex[2] = {0, 0};
+    mat4 shadowMat[2];
     GLuint sceneFbo = 0, sceneTex = 0, sceneDepth = 0;
     GLuint msFbo = 0, msColor = 0, msDepth = 0;
+    GLuint bloomFbo[2] = {0, 0}, bloomTex[2] = {0, 0};
+    int bw = 0, bh = 0;
     GLuint emptyVao = 0;
-    mat4 shadowMat;
     Atmosphere atmo;
     float time = 0.f;
+    float bloomAmount = 0.22f;
 
     bool init();
     void resize(int w, int h);
     void destroyTargets();
+    void setShadowQuality(int nearSize);
     // Uniforms shared by every lit shader.
     void setCommon(Shader& s, const Camera& cam);
-    void beginShadowPass(vec3 focus, float extent);
-    void endShadowPass();
+    void beginShadowPass(int cascade, vec3 focus, float extent, float depthRange);
+    void endShadowPasses();
     void beginScene();
     void drawSky(const Camera& cam);
     void endScene(float blur, float flash);

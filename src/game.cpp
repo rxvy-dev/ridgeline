@@ -172,6 +172,8 @@ bool Game::init(const Options& o) {
         titleCar.idx = 40;
     }
     showCar.model = &models[0];
+    dayAtmo = R.atmo;
+    setupTitle();
     setPlayerCar(std::clamp(current, 0, int(garage.size()) - 1));
     player.car.placeAt(world.hubSpawn, world.hubYaw, world);
     camYaw = world.hubYaw;
@@ -231,12 +233,45 @@ bool Game::init(const Options& o) {
         else if (opt.scene == "settings") { enterFreeRoam(world.hubSpawn, world.hubYaw); state = ST_SETTINGS; }
         // fast-forward the simulation
         int steps = int(opt.simSeconds * 60);
+        if (opt.look != 0) { lookYaw = opt.look; lookPitch = 0.25f; lookIdle = -1e9f; }
         for (int i = 0; i < steps; i++) {
             update(1.f / 60.f);
             if (state == ST_RACE_INTRO && i == 0) { stateTime = 6.f; }
         }
     }
     return true;
+}
+
+void Game::setupTitle() {
+    // park the best car in the garage at a lookout high on the pass road, sun setting behind it
+    int bestOwned = 0;
+    for (int i = 0; i < int(garage.size()); i++)
+        if (kCars[garage[i].spec].price > kCars[garage[bestOwned].spec].price) bestOwned = i;
+    const OwnedCar& oc = garage[bestOwned];
+    titleCar.car.init(&kCars[oc.spec], vec3(), 0);
+    titleCar.model = &models[oc.spec];
+    titleCar.paint = kPaints[oc.paint];
+    titleCar.stripe = oc.stripes ? stripeFor(titleCar.paint) : titleCar.paint;
+    const Road& pass = world.roads[3];
+    int bi = int(pass.pts.size()) * 2 / 3;
+    vec3 p = pass.pts[bi];
+    vec3 t = pass.tan[bi], right(-t.z, 0, t.x);
+    vec3 toValley = normalize(vec3(-p.x, 0, -p.z));
+    if (dot(right, toValley) < 0) right = -right;
+    p += right * (pass.width * 0.3f);
+    float yaw = std::atan2(toValley.x, toValley.z) + 0.5f;
+    titleCar.car.placeAt(p, yaw, world);
+    // sunset light coming from behind the car, towards the camera
+    titleAtmo = dayAtmo;
+    vec3 f(std::sin(yaw), 0, std::cos(yaw)), r(-std::cos(yaw), 0, std::sin(yaw));
+    vec3 toCar = normalize(-(f * 5.8f - r * 2.6f));  // camera -> car
+    titleAtmo.sunDir = normalize(vec3(toCar.x, 0.14f, toCar.z));
+    titleAtmo.sunColor = vec3(2.1f, 1.25f, 0.62f);
+    titleAtmo.skyTop = vec3(0.13f, 0.27f, 0.55f);
+    titleAtmo.skyHorizon = vec3(0.98f, 0.70f, 0.46f);
+    titleAtmo.fogColor = vec3(0.86f, 0.66f, 0.48f);
+    titleAtmo.skyAmb = vec3(0.46f, 0.40f, 0.42f);
+    titleAtmo.groundAmb = vec3(0.30f, 0.21f, 0.14f);
 }
 
 void Game::shutdown() {
@@ -260,7 +295,7 @@ void Game::save() {
     for (size_t i = 0; i < bestPlace.size(); i++) f << "best=" << i << "," << bestPlace[i] << "\n";
     f << "mph=" << settings.mph << "\nblur=" << settings.motionBlur << "\nshadows=" << settings.shadows << "\nmsaa=" << settings.msaa
       << "\nfullscreen=" << settings.fullscreen << "\nvolume=" << settings.volume << "\ndraw=" << settings.drawDist
-      << "\nvsync=" << settings.vsync << "\nassists=" << settings.assists << "\n";
+      << "\nvsync=" << settings.vsync << "\nassists=" << settings.assists << "\ngrass=" << settings.grass << "\n";
 }
 
 bool Game::load() {
@@ -289,6 +324,7 @@ bool Game::load() {
         else if (k == "draw") settings.drawDist = std::clamp(std::atoi(v.c_str()), 0, 2);
         else if (k == "vsync") settings.vsync = std::atoi(v.c_str());
         else if (k == "assists") settings.assists = std::atoi(v.c_str());
+        else if (k == "grass") settings.grass = std::atoi(v.c_str());
     }
     if (garage.empty()) return false;
     current = std::clamp(current, 0, int(garage.size()) - 1);
@@ -513,6 +549,16 @@ void Game::handleEvent(const SDL_Event& e) {
     switch (e.type) {
         case SDL_EVENT_QUIT: running = false; return;
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: R.resize(e.window.data1, e.window.data2); return;
+        case SDL_EVENT_MOUSE_MOTION:
+            if (SDL_GetWindowRelativeMouseMode(win)) {
+                lookYaw -= e.motion.xrel * 0.0045f;
+                lookPitch = clampf(lookPitch + e.motion.yrel * 0.0035f, -0.4f, 1.1f);
+                lookIdle = 0;
+            }
+            return;
+        case SDL_EVENT_MOUSE_WHEEL:
+            lookZoom = clampf(lookZoom - e.wheel.y * 0.08f, 0.6f, 2.2f);
+            return;
         case SDL_EVENT_GAMEPAD_ADDED:
             if (!pad) pad = SDL_OpenGamepad(e.gdevice.which);
             return;
@@ -560,6 +606,33 @@ void Game::handleEvent(const SDL_Event& e) {
         default: break;
     }
     if (a != A_NONE) handleAction(a);
+}
+
+struct MenuTile { float x, y, w, h; const char* label; const char* sub; vec4 accent; };
+static const MenuTile kTiles[] = {
+    {0, 0, 1, 1, "Resume", "Back to the road", {1.0f, 0.42f, 0.12f, 1}},
+    {1, 0, 2, 1, "World Map", "Fast travel anywhere", {0.30f, 0.62f, 0.95f, 1}},
+    {3, 0, 1, 1, "Dealership", "Buy new cars", {0.98f, 0.72f, 0.18f, 1}},
+    {0, 1, 1, 1, "My Garage", "Paint and switch cars", {0.88f, 0.22f, 0.16f, 1}},
+    {1, 1, 1, 1, "Next Race", "", {0.45f, 0.85f, 0.35f, 1}},
+    {2, 1, 1, 1, "Settings", "Graphics, sound, driving", {0.62f, 0.62f, 0.66f, 1}},
+    {3, 1, 1, 1, "Save & Exit", "Back to the title screen", {0.20f, 0.70f, 0.66f, 1}},
+};
+static const int kTileCount = 7;
+static int tileMove(int cur, int dx, int dy) {
+    const MenuTile& c = kTiles[cur];
+    float cx = c.x + c.w * 0.5f, cy = c.y + c.h * 0.5f;
+    int best = cur; float bd = 1e9f;
+    for (int i = 0; i < kTileCount; i++) {
+        if (i == cur) continue;
+        float tx = kTiles[i].x + kTiles[i].w * 0.5f - cx, ty = kTiles[i].y + kTiles[i].h * 0.5f - cy;
+        float along = tx * dx + ty * dy;
+        if (along <= 0.01f) continue;
+        float across = std::fabs(tx * dy) + std::fabs(ty * dx);
+        float d = along + across * 2.f;
+        if (d < bd) { bd = d; best = i; }
+    }
+    return best;
 }
 
 static std::vector<std::string> pauseItems(bool racing) {
@@ -613,6 +686,34 @@ void Game::handleAction(Action a) {
             break;
         case ST_PAUSE: {
             bool racing = returnState == ST_RACE || returnState == ST_RACE_INTRO;
+            if (!racing) {
+                int before = menuSel;
+                if (a == A_LEFT) menuSel = tileMove(menuSel, -1, 0);
+                if (a == A_RIGHT) menuSel = tileMove(menuSel, 1, 0);
+                if (a == A_UP) menuSel = tileMove(menuSel, 0, -1);
+                if (a == A_DOWN) menuSel = tileMove(menuSel, 0, 1);
+                if (menuSel != before) audio.beep(880, 0.04f);
+                if (a == A_BACK || a == A_PAUSE) state = returnState;
+                if (a != A_CONFIRM) break;
+                audio.beep(1100, 0.06f);
+                switch (menuSel) {
+                    case 0: state = returnState; break;
+                    case 1: state = ST_MAP; subSel = 0; break;
+                    case 2: state = ST_DEALER; subSel = 0; dealerPaint = stockPaint(kCars[0]); stateTime = 0; break;
+                    case 3: state = ST_GARAGE; subSel = current; stateTime = 0; break;
+                    case 4: {
+                        int ev = nextRaceEvent();
+                        const EventDef& E = events[ev];
+                        enterFreeRoam(E.route.pts[0] - E.route.tan[0] * (E.route.closed ? 25.f : 0.f), E.startYaw);
+                        if (!E.route.closed) player.car.placeAt(E.route.pts[2], E.startYaw, world);
+                        toast("Fast travelled to " + E.name, ACCENT);
+                        break;
+                    }
+                    case 5: state = ST_SETTINGS; subSel = 0; break;
+                    case 6: save(); state = ST_TITLE; stateTime = 0; setupTitle(); break;
+                }
+                break;
+            }
             auto items = pauseItems(racing);
             nav(menuSel, int(items.size()));
             if (a == A_BACK || a == A_PAUSE) state = returnState;
@@ -705,6 +806,7 @@ void Game::handleAction(Action a) {
                 case 6: settings.vsync = !settings.vsync; break;
                 case 7: settings.volume = std::clamp(settings.volume + d * 10, 0, 100); break;
                 case 8: settings.assists = !settings.assists; break;
+                case 9: settings.grass = !settings.grass; break;
             }
             audio.beep(990, 0.04f);
             applySettings();
@@ -726,7 +828,8 @@ std::vector<std::string> Game::settingsItems() const {
             std::string("Fullscreen: ") + (settings.fullscreen ? "On" : "Off"),
             std::string("V-Sync: ") + (settings.vsync ? "On" : "Off"),
             "Volume: " + std::to_string(settings.volume) + "%",
-            std::string("Driving assists: ") + (settings.assists ? "On" : "Off")};
+            std::string("Driving assists: ") + (settings.assists ? "On" : "Off"),
+            std::string("Grass: ") + (settings.grass ? "On" : "Off")};
 }
 
 // ====================================================================== update
@@ -740,14 +843,14 @@ void Game::update(float dt) {
     shake = std::max(0.f, shake - dt * 3.f);
 
     Vehicle* audioCar = &player.car;
+    R.atmo = state == ST_TITLE ? titleAtmo : dayAtmo;
     switch (state) {
         case ST_TITLE: {
-            const Route& rt = events[0].route;
-            titleCar.idx = rt.project(titleCar.car.pos, titleCar.idx, 25);
-            std::vector<Racer*> none;
-            Controls c = aiDrive(titleCar, rt, world, none, 1.f, dt);
-            physAcc += dt;
-            while (physAcc >= 1.f / 120.f) { titleCar.car.update(1.f / 120.f, world, c); physAcc -= 1.f / 120.f; }
+            Controls idle;
+            idle.brake = 1.f;
+            titleCar.car.update(dt, world, idle);
+            titleCar.car.vel = vec3(0, titleCar.car.vel.y, 0);
+            titleCar.car.rpm = 900.f;
             audioCar = &titleCar.car;
             break;
         }
@@ -807,6 +910,10 @@ void Game::update(float dt) {
             break;
     }
     updateCamera(dt);
+    if (opt.shot.empty()) {
+        bool wantMouse = (state == ST_FREEROAM || state == ST_RACE || state == ST_RACE_INTRO) && (SDL_GetWindowFlags(win) & SDL_WINDOW_INPUT_FOCUS);
+        if (wantMouse != SDL_GetWindowRelativeMouseMode(win)) SDL_SetWindowRelativeMouseMode(win, wantMouse);
+    }
 
     // audio
     audio.rpm = audioCar->rpm;
@@ -944,35 +1051,13 @@ void Game::updateCamera(float dt) {
         return;
     }
     if (state == ST_TITLE) {
-        titleCut += dt;
-        if (titleCut > 7.f) { titleCut = 0; titleShot = (titleShot + 1) % 4; camPos = vec3(); }
-        vec3 rgt = car.right();
-        switch (titleShot) {
-            case 0: {
-                cam.pos = car.pos - fwd * 7.f + vec3(0, 1.6f, 0) + rgt * 1.5f;
-                cam.target = car.pos + fwd * 4.f + vec3(0, 0.8f, 0);
-                break;
-            }
-            case 1: {
-                cam.pos = car.pos + rgt * 5.5f + vec3(0, 0.9f, 0) + fwd * 1.5f;
-                cam.target = car.pos + vec3(0, 0.6f, 0);
-                break;
-            }
-            case 2: {
-                if (length(camPos) < 1.f) { camPos = car.pos + fwd * 90.f + rgt * 9.f; camPos.y = world.heightAt(camPos.x, camPos.z) + 2.f; }
-                cam.pos = camPos;
-                cam.target = car.pos + vec3(0, 0.8f, 0);
-                break;
-            }
-            default: {
-                float a = titleCut * 0.3f;
-                cam.pos = car.pos + vec3(std::cos(a) * 9.f, 3.5f, std::sin(a) * 9.f);
-                cam.target = car.pos + vec3(0, 0.6f, 0);
-            }
-        }
-        float g = world.heightAt(cam.pos.x, cam.pos.z) + 0.6f;
-        cam.pos.y = std::max(cam.pos.y, g);
-        cam.fov = titleShot == 2 ? 0.55f : 1.0f;
+        vec3 f = car.forward(), rgt = car.right();
+        float a = std::sin(stateTime * 0.08f) * 0.35f;
+        vec3 off = f * (std::cos(a) * 5.8f) - rgt * (std::sin(a) * 5.8f + 2.6f);
+        cam.pos = car.pos + off + vec3(0, 0.85f, 0);
+        cam.pos.y = std::max(cam.pos.y, world.heightAt(cam.pos.x, cam.pos.z) + 0.5f);
+        cam.target = car.pos + vec3(0, 0.75f, 0) - f * 0.4f - rgt * 1.6f;
+        cam.fov = 0.82f;
         cam.update();
         return;
     }
@@ -1006,20 +1091,46 @@ void Game::updateCamera(float dt) {
     float fovT = 1.08f + clampf(kmh / 300.f, 0.f, 1.f) * 0.32f;
     fovSm += (fovT - fovSm) * damp(3.f, dt);
     cam.fov = fovSm;
+    // free look: gamepad right stick (springs back) or mouse (recentres after a pause)
+    if (pad) {
+        float rx = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHTX) / 32767.f;
+        float ry = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHTY) / 32767.f;
+        if (std::fabs(rx) > 0.2f || std::fabs(ry) > 0.2f) {
+            lookYaw += (-rx * PI * 0.95f - lookYaw) * damp(8.f, dt);
+            lookPitch += (ry * 0.55f - lookPitch) * damp(8.f, dt);
+            lookIdle = 0;
+            padLooking = true;
+        } else if (padLooking) {
+            padLooking = false;
+            lookIdle = 10.f;  // spring straight back
+        }
+    }
+    lookIdle += dt;
+    if (lookIdle > 1.6f && (v > 3.f || lookIdle > 5.f)) {
+        lookYaw = wrapAngle(lookYaw) * (1.f - damp(2.5f, dt));
+        lookPitch *= 1.f - damp(2.5f, dt);
+    }
+    float orbit = clampf(std::fabs(wrapAngle(lookYaw)) / 0.6f, 0.f, 1.f);
     if (camMode <= 1 || lookBack) {
         float dist = camMode == 0 ? 6.4f : 4.8f;
         float hgt = camMode == 0 ? 1.95f : 1.45f;
         dist *= car.spec->length / 4.4f;
         if (car.spec->body == BODY_TRUCK) hgt += 0.4f;
         dist += clampf(kmh / 300.f, 0.f, 1.f) * 0.8f;
-        cam.pos = car.pos - cf * dist + vec3(0, hgt, 0);
-        cam.pos.y = std::max(cam.pos.y, car.pos.y + hgt * 0.6f);
-        cam.target = car.pos + cf * 3.f + vec3(0, 0.95f, 0);
+        float lyaw = yaw + lookYaw;
+        float el = clampf(std::atan2(hgt - 0.95f, dist) + lookPitch, -0.08f, 1.35f);
+        float D = std::sqrt(dist * dist + (hgt - 0.95f) * (hgt - 0.95f)) * lookZoom;
+        vec3 pivot = car.pos + vec3(0, 0.95f, 0);
+        vec3 back(std::sin(lyaw) * std::cos(el), -std::sin(el), std::cos(lyaw) * std::cos(el));
+        cam.pos = pivot - back * D;
+        cam.target = pivot + cf * (3.f * (1.f - orbit));
     } else {
         mat4 bm = car.bodyMatrix();
         vec3 local = camMode == 2 ? vec3(0, car.spec->height * 0.82f, 0.25f) : vec3(0, 0.55f, car.spec->length * 0.5f + 0.15f);
         cam.pos = bm.transformPoint(local);
-        cam.target = cam.pos + bm.transformDir(vec3(0, -0.02f, 1)) * 10.f;
+        vec3 dir = bm.transformDir(vec3(0, -0.02f, 1));
+        float a = std::atan2(dir.x, dir.z) + lookYaw, p = std::asin(clampf(dir.y, -1.f, 1.f)) - lookPitch * 0.8f;
+        cam.target = cam.pos + vec3(std::sin(a) * std::cos(p), std::sin(p), std::cos(a) * std::cos(p)) * 10.f;
         cam.fov = fovSm + 0.1f;
     }
     float g = world.heightAt(cam.pos.x, cam.pos.z) + 0.5f;
@@ -1042,13 +1153,15 @@ void Game::drawCar(Racer& r, Shader& s) {
     for (int i = 0; i < 4; i++) {
         s.set("uModel", r.car.wheelMatrix(*r.model, i));
         r.model->wheel.draw();
+        s.set("uModel", r.car.wheelMatrix(*r.model, i, false));
+        r.model->caliper.draw();
     }
 }
 
 void Game::renderWorld(const Camera& c, bool showroom) {
-    const float dists[] = {650.f, 950.f, 1400.f};
+    const float dists[] = {800.f, 1200.f, 1800.f};
     float drawDist = dists[settings.drawDist];
-    R.atmo.fogDensity = 2.2f / drawDist;
+    R.atmo.fogDensity = 1.5f / drawDist;
     std::vector<Racer*> cars;
     if (state == ST_TITLE) cars.push_back(&titleCar);
     else {
@@ -1087,42 +1200,58 @@ void Game::renderWorld(const Camera& c, bool showroom) {
         cars.push_back(&d);
     }
 
-    // ---- shadow pass
+    // ---- shadow passes: a sharp near cascade around the car and a wide far cascade
+    auto drawTrees = [&](Shader& sh, vec3 eye, float range, float lodDist) {
+        sh.set("tFoliage", int(U_PINE));
+        world.pines.draw(eye, range, lodDist);
+        sh.set("tFoliage", int(U_LEAVES));
+        world.leafy.draw(eye, range, lodDist);
+        world.rocks.draw(eye, range * 0.7f, range);
+    };
     if (R.shadows) {
-        vec3 focus = c.target + normalize(vec3(c.target.x - c.pos.x, 0, c.target.z - c.pos.z)) * 25.f;
-        R.beginShadowPass(focus, 95.f);
-        R.depth.use();
-        for (auto& ch : world.chunks) {
-            float dx = ch.center.x - focus.x, dz = ch.center.z - focus.z;
-            if (dx * dx + dz * dz < 330.f * 330.f) ch.mesh.draw();
+        R.tex.bindAll();
+        vec3 fdir = normalize(vec3(c.target.x - c.pos.x, 0, c.target.z - c.pos.z));
+        const float ext[2] = {38.f, 330.f};
+        const float lead[2] = {14.f, 220.f};
+        for (int cas = 0; cas < 2; cas++) {
+            vec3 focus = c.target + fdir * lead[cas];
+            R.beginShadowPass(cas, focus, ext[cas], cas == 0 ? 300.f : 900.f);
+            R.depth.use();
+            float reach = ext[cas] * 1.5f + 120.f;
+            for (auto& ch : world.chunks) {
+                float dx = ch.center.x - focus.x, dz = ch.center.z - focus.z;
+                if (dx * dx + dz * dz < reach * reach) ch.mesh.draw();
+            }
+            world.hubMesh.draw();
+            world.propsMesh.draw();
+            for (Racer* r : cars) {
+                R.depth.set("uModel", r->car.bodyMatrix());
+                r->model->body.draw();
+                for (int i = 0; i < 4; i++) {
+                    R.depth.set("uModel", r->car.wheelMatrix(*r->model, i));
+                    r->model->wheel.draw();
+                }
+            }
+            R.depth.set("uModel", mat4());
+            R.depthTree.use();
+            drawTrees(R.depthTree, focus, ext[cas] * 1.45f, cas == 0 ? 400.f : 0.f);
         }
-        world.hubMesh.draw();
-        for (Racer* r : cars) {
-            R.depth.set("uModel", r->car.bodyMatrix());
-            r->model->body.draw();
-        }
-        R.depth.set("uModel", mat4());
-        R.depthTree.use();
-        world.pines.draw(focus, 150.f);
-        world.leafy.draw(focus, 150.f);
-        world.rocks.draw(focus, 150.f);
-        R.endShadowPass();
+        R.endShadowPasses();
     }
 
     R.beginScene();
     R.drawSky(c);
 
+    vec3 camFwd = normalize(vec3(c.target.x - c.pos.x, 0, c.target.z - c.pos.z));
     // terrain
     R.setCommon(R.terrain, c);
     R.terrain.set("uWater", world.waterLevel);
     for (auto& ch : world.chunks) {
         float dx = ch.center.x - c.pos.x, dz = ch.center.z - c.pos.z;
-        float lim = drawDist + 215.f;
-        if (dx * dx + dz * dz > lim * lim) continue;
-        // cheap behind-camera rejection
-        vec3 to = normalize(vec3(dx, 0, dz));
-        vec3 cf = normalize(vec3(c.target.x - c.pos.x, 0, c.target.z - c.pos.z));
-        if (dx * dx + dz * dz > 300.f * 300.f && dot(to, cf) < -0.3f) continue;
+        float d2 = dx * dx + dz * dz;
+        float lim = drawDist + 110.f;
+        if (d2 > lim * lim) continue;
+        if (d2 > 160.f * 160.f && dot(normalize(vec3(dx, 0, dz)), camFwd) < -0.45f) continue;
         ch.mesh.draw();
     }
     // roads
@@ -1131,7 +1260,7 @@ void Game::renderWorld(const Camera& c, bool showroom) {
     glPolygonOffset(-1.f, -2.f);
     world.roadMesh.draw();
     glDisable(GL_POLYGON_OFFSET_FILL);
-    // hub + cars
+    // hub, props, cars
     R.setCommon(R.object, c);
     R.object.set("uPaint", vec3(1, 1, 1));
     R.object.set("uStripe", vec3(1, 1, 1));
@@ -1141,14 +1270,33 @@ void Game::renderWorld(const Camera& c, bool showroom) {
     glPolygonOffset(-1.f, -3.f);
     world.hubMesh.draw();
     glDisable(GL_POLYGON_OFFSET_FILL);
+    glDisable(GL_CULL_FACE);
+    world.propsMesh.draw();
+    glEnable(GL_CULL_FACE);
     for (Racer* r : cars) drawCar(*r, R.object);
-    // vegetation
+    // vegetation (alpha-tested, double sided)
+    glDisable(GL_CULL_FACE);
+    bool a2c = R.msaa > 1 && R.msFbo;
+    if (a2c) glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
     R.setCommon(R.tree, c);
-    float treeDist = drawDist * 0.8f;
-    world.pines.draw(c.pos, treeDist);
-    world.leafy.draw(c.pos, treeDist);
-    world.rocks.draw(c.pos, treeDist * 0.7f);
-    world.posts.draw(c.pos, 350.f);
+    drawTrees(R.tree, c.pos, drawDist * 0.85f, 230.f);
+    if (settings.grass) {
+        R.setCommon(R.grass, c);
+        float sp = world.grassSpacing;
+        R.grass.set("uOrigin", vec2(std::floor(c.pos.x / sp) * sp, std::floor(c.pos.z / sp) * sp));
+        R.grass.set("uRadius", world.grassRadius);
+        R.grass.set("uHalf", World::HALF);
+        R.grass.set("uWaterLevel", world.waterLevel);
+        R.grass.set("uHub", world.hubPos);
+        glActiveTexture(GL_TEXTURE0 + U_HEIGHT);
+        glBindTexture(GL_TEXTURE_2D, world.heightTex);
+        glActiveTexture(GL_TEXTURE0 + U_ROADDIST);
+        glBindTexture(GL_TEXTURE_2D, world.roadTex);
+        glActiveTexture(GL_TEXTURE0);
+        world.grassMesh.drawInstanced(world.grassCount);
+    }
+    if (a2c) glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+    glEnable(GL_CULL_FACE);
     // water
     R.setCommon(R.water, c);
     world.waterMesh.draw();
@@ -1179,7 +1327,7 @@ void Game::renderWorld(const Camera& c, bool showroom) {
         R.unlit.set("uModel", mat4());
         gateMesh.draw();
     }
-    if (state == ST_FREEROAM || state == ST_TITLE || state == ST_PAUSE || state == ST_MAP) {
+    if (state == ST_FREEROAM || state == ST_PAUSE || state == ST_MAP) {
         glBlendFunc(GL_SRC_ALPHA, GL_ONE);
         R.unlit.set("uFog", 0);
         for (auto& e : events) {
@@ -1462,8 +1610,67 @@ void Game::drawRaceHud() {
     if (offRouteTime > 1.5f) hud.text(hud.w * 0.5f, hud.h * 0.42f, 22 * u, pad ? "Off route! Press (X) to reset" : "Off route! Press R to reset", vec4(1, 0.5f, 0.3f, 1), 1);
 }
 
+int Game::nextRaceEvent() const {
+    for (int i = 0; i < int(events.size()); i++)
+        if (i >= int(bestPlace.size()) || bestPlace[i] != 1) return i;
+    return 0;
+}
+
 void Game::drawPause() {
     float u = hud.ui;
+    bool racingMenu = returnState == ST_RACE || returnState == ST_RACE_INTRO;
+    if (!racingMenu) {
+        hud.rectV(0, 0, hud.w, hud.h, vec4(0.02f, 0.02f, 0.03f, 0.82f), vec4(0.05f, 0.03f, 0.02f, 0.72f));
+        // top bar
+        float x0 = 56 * u, y0 = 34 * u, W = hud.w - 112 * u;
+        hud.text(x0, y0, 34 * u, "RIDGELINE FESTIVAL", WHITE);
+        hud.rect(x0, y0 + 46 * u, 120 * u, 4 * u, ACCENT);
+        hud.text(x0 + W, y0 + 2 * u, 28 * u, "CR " + fmtThousands(credits), WHITE, 2);
+        hud.text(x0 + W, y0 + 38 * u, 15 * u, carName(*player.car.spec) + "   |   Class " + std::string(1, player.car.spec->cls) +
+                 "   |   " + std::to_string(racesWon) + " wins", DIM, 2, false);
+        // tiles
+        float gy = y0 + 84 * u, gap = 12 * u;
+        float cw = (W - gap * 3) / 4.f, ch = std::min((hud.h - gy - 90 * u - gap) / 2.f, cw * 0.95f);
+        for (int i = 0; i < kTileCount; i++) {
+            const MenuTile& t = kTiles[i];
+            float tx = x0 + t.x * (cw + gap), ty = gy + t.y * (ch + gap);
+            float tw = t.w * cw + (t.w - 1) * gap, th = t.h * ch + (t.h - 1) * gap;
+            bool sel = i == menuSel;
+            hud.rect(tx, ty, tw, th, vec4(0.09f, 0.09f, 0.10f, 0.94f));
+            if (i == 1) {  // live map preview
+                vec2 pc = vec2((player.car.pos.x + World::HALF) / (2 * World::HALF), (World::HALF - player.car.pos.z) / (2 * World::HALF));
+                float span = 0.32f * tw / th * 0.5f, spv = 0.32f * 0.5f;
+                vec2 p[4] = {{tx, ty}, {tx + tw, ty}, {tx + tw, ty + th}, {tx, ty + th}};
+                vec2 uv[4] = {{pc.x - span, pc.y - spv}, {pc.x + span, pc.y - spv}, {pc.x + span, pc.y + spv}, {pc.x - span, pc.y + spv}};
+                hud.mapQuad(p, uv, vec4(0.85f, 0.85f, 0.85f, 1));
+                hud.rectV(tx, ty + th * 0.45f, tw, th * 0.55f, vec4(0, 0, 0, 0), vec4(0, 0, 0, 0.85f));
+                vec2 me(tx + tw * 0.5f, ty + th * 0.5f);
+                hud.circle(me, 7 * u, vec4(0, 0, 0, 1), 14);
+                hud.circle(me, 5 * u, WHITE, 14);
+            } else {
+                hud.rectV(tx, ty, tw, th, vec4(t.accent.x, t.accent.y, t.accent.z, 0.30f), vec4(t.accent.x * 0.2f, t.accent.y * 0.2f, t.accent.z * 0.2f, 0.2f));
+            }
+            hud.rect(tx, ty + th - 5 * u, tw, 5 * u, t.accent);
+            std::string sub = t.sub;
+            if (i == 4) {
+                const EventDef& E = events[nextRaceEvent()];
+                sub = E.name;
+            }
+            hud.text(tx + 18 * u, ty + th - 78 * u, 28 * u, t.label, WHITE);
+            hud.text(tx + 18 * u, ty + th - 38 * u, 14 * u, sub, vec4(1, 1, 1, 0.75f), 0, false);
+            if (sel) {
+                float b = 3 * u;
+                hud.rect(tx - b, ty - b, tw + 2 * b, b, WHITE);
+                hud.rect(tx - b, ty + th, tw + 2 * b, b, WHITE);
+                hud.rect(tx - b, ty, b, th, WHITE);
+                hud.rect(tx + tw, ty, b, th, WHITE);
+            }
+        }
+        hud.text(hud.w * 0.5f, hud.h - 46 * u, 15 * u, pad ? "D-pad move   (A) select   (B) back" : "Arrows move   ENTER select   ESC back", DIM, 1, false);
+        float tyy = hud.h * 0.8f;
+        for (auto& t : toasts) { hud.text(hud.w * 0.5f, tyy, 20 * u, t.text, t.col, 1); tyy += 28 * u; }
+        return;
+    }
     hud.rect(0, 0, hud.w, hud.h, vec4(0, 0, 0, 0.35f));
     bool racing = returnState == ST_RACE || returnState == ST_RACE_INTRO;
     drawMenuPanel(racing ? "PAUSED" : "FESTIVAL", pauseItems(racing), menuSel, 60 * u, 120 * u, 360 * u);
@@ -1627,19 +1834,19 @@ void Game::drawResults() {
 
 void Game::drawTitle() {
     float u = hud.ui;
-    hud.rectV(0, 0, hud.w, hud.h * 0.45f, vec4(0, 0, 0, 0.55f), vec4(0, 0, 0, 0));
-    hud.rectV(0, hud.h * 0.7f, hud.w, hud.h * 0.3f, vec4(0, 0, 0, 0), vec4(0, 0, 0, 0.6f));
-    float ty = hud.h * 0.12f;
-    hud.text(hud.w * 0.5f, ty, 96 * u, "RIDGELINE", WHITE, 1);
-    hud.rect(hud.w * 0.5f - 160 * u, ty + 118 * u, 320 * u, 4 * u, ACCENT);
-    hud.text(hud.w * 0.5f, ty + 132 * u, 18 * u, "OPEN-WORLD FESTIVAL RACING", DIM, 1, false);
+    hud.rectV(0, hud.h * 0.55f, hud.w, hud.h * 0.45f, vec4(0, 0, 0, 0), vec4(0, 0, 0, 0.55f));
+    float rx = hud.w - 60 * u, by = hud.h - 70 * u;
+    hud.text(rx, by - 150 * u, 74 * u, "RIDGELINE", WHITE, 2);
+    float tw = hud.textWidth(74 * u, "RIDGELINE");
+    hud.rect(rx - tw, by - 62 * u, tw, 4 * u, ACCENT);
+    hud.text(rx, by - 50 * u, 15 * u, "OPEN-WORLD FESTIVAL RACING", vec4(1, 1, 1, 0.8f), 2, false);
     float blink = 0.55f + 0.45f * std::sin(stateTime * 3.f);
-    hud.text(hud.w * 0.5f, hud.h * 0.78f, 26 * u, pad ? "Press (A) to drive" : "Press ENTER to drive", vec4(1, 1, 1, blink), 1);
+    hud.text(rx, by - 16 * u, 20 * u, pad ? "PRESS (A)" : "PRESS ENTER", vec4(1, 1, 1, blink), 2);
     char buf[128];
-    std::snprintf(buf, sizeof(buf), "CR %s   |   %d cars   |   %d wins", fmtThousands(credits).c_str(), int(garage.size()), racesWon);
-    hud.text(hud.w * 0.5f, hud.h * 0.78f + 44 * u, 15 * u, buf, DIM, 1, false);
-    hud.text(hud.w - 20 * u, hud.h - 30 * u, 12 * u, "v1.0  |  free & open source (MIT)", vec4(1, 1, 1, 0.45f), 2, false);
-    hud.text(20 * u, hud.h - 30 * u, 12 * u, pad ? "(B) quit" : "ESC quit", vec4(1, 1, 1, 0.45f), 0, false);
+    std::snprintf(buf, sizeof(buf), "CR %s   |   %d %s   |   %d %s", fmtThousands(credits).c_str(), int(garage.size()), garage.size() == 1 ? "car" : "cars",
+                  racesWon, racesWon == 1 ? "win" : "wins");
+    hud.text(56 * u, hud.h - 56 * u, 15 * u, buf, vec4(1, 1, 1, 0.7f), 0, false);
+    hud.text(56 * u, hud.h - 34 * u, 12 * u, std::string(pad ? "(B) quit" : "ESC quit") + "   |   v2.0  |  free & open source (MIT)", vec4(1, 1, 1, 0.45f), 0, false);
 }
 
 void Game::saveShot(const std::string& path) {

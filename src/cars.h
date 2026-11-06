@@ -36,7 +36,8 @@ CarRatings rateCar(const CarSpec& s);
 
 struct CarModel {
     Mesh body;
-    Mesh wheel;
+    Mesh wheel;     // spins
+    Mesh caliper;   // steers but does not spin
     vec3 wheelPos[4];   // FL, FR, RL, RR in car space (+z forward, +x left)
     float wheelR, wheelW;
     void build(const CarSpec& s);
