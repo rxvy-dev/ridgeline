@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Ridgeline
+GenericName=Open-World Racing Game
+Comment=Open-world festival racing with AI races, a dealership and a procedural autumn valley
+Exec=ridgeline
+Icon=ridgeline
+Terminal=false
+Categories=Game;ActionGame;
+Keywords=racing;cars;driving;open world;
