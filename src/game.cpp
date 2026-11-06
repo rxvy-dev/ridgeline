@@ -234,6 +234,7 @@ bool Game::init(const Options& o) {
         // fast-forward the simulation
         int steps = int(opt.simSeconds * 60);
         if (opt.look != 0) { lookYaw = opt.look; lookPitch = 0.25f; lookIdle = -1e9f; }
+        if (opt.cam >= 0) camMode = opt.cam;
         for (int i = 0; i < steps; i++) {
             update(1.f / 60.f);
             if (state == ST_RACE_INTRO && i == 0) { stateTime = 6.f; }
@@ -321,10 +322,10 @@ bool Game::load() {
         else if (k == "msaa") settings.msaa = std::clamp(std::atoi(v.c_str()), 0, 8);
         else if (k == "fullscreen") settings.fullscreen = std::atoi(v.c_str());
         else if (k == "volume") settings.volume = std::clamp(std::atoi(v.c_str()), 0, 100);
-        else if (k == "draw") settings.drawDist = std::clamp(std::atoi(v.c_str()), 0, 2);
+        else if (k == "draw") settings.drawDist = std::clamp(std::atoi(v.c_str()), 0, 3);
         else if (k == "vsync") settings.vsync = std::atoi(v.c_str());
         else if (k == "assists") settings.assists = std::atoi(v.c_str());
-        else if (k == "grass") settings.grass = std::atoi(v.c_str());
+        else if (k == "grass") settings.grass = std::clamp(std::atoi(v.c_str()), 0, 2);
     }
     if (garage.empty()) return false;
     current = std::clamp(current, 0, int(garage.size()) - 1);
@@ -653,7 +654,7 @@ void Game::handleAction(Action a) {
         case ST_FREEROAM:
             if (a == A_PAUSE || a == A_BACK) { state = ST_PAUSE; returnState = ST_FREEROAM; menuSel = 0; }
             else if (a == A_MAP) { state = ST_MAP; subSel = 0; }
-            else if (a == A_CAMERA) camMode = (camMode + 1) % 4;
+            else if (a == A_CAMERA) camMode = (camMode + 1) % 5;
             else if (a == A_RESET) {
                 int r, s;
                 if (world.nearestRoad(player.car.pos, r, s)) {
@@ -675,7 +676,7 @@ void Game::handleAction(Action a) {
             break;
         case ST_RACE:
             if (a == A_PAUSE || a == A_BACK) { state = ST_PAUSE; returnState = ST_RACE; menuSel = 0; }
-            else if (a == A_CAMERA) camMode = (camMode + 1) % 4;
+            else if (a == A_CAMERA) camMode = (camMode + 1) % 5;
             else if (a == A_RESET) {
                 const Route& rt = events[raceEvent].route;
                 int i = player.idx;
@@ -801,12 +802,12 @@ void Game::handleAction(Action a) {
                 case 1: settings.motionBlur = !settings.motionBlur; break;
                 case 2: settings.shadows = !settings.shadows; break;
                 case 3: { const int m[] = {0, 2, 4, 8}; int i = 0; while (i < 3 && m[i] != settings.msaa) i++; settings.msaa = m[(i + d + 4) % 4]; break; }
-                case 4: settings.drawDist = (settings.drawDist + d + 3) % 3; break;
+                case 4: settings.drawDist = (settings.drawDist + d + 4) % 4; break;
                 case 5: settings.fullscreen = !settings.fullscreen; break;
                 case 6: settings.vsync = !settings.vsync; break;
                 case 7: settings.volume = std::clamp(settings.volume + d * 10, 0, 100); break;
                 case 8: settings.assists = !settings.assists; break;
-                case 9: settings.grass = !settings.grass; break;
+                case 9: settings.grass = (settings.grass + d + 3) % 3; break;
             }
             audio.beep(990, 0.04f);
             applySettings();
@@ -819,7 +820,7 @@ void Game::handleAction(Action a) {
 }
 
 std::vector<std::string> Game::settingsItems() const {
-    const char* dd[] = {"Low", "Medium", "High"};
+    const char* dd[] = {"Low", "Medium", "High", "Ultra"};
     return {std::string("Speed units: ") + (settings.mph ? "MPH" : "KM/H"),
             std::string("Motion blur: ") + (settings.motionBlur ? "On" : "Off"),
             std::string("Shadows: ") + (settings.shadows ? "On" : "Off"),
@@ -829,7 +830,7 @@ std::vector<std::string> Game::settingsItems() const {
             std::string("V-Sync: ") + (settings.vsync ? "On" : "Off"),
             "Volume: " + std::to_string(settings.volume) + "%",
             std::string("Driving assists: ") + (settings.assists ? "On" : "Off"),
-            std::string("Grass: ") + (settings.grass ? "On" : "Off")};
+            std::string("Grass: ") + (settings.grass == 0 ? "Off" : settings.grass == 1 ? "Near only" : "Full distance")};
 }
 
 // ====================================================================== update
@@ -1035,6 +1036,7 @@ vec3 Game::showroomSpot() const {
 void Game::updateCamera(float dt) {
     int pw = R.width, ph = R.height;
     cam.aspect = float(pw) / float(ph);
+    cam.nearZ = 0.25f;
     bool showroom = state == ST_DEALER || state == ST_GARAGE;
     Racer& tr = state == ST_TITLE ? titleCar : player;
     Vehicle& car = tr.car;
@@ -1126,15 +1128,19 @@ void Game::updateCamera(float dt) {
         cam.target = pivot + cf * (3.f * (1.f - orbit));
     } else {
         mat4 bm = car.bodyMatrix();
-        vec3 local = camMode == 2 ? vec3(0, car.spec->height * 0.82f, 0.25f) : vec3(0, 0.55f, car.spec->length * 0.5f + 0.15f);
+        const CarModel& m = *tr.model;
+        vec3 local = camMode == 2 ? m.eye : (camMode == 3 ? m.hoodCam : m.bumperCam);
+        cam.nearZ = camMode == 2 ? 0.04f : 0.12f;
         cam.pos = bm.transformPoint(local);
         vec3 dir = bm.transformDir(vec3(0, -0.02f, 1));
         float a = std::atan2(dir.x, dir.z) + lookYaw, p = std::asin(clampf(dir.y, -1.f, 1.f)) - lookPitch * 0.8f;
         cam.target = cam.pos + vec3(std::sin(a) * std::cos(p), std::sin(p), std::cos(a) * std::cos(p)) * 10.f;
-        cam.fov = fovSm + 0.1f;
+        cam.fov = camMode == 2 ? 1.05f + (fovSm - 1.08f) * 0.4f : fovSm + 0.1f;
     }
-    float g = world.heightAt(cam.pos.x, cam.pos.z) + 0.5f;
-    cam.pos.y = std::max(cam.pos.y, g);
+    if (camMode <= 1 || lookBack) {
+        float g = world.heightAt(cam.pos.x, cam.pos.z) + 0.5f;
+        cam.pos.y = std::max(cam.pos.y, g);
+    }
     float sh = shake * 0.12f + clampf((kmh - 200.f) / 200.f, 0.f, 1.f) * 0.015f;
     if (sh > 0) {
         cam.pos += vec3(std::sin(simTime * 53.f), std::sin(simTime * 61.f + 1.f), std::cos(simTime * 47.f)) * sh;
@@ -1143,13 +1149,20 @@ void Game::updateCamera(float dt) {
 }
 
 // ====================================================================== render
-void Game::drawCar(Racer& r, Shader& s) {
+void Game::drawCar(Racer& r, Shader& s, bool glassPass) {
     s.set("uPaint", r.paint);
     s.set("uStripe", r.stripe);
     s.set("uBrake", r.car.brake > 0.1f ? 1.f : 0.f);
     s.set("uHeadlights", 0.f);
-    s.set("uModel", r.car.bodyMatrix());
+    s.set("uGlassPass", glassPass ? 1 : 0);
+    mat4 bm = r.car.bodyMatrix();
+    s.set("uModel", bm);
     r.model->body.draw();
+    if (glassPass) return;
+    s.set("uModel", bm);
+    r.model->interior.draw();
+    s.set("uModel", bm * r.model->steeringBase * rotateZ(r.car.wheelSteer * 6.f));
+    r.model->steering.draw();
     for (int i = 0; i < 4; i++) {
         s.set("uModel", r.car.wheelMatrix(*r.model, i));
         r.model->wheel.draw();
@@ -1159,7 +1172,7 @@ void Game::drawCar(Racer& r, Shader& s) {
 }
 
 void Game::renderWorld(const Camera& c, bool showroom) {
-    const float dists[] = {800.f, 1200.f, 1800.f};
+    const float dists[] = {800.f, 1200.f, 1800.f, 2600.f};
     float drawDist = dists[settings.drawDist];
     R.atmo.fogDensity = 1.5f / drawDist;
     std::vector<Racer*> cars;
@@ -1211,11 +1224,11 @@ void Game::renderWorld(const Camera& c, bool showroom) {
     if (R.shadows) {
         R.tex.bindAll();
         vec3 fdir = normalize(vec3(c.target.x - c.pos.x, 0, c.target.z - c.pos.z));
-        const float ext[2] = {38.f, 330.f};
-        const float lead[2] = {14.f, 220.f};
+        const float ext[2] = {48.f, 430.f};
+        const float lead[2] = {18.f, 300.f};
         for (int cas = 0; cas < 2; cas++) {
             vec3 focus = c.target + fdir * lead[cas];
-            R.beginShadowPass(cas, focus, ext[cas], cas == 0 ? 300.f : 900.f);
+            R.beginShadowPass(cas, focus, ext[cas], cas == 0 ? 320.f : 1000.f);
             R.depth.use();
             float reach = ext[cas] * 1.5f + 120.f;
             for (auto& ch : world.chunks) {
@@ -1270,21 +1283,19 @@ void Game::renderWorld(const Camera& c, bool showroom) {
     glPolygonOffset(-1.f, -3.f);
     world.hubMesh.draw();
     glDisable(GL_POLYGON_OFFSET_FILL);
+    R.object.set("uGlassPass", 0);
     glDisable(GL_CULL_FACE);
     world.propsMesh.draw();
-    glEnable(GL_CULL_FACE);
     for (Racer* r : cars) drawCar(*r, R.object);
+    glEnable(GL_CULL_FACE);
     // vegetation (alpha-tested, double sided)
     glDisable(GL_CULL_FACE);
     bool a2c = R.msaa > 1 && R.msFbo;
     if (a2c) glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
     R.setCommon(R.tree, c);
-    drawTrees(R.tree, c.pos, drawDist * 0.85f, 230.f);
+    drawTrees(R.tree, c.pos, drawDist * 0.85f, 420.f);
     if (settings.grass) {
         R.setCommon(R.grass, c);
-        float sp = world.grassSpacing;
-        R.grass.set("uOrigin", vec2(std::floor(c.pos.x / sp) * sp, std::floor(c.pos.z / sp) * sp));
-        R.grass.set("uRadius", world.grassRadius);
         R.grass.set("uHalf", World::HALF);
         R.grass.set("uWaterLevel", world.waterLevel);
         R.grass.set("uHub", world.hubPos);
@@ -1293,13 +1304,23 @@ void Game::renderWorld(const Camera& c, bool showroom) {
         glActiveTexture(GL_TEXTURE0 + U_ROADDIST);
         glBindTexture(GL_TEXTURE_2D, world.roadTex);
         glActiveTexture(GL_TEXTURE0);
-        world.grassMesh.drawInstanced(world.grassCount);
+        world.drawGrass(R.grass, c.pos, settings.grass == 1 ? 2 : 4);
     }
     if (a2c) glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
     glEnable(GL_CULL_FACE);
     // water
     R.setCommon(R.water, c);
     world.waterMesh.draw();
+    // car glass (transparent, after everything opaque)
+    R.setCommon(R.object, c);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_CULL_FACE);
+    for (Racer* r : cars) drawCar(*r, R.object, true);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glEnable(GL_CULL_FACE);
 
     // ---- blended overlays
     glEnable(GL_BLEND);
@@ -1351,8 +1372,21 @@ void Game::render() {
     bool showroom = state == ST_DEALER || state == ST_GARAGE;
     renderWorld(cam, showroom);
     float blur = 0;
-    if (settings.motionBlur && (state == ST_FREEROAM || state == ST_RACE)) blur = clampf((player.car.speedKmh() - 90.f) / 260.f, 0.f, 1.f) * 0.85f;
+    if (settings.motionBlur && (state == ST_FREEROAM || state == ST_RACE)) blur = clampf((player.car.speedKmh() - 90.f) / 260.f, 0.f, 1.f) * (camMode == 2 ? 0.35f : 0.85f);
     if (state == ST_TITLE && settings.motionBlur) blur = clampf((titleCar.car.speedKmh() - 90.f) / 260.f, 0.f, 0.6f);
+    // sun shafts when looking towards the sun
+    {
+        vec3 sd = R.atmo.sunDir;
+        vec4 sp = cam.viewProj * vec4(cam.pos + sd * 3000.f, 1.f);
+        R.sunAmt = 0;
+        if (sp.w > 0) {
+            vec2 ndc(sp.x / sp.w, sp.y / sp.w);
+            R.sunUV = vec2(ndc.x * 0.5f + 0.5f, ndc.y * 0.5f + 0.5f);
+            float facing = dot(normalize(cam.target - cam.pos), sd);
+            float edge = 1.f - smoothstepf(1.0f, 1.6f, std::max(std::fabs(ndc.x), std::fabs(ndc.y)));
+            R.sunAmt = smoothstepf(0.1f, 0.6f, facing) * edge * (state == ST_TITLE ? 1.4f : 1.f);
+        }
+    }
     R.endScene(blur, flash);
     hud.begin(R.width, R.height);
     drawHud();
@@ -1846,7 +1880,7 @@ void Game::drawTitle() {
     std::snprintf(buf, sizeof(buf), "CR %s   |   %d %s   |   %d %s", fmtThousands(credits).c_str(), int(garage.size()), garage.size() == 1 ? "car" : "cars",
                   racesWon, racesWon == 1 ? "win" : "wins");
     hud.text(56 * u, hud.h - 56 * u, 15 * u, buf, vec4(1, 1, 1, 0.7f), 0, false);
-    hud.text(56 * u, hud.h - 34 * u, 12 * u, std::string(pad ? "(B) quit" : "ESC quit") + "   |   v2.0  |  free & open source (MIT)", vec4(1, 1, 1, 0.45f), 0, false);
+    hud.text(56 * u, hud.h - 34 * u, 12 * u, std::string(pad ? "(B) quit" : "ESC quit") + "   |   v2.1  |  free & open source (MIT)", vec4(1, 1, 1, 0.45f), 0, false);
 }
 
 void Game::saveShot(const std::string& path) {

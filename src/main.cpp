@@ -38,6 +38,7 @@ int main(int argc, char** argv) {
         else if (!std::strcmp(argv[i], "--shot")) o.shot = next();
         else if (!std::strcmp(argv[i], "--frames")) o.frames = std::atoi(next());
         else if (!std::strcmp(argv[i], "--look")) o.look = float(std::atof(next()));
+        else if (!std::strcmp(argv[i], "--cam")) o.cam = std::atoi(next());
     }
     if (o.width < 320) o.width = 1280;
     if (o.height < 240) o.height = 720;

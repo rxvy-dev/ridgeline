@@ -48,9 +48,9 @@ struct World {
     Mesh pineMesh, pineLod, leafMesh, leafLod, rockMesh, grassMesh;
     InstanceField pines, leafy, rocks;
     GLuint mapTex = 0, heightTex = 0, roadTex = 0;
-    GLuint grassBuf = 0;
-    int grassCount = 0;
-    float grassSpacing = 0.85f, grassRadius = 55.f;
+    struct GrassRing { GLuint buf = 0; int count = 0; float spacing, inner, outer, scale; };
+    std::vector<GrassRing> grassRings;
+    void drawGrass(struct Shader& sh, vec3 eye, int rings) const;
     void buildGrass();
     static constexpr int MAP_RES = 1024;
 

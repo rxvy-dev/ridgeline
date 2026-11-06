@@ -320,13 +320,13 @@ bool Renderer::init() {
     if (!ok) return false;
     glGenVertexArrays(1, &emptyVao);
     tex.generate();
-    setShadowQuality(2048);
+    setShadowQuality(4096);
     return true;
 }
 
 void Renderer::setShadowQuality(int nearSize) {
     shadowSize[0] = nearSize;
-    shadowSize[1] = 2048;
+    shadowSize[1] = 4096;
     for (int i = 0; i < 2; i++) {
         if (shadowTex[i]) glDeleteTextures(1, &shadowTex[i]);
         if (shadowFbo[i]) glDeleteFramebuffers(1, &shadowFbo[i]);
@@ -461,6 +461,7 @@ void Renderer::setCommon(Shader& s, const Camera& cam) {
     s.set("tHeight", int(U_HEIGHT));
     s.set("tRoadDist", int(U_ROADDIST));
     s.set("tFlakes", int(U_FLAKES));
+    s.set("uGlassPass", 0);
 }
 
 void Renderer::beginShadowPass(int c, vec3 focus, float extent, float depthRange) {
@@ -565,6 +566,8 @@ void Renderer::endScene(float blurAmt, float flash) {
     post.set("uBlur", blurAmt);
     post.set("uFlash", flash);
     post.set("uBloomAmt", bloomAmount);
+    post.set("uSunUV", sunUV);
+    post.set("uSunAmt", sunAmt);
     glActiveTexture(GL_TEXTURE0 + U_BLOOM);
     glBindTexture(GL_TEXTURE_2D, bloomTex[0]);
     glActiveTexture(GL_TEXTURE0 + U_SCENE);

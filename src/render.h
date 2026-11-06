@@ -116,6 +116,8 @@ struct Renderer {
     Atmosphere atmo;
     float time = 0.f;
     float bloomAmount = 0.22f;
+    vec2 sunUV;
+    float sunAmt = 0.f;
 
     bool init();
     void resize(int w, int h);

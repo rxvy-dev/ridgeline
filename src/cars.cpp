@@ -464,6 +464,91 @@ void CarModel::build(const CarSpec& s) {
         patch(t0, t1, jShoulder + 0.6f, jShoulder + 3.2f, 0.003f, vec4(1, 1, 1, 9), 3, 3);
     }
     b.build(body);
+
+    // ---------------------------------------------------------------- cockpit
+    {
+        MeshBuilder in;
+        vec4 plastic(0.17f, 0.17f, 0.18f, 0), fabric(0.24f, 0.22f, 0.20f, 0), trim(1, 1, 1, 4), carpet(0.12f, 0.115f, 0.11f, 0);
+        float tEye = std::min(sh.sB + 0.10f, std::max(sh.sC - 0.02f, sh.sB + 0.04f));
+        float zEye = zf - tEye * L;
+        float beltE = belt(tEye), roofY = sh.roof * H;
+        float wIn = halfW(tEye) * 0.86f;
+        float floorY = bottomY(tEye) + 0.12f;
+        eye = vec3(halfW(tEye) * 0.42f, beltE + (roofY - beltE) * 0.55f, zEye);
+        if (s.body == BODY_TRUCK) eye.y = beltE + (roofY - beltE) * 0.5f;
+        float zWsBase = zf - sh.sA * L;
+        float zDashRear = std::min(eye.z + 0.62f, zWsBase - 0.05f);
+        float dashTop = beltE + 0.02f;
+        // dashboard slab + top pad sloping up to the windscreen
+        float dz0 = zDashRear, dz1 = zWsBase + 0.05f;
+        in.box(vec3(0, dashTop - 0.17f, (dz0 + dz1) * 0.5f), vec3(wIn, 0.17f, std::max(0.05f, (dz1 - dz0) * 0.5f)), plastic);
+        in.box(vec3(0, dashTop - 0.36f, dz0 + 0.06f), vec3(wIn * 0.96f, 0.05f, 0.08f), plastic);
+        // instrument hood and two gauges facing the driver
+        in.box(vec3(eye.x, dashTop + 0.05f, dz0 + 0.08f), vec3(0.2f, 0.045f, 0.1f), plastic);
+        for (int g = -1; g <= 1; g += 2) {
+            vec3 gc(eye.x + g * 0.085f, dashTop - 0.03f, dz0 - 0.003f);
+            const int K = 20;
+            for (int k = 0; k < K; k++) {
+                float a0 = k / float(K) * 2 * PI, a1 = (k + 1) / float(K) * 2 * PI;
+                vec3 p0 = gc + vec3(std::cos(a0), std::sin(a0), 0) * 0.07f, p1 = gc + vec3(std::cos(a1), std::sin(a1), 0) * 0.07f;
+                in.flatTri(gc, p1, p0, vec4(0.05f, 0.05f, 0.06f, 0));
+                if (k % 2 == 0 && (a0 < 4.2f || a0 > 5.3f)) {
+                    vec3 q0 = gc + vec3(std::cos(a0), std::sin(a0), 0) * 0.058f, q1 = gc + vec3(std::cos(a0), std::sin(a0), 0) * 0.068f;
+                    in.flatQuad(q0 + vec3(0, 0, -0.001f), q1 + vec3(0.004f, 0, -0.001f), q1 + vec3(0.004f, 0.004f, -0.001f), q0 + vec3(0, 0.004f, -0.001f), vec4(1.6f, 1.5f, 1.3f, 3));
+                }
+            }
+            // needle
+            vec3 n0 = gc + vec3(0, 0, -0.002f), n1 = gc + vec3(-0.045f * g, 0.035f, -0.002f);
+            in.flatQuad(n0, n0 + vec3(0.004f, 0, 0), n1 + vec3(0.004f, 0, 0), n1, vec4(1.0f, 0.35f, 0.1f, 3));
+            in.flatQuad(n0, n1, n1 + vec3(0.004f, 0, 0), n0 + vec3(0.004f, 0, 0), vec4(1.0f, 0.35f, 0.1f, 3));
+        }
+        // centre stack with a small screen, vents
+        in.box(vec3(0, dashTop - 0.2f, dz0 - 0.02f), vec3(0.14f, 0.16f, 0.04f), plastic);
+        in.box(vec3(0, dashTop - 0.1f, dz0 - 0.061f), vec3(0.09f, 0.05f, 0.002f), vec4(0.10f, 0.16f, 0.22f, 3));
+        for (int v = -1; v <= 1; v += 2) in.box(vec3(v * wIn * 0.75f, dashTop - 0.08f, dz0 - 0.005f), vec3(0.06f, 0.025f, 0.004f), trim);
+        // floor, console, seats
+        in.box(vec3(0, floorY, eye.z - 0.2f), vec3(wIn, 0.02f, 0.9f), carpet);
+        in.box(vec3(0, floorY + 0.14f, eye.z - 0.15f), vec3(0.09f, 0.14f, 0.45f), plastic);
+        in.box(vec3(0, floorY + 0.29f, eye.z + 0.05f), vec3(0.025f, 0.03f, 0.04f), trim);  // gear lever knob
+        for (int side = -1; side <= 1; side += 2) {
+            float sx = side * std::fabs(eye.x);
+            float seatY = std::max(floorY + 0.12f, eye.y - 0.62f);
+            in.box(vec3(sx, seatY, eye.z - 0.05f), vec3(0.24f, 0.07f, 0.26f), fabric);
+            mat4 back = translate(vec3(sx, seatY + 0.36f, eye.z - 0.34f)) * rotateX(-0.22f);
+            in.box(vec3(0, 0, 0), vec3(0.24f, 0.34f, 0.07f), fabric, &back);
+            mat4 head = translate(vec3(sx, seatY + 0.78f, eye.z - 0.42f)) * rotateX(-0.22f);
+            in.box(vec3(0, 0, 0), vec3(0.13f, 0.09f, 0.06f), fabric, &head);
+        }
+        // rear-view mirror
+        float zMirror = zf - (sh.sB - 0.015f) * L - 0.06f;
+        in.box(vec3(0, roofY - 0.1f, zMirror), vec3(0.12f, 0.035f, 0.012f), plastic);
+        in.box(vec3(0, roofY - 0.1f, zMirror - 0.013f), vec3(0.11f, 0.028f, 0.001f), trim);
+        in.box(vec3(0, roofY - 0.05f, zMirror), vec3(0.01f, 0.03f, 0.01f), plastic);
+        in.build(interior);
+
+        // steering wheel: ring + three spokes + hub, axis along local z (facing the driver)
+        MeshBuilder sw;
+        vec4 leather(0.13f, 0.12f, 0.12f, 0);
+        const int K = 28;
+        float R = 0.18f;
+        for (int k = 0; k < K; k++) {
+            float a0 = k / float(K) * 2 * PI, a1 = (k + 1) / float(K) * 2 * PI;
+            sw.tube(vec3(std::cos(a0) * R, std::sin(a0) * R, 0), vec3(std::cos(a1) * R, std::sin(a1) * R, 0), 0.02f, 0.02f, 8, leather);
+        }
+        sw.tube(vec3(0, 0, 0.02f), vec3(-R, 0, 0), 0.016f, 0.014f, 6, leather);
+        sw.tube(vec3(0, 0, 0.02f), vec3(R, 0, 0), 0.016f, 0.014f, 6, leather);
+        sw.tube(vec3(0, 0, 0.02f), vec3(0, -R, 0), 0.016f, 0.014f, 6, leather);
+        sw.box(vec3(0, -0.01f, 0.035f), vec3(0.06f, 0.05f, 0.03f), leather);
+        sw.box(vec3(0, -0.01f, 0.004f), vec3(0.025f, 0.018f, 0.002f), trim);
+        sw.tube(vec3(0, 0, 0.06f), vec3(0, 0, 0.32f), 0.03f, 0.04f, 8, leather);  // column
+        sw.build(steering);
+        vec3 swc(eye.x, eye.y - 0.33f, eye.z + 0.44f);
+        steeringBase = translate(swc) * rotateX(0.38f);
+        // other camera anchors
+        float tHood = sh.sA * 0.92f;
+        hoodCam = vec3(0, topY(tHood) + 0.16f, zf - tHood * L);
+        bumperCam = vec3(0, sh.nose * H * 0.62f, zf + 0.28f);
+    }
     MeshBuilder wb;
     buildWheelMesh(wb, sh.spokes, s.body == BODY_TRUCK || s.body == BODY_RALLY);
     wb.build(wheel);

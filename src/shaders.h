@@ -33,6 +33,13 @@ float pcf(sampler2DShadow s, vec3 p, float texel){
             sum += texture(s, vec3(p.xy + vec2(x, y) * texel, p.z));
     return sum / 9.0;
 }
+float pcf5(sampler2DShadow s, vec3 p, float texel){
+    float sum = 0.0;
+    for (int x = -2; x <= 2; x++)
+        for (int y = -2; y <= 2; y++)
+            sum += texture(s, vec3(p.xy + vec2(x, y) * texel * 0.85, p.z));
+    return sum / 25.0;
+}
 float shadowFactor(vec3 wp, vec3 n){
     if (uShadows == 0) return 1.0;
     vec4 a = uShadowMat0 * vec4(wp + n * 0.05, 1.0);
@@ -46,7 +53,7 @@ float shadowFactor(vec3 wp, vec3 n){
     float s1 = 1.0;
     if (mb < 1.0 && pb.z < 1.0) s1 = mix(pcf(uShadow1, vec3(pb.xy, pb.z - 0.00025), uShadowTexel.y), 1.0, smoothstep(0.85, 1.0, mb));
     if (ma < 0.98 && pa.z < 1.0) {
-        float s0 = pcf(uShadow0, vec3(pa.xy, pa.z - 0.00012), uShadowTexel.x);
+        float s0 = pcf5(uShadow0, vec3(pa.xy, pa.z - 0.00010), uShadowTexel.x);
         return mix(s0, s1, smoothstep(0.75, 0.98, ma));
     }
     return s1;
@@ -208,14 +215,36 @@ uniform vec3 uPaint;
 uniform vec3 uStripe;
 uniform float uBrake;
 uniform float uHeadlights;
+uniform int uGlassPass;
 uniform sampler2D tFlakes;
 out vec4 FragColor;
 void main(){
     vec3 n = normalize(vNrm);
     if (!gl_FrontFacing) n = -n;
     int mat = int(vCol.a + 0.5);
+    bool glass = mat == 2;
+    if ((uGlassPass == 0) == glass) discard;
     vec3 V = normalize(uCamPos - vPos);
     float sh = shadowFactor(vPos, n);
+    if (glass) {
+        float ndv = max(dot(n, V), 0.0);
+        float F = 0.05 + 0.95 * pow(1.0 - ndv, 5.0);
+        vec3 env = envColor(reflect(-V, n));
+        vec3 H = normalize(V + uSunDir);
+        vec3 spec = uSunColor * pow(max(dot(n, H), 0.0), 900.0) * 4.0 * sh;
+        float baseA = gl_FrontFacing ? 0.42 : 0.12;
+        vec3 tint = vec3(0.025, 0.03, 0.035) * (ambient(n) + uSunColor * 0.3);
+        float a = 1.0 - (1.0 - baseA) * (1.0 - F);
+        vec3 c = (tint * baseA * (1.0 - F) + env * F + spec) / max(a, 0.01);
+        FragColor = vec4(applyFog(c, vPos), clamp(a, 0.0, 1.0));
+        return;
+    }
+    // inside of the bodywork: door cards, pillars and a lighter headliner
+    if (!gl_FrontFacing && (mat == 1 || mat == 5 || mat == 6)) {
+        vec3 alb = n.y < -0.55 ? vec3(0.30, 0.29, 0.27) : vec3(0.15, 0.14, 0.13);
+        FragColor = vec4(applyFog(alb * (ambient(n) * 1.1 + uSunColor * (0.25 + 0.3 * sh)), vPos), 1.0);
+        return;
+    }
     if (mat == 3) {
         vec3 e = vCol.rgb;
         bool red = e.r > e.g * 2.0;
@@ -227,6 +256,7 @@ void main(){
     }
     vec3 albedo = vCol.rgb;
     float spec = 0.06, gloss = 18.0, refl = 0.0, coat = 0.0, sharp = 0.0;
+    float fill = mat == 0 ? 0.35 : 0.0;
     if (mat == 1 || mat == 5) {
         albedo = (mat == 1 ? uPaint : uStripe) * vCol.rgb;
         float fl = texture(tFlakes, vObj.xz * 2.7 + vObj.y * 1.3).r;
@@ -241,7 +271,7 @@ void main(){
     else if (mat == 10) { albedo = vec3(0.30, 0.31, 0.33) * (1.0 + uHeadlights); coat = 1.0; sharp = 1.0; refl = 0.35; }
     else if (mat == 11) { albedo = vec3(0.65, 0.07, 0.05); spec = 0.5; gloss = 50.0; }
     else if (mat == 12) { albedo = vec3(0.86, 0.86, 0.82); spec = 0.2; }
-    vec3 col = lighting(albedo, n, sh);
+    vec3 col = lighting(albedo, n, sh) + albedo * uSunColor * fill * (1.0 - sh) * 0.5;
     vec3 H = normalize(V + uSunDir);
     float ndh = max(dot(n, H), 0.0);
     col += uSunColor * pow(ndh, gloss) * spec * sh;
@@ -327,7 +357,10 @@ layout(location=3) in vec2 iOff;
 uniform mat4 uViewProj;
 uniform float uTime;
 uniform vec2 uOrigin;
-uniform float uRadius;
+uniform float uSpacing;
+uniform float uInner;
+uniform float uOuter;      // negative: last ring, fade out gently
+uniform float uScaleMul;
 uniform float uHalf;
 uniform float uWaterLevel;
 uniform vec3 uHub;
@@ -338,26 +371,30 @@ float h1(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 
 float hgt(vec2 xz){ return texture(tHeight, (xz + uHalf) / (2.0 * uHalf)).r; }
 void main(){
     vec2 cell = uOrigin + iOff;
-    vec2 xz = cell + (vec2(h1(cell), h1(cell + 17.3)) - 0.5) * 1.6;
+    vec2 xz = cell + (vec2(h1(cell), h1(cell + 17.3)) - 0.5) * uSpacing * 1.8;
     vec2 uv = (xz + uHalf) / (2.0 * uHalf);
     float h = hgt(xz);
     float rd = texture(tRoadDist, uv).r;
     float e = 1.5;
     vec3 gn = normalize(vec3(hgt(xz - vec2(e, 0)) - hgt(xz + vec2(e, 0)), 2.0 * e, hgt(xz - vec2(0, e)) - hgt(xz + vec2(0, e))));
     float d = length(xz - uCamPos.xz);
-    float keep = step(1.2, rd) * step(uWaterLevel + 0.8, h) * step(0.82, gn.y) * step(52.0, length(xz - uHub.xz));
-    float dens = smoothstep(0.25, 0.55, h1(floor(xz / 9.0)) * 0.6 + h1(cell * 0.37) * 0.4);
+    float keep = step(1.0 + 0.6 * uScaleMul, rd) * step(uWaterLevel + 0.8, h) * step(0.82, gn.y) * step(52.0, length(xz - uHub.xz));
+    float dens = smoothstep(0.25, 0.55, h1(floor(xz / 9.0)) * 0.6 + h1(floor(xz / 2.3)) * 0.4);
     keep *= step(h1(cell + 3.1), 0.35 + dens * 0.65);
-    float fade = 1.0 - smoothstep(uRadius * 0.65, uRadius, d);
+    float band = uSpacing * 9.0;
+    float outer = abs(uOuter);
+    float fadeIn = uInner > 0.0 ? smoothstep(uInner, uInner + band, d) : 1.0;
+    float fadeOut = uOuter > 0.0 ? 1.0 - smoothstep(outer - band, outer, d) : 1.0 - smoothstep(outer * 0.7, outer, d);
+    float fade = fadeIn * fadeOut;
     float sc = (0.7 + 0.6 * h1(cell + 9.9)) * keep * fade;
     float ang = h1(cell + 5.5) * 6.2831;
     float c = cos(ang), s = sin(ang);
-    vec3 p = aPos * vec3(sc, sc * (0.8 + 0.5 * h1(cell + 2.2)), sc);
+    vec3 p = aPos * vec3(sc * uScaleMul, sc * min(uScaleMul, 1.45) * (0.8 + 0.5 * h1(cell + 2.2)), sc * uScaleMul);
     p = vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z);
     float bend = aPos.y * aPos.y;
     p.x += sin(uTime * 1.8 + xz.x * 0.2 + xz.y * 0.13) * 0.10 * bend;
     p.z += cos(uTime * 1.5 + xz.x * 0.17) * 0.06 * bend;
-    vec3 wp = vec3(xz.x, h - 0.04, xz.y) + p;
+    vec3 wp = vec3(xz.x, h - 0.05 * uScaleMul, xz.y) + p;
     vPos = wp; vUV = aCol.xy; vFade = fade;
     vGround = gn;
     gl_Position = uViewProj * vec4(wp, 1.0);
@@ -529,6 +566,8 @@ uniform sampler2D uBloom;
 uniform float uBlur;
 uniform float uFlash;
 uniform float uBloomAmt;
+uniform vec2 uSunUV;
+uniform float uSunAmt;
 out vec4 FragColor;
 vec3 aces(vec3 x){ return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
 void main(){
@@ -546,6 +585,19 @@ void main(){
         c = acc / w;
     }
     c += texture(uBloom, uv).rgb * uBloomAmt;
+    if (uSunAmt > 0.001) {
+        // light shafts: march the bloom buffer towards the sun
+        vec2 d = (uSunUV - uv) / 40.0;
+        vec2 p = uv;
+        float decay = 1.0;
+        vec3 acc = vec3(0.0);
+        for (int i = 0; i < 40; i++) {
+            p += d;
+            acc += texture(uBloom, clamp(p, 0.0, 1.0)).rgb * decay;
+            decay *= 0.955;
+        }
+        c += acc / 40.0 * uSunAmt * 2.2 * vec3(1.0, 0.85, 0.65);
+    }
     c = aces(c * 1.12);
     float l = dot(c, vec3(0.299, 0.587, 0.114));
     c *= mix(vec3(0.93, 0.99, 1.06), vec3(1.07, 1.0, 0.88), smoothstep(0.15, 0.75, l));

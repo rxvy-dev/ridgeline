@@ -38,6 +38,10 @@ struct CarModel {
     Mesh body;
     Mesh wheel;     // spins
     Mesh caliper;   // steers but does not spin
+    Mesh interior;  // dashboard, seats, console, gauges
+    Mesh steering;  // steering wheel, in its own frame (axis = local z)
+    mat4 steeringBase;  // car space placement of the steering wheel
+    vec3 eye, hoodCam, bumperCam;  // camera anchors in car space
     vec3 wheelPos[4];   // FL, FR, RL, RR in car space (+z forward, +x left)
     float wheelR, wheelW;
     void build(const CarSpec& s);

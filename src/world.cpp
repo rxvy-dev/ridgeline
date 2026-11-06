@@ -276,7 +276,7 @@ void World::scatter(uint32_t seed) {
     const vec3 autumn[] = {{0.98f, 0.50f, 0.12f}, {0.97f, 0.72f, 0.18f}, {0.82f, 0.24f, 0.08f},
                            {0.70f, 0.66f, 0.20f}, {0.38f, 0.50f, 0.18f}, {0.93f, 0.40f, 0.10f}};
     const float autumnW[] = {0.26f, 0.22f, 0.14f, 0.14f, 0.12f, 0.12f};
-    const float step = 6.5f;
+    const float step = 6.0f;
     for (float gz = -HALF + 10; gz < HALF - 10; gz += step)
         for (float gx = -HALF + 10; gx < HALF - 10; gx += step) {
             float x = gx + rng.range(-step * 0.45f, step * 0.45f);
@@ -785,23 +785,50 @@ void World::buildGrass() {
         b.quad4(-d, d, d + vec3(0, h, 0), -d + vec3(0, h, 0), vec3(0, 1, 0), vec4(0, 1, 1, 1), vec4(1, 1, 1, 1), vec4(1, 0, 1, 1), vec4(0, 0, 1, 1));
     }
     b.build(grassMesh);
-    std::vector<float> offs;
-    int n = int(grassRadius / grassSpacing);
-    for (int z = -n; z <= n; z++)
-        for (int x = -n; x <= n; x++) {
-            if (x * x + z * z > n * n) continue;
-            offs.push_back(x * grassSpacing);
-            offs.push_back(z * grassSpacing);
-        }
-    grassCount = int(offs.size() / 2);
-    glGenBuffers(1, &grassBuf);
-    glBindBuffer(GL_ARRAY_BUFFER, grassBuf);
-    glBufferData(GL_ARRAY_BUFFER, offs.size() * 4, offs.data(), GL_STATIC_DRAW);
+    // concentric rings: dense small tufts near the camera, fewer and larger ones far away
+    const float spec[4][4] = {{0.55f, 0.f, 52.f, 1.0f}, {1.1f, 40.f, 135.f, 1.5f}, {2.3f, 118.f, 300.f, 2.1f}, {4.4f, 270.f, 580.f, 2.9f}};
+    grassRings.clear();
+    for (auto& sp : spec) {
+        GrassRing r;
+        r.spacing = sp[0]; r.inner = sp[1]; r.outer = sp[2]; r.scale = sp[3];
+        std::vector<float> offs;
+        int n = int(r.outer / r.spacing) + 1;
+        float in2 = std::max(0.f, r.inner - r.spacing * 2) , out2 = r.outer + r.spacing * 2;
+        for (int z = -n; z <= n; z++)
+            for (int x = -n; x <= n; x++) {
+                float d = std::sqrt(float(x * x + z * z)) * r.spacing;
+                if (d < in2 || d > out2) continue;
+                offs.push_back(x * r.spacing);
+                offs.push_back(z * r.spacing);
+            }
+        r.count = int(offs.size() / 2);
+        glGenBuffers(1, &r.buf);
+        glBindBuffer(GL_ARRAY_BUFFER, r.buf);
+        glBufferData(GL_ARRAY_BUFFER, offs.size() * 4, offs.data(), GL_STATIC_DRAW);
+        grassRings.push_back(r);
+    }
     glBindVertexArray(grassMesh.vao);
     glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 8, (void*)0);
     glVertexAttribDivisor(3, 1);
     glBindVertexArray(0);
+    size_t total = 0;
+    for (auto& r : grassRings) total += r.count;
+    SDL_Log("Grass: %zu tufts in %zu rings", total, grassRings.size());
+}
+
+void World::drawGrass(Shader& sh, vec3 eye, int rings) const {
+    glBindVertexArray(grassMesh.vao);
+    for (int i = 0; i < int(grassRings.size()) && i < rings; i++) {
+        const GrassRing& r = grassRings[i];
+        sh.set("uOrigin", vec2(std::floor(eye.x / r.spacing) * r.spacing, std::floor(eye.z / r.spacing) * r.spacing));
+        sh.set("uSpacing", r.spacing);
+        sh.set("uInner", r.inner);
+        sh.set("uOuter", i + 1 == rings ? -r.outer : r.outer);
+        sh.set("uScaleMul", r.scale);
+        glBindBuffer(GL_ARRAY_BUFFER, r.buf);
+        glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 8, (void*)0);
+        glDrawElementsInstanced(GL_TRIANGLES, grassMesh.count, GL_UNSIGNED_INT, nullptr, r.count);
+    }
 }
 
 void World::buildMapTexture() {

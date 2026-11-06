@@ -21,8 +21,9 @@ Written in C++17 with **SDL3** and OpenGL 3.3. No engine and no downloaded asset
 - **Economy**: win credits from race prizes (top 3 pay out, everyone else gets a participation bonus) and from **drift chains** and **jumps** anywhere in the world.
 - **Dealership and garage**: buy cars, choose from 12 paint colours, toggle racing stripes and switch between the cars you own.
 - **Driving physics**: tyre slip and grip limits, weight transfer, a 6-speed automatic gearbox, handbrake drifts, jumps and landings, grip that changes between asphalt, dirt, grass and water, and collisions with trees, rocks and other cars. Traction control and a stability assist are on by default and can be turned off.
-- **Graphics**: golden-hour lighting with two shadow cascades, bloom, filmic colour grading, sky with lit clouds, distance and height fog, and speed-based motion blur. Terrain is textured with dry grass, dirt and layered rock cliffs, and close to the camera there are thousands of swaying grass tufts. Pines are built from needle-branch cards, autumn trees from leaf clusters, and both have a distant level of detail. Roads are textured asphalt with double yellow centre lines and steel guardrails. Cars have smooth bodies with wheel-arch cut-outs, panel gaps, chrome trim, shaped lights, multi-spoke alloys with brake discs and calipers, and metallic clearcoat paint that reflects the sky and tree line. Every texture is generated procedurally at startup.
+- **Graphics**: golden-hour lighting with two shadow cascades, bloom, filmic colour grading, sky with lit clouds, distance and height fog, and speed-based motion blur. Terrain is textured with dry grass, dirt and layered rock cliffs, and about 165,000 swaying grass tufts reach out to ~550 m in four distance tiers, so grass doesn't pop in. Shadows use two 4096² cascades with soft filtering, and sun shafts break through the trees when you face the light. Pines are built from needle-branch cards, autumn trees from leaf clusters, and both have a distant level of detail. Roads are textured asphalt with double yellow centre lines and steel guardrails. Cars have smooth bodies with wheel-arch cut-outs, panel gaps, chrome trim, shaped lights, multi-spoke alloys with brake discs and calipers, and metallic clearcoat paint that reflects the sky and tree line. Every texture is generated procedurally at startup.
 - **Free-look camera**: orbit around your car with the mouse or right stick, zoom with the scroll wheel. It re-centres behind you automatically.
+- **Cockpit view**: a full interior with dashboard, lit gauges, a steering wheel that turns with your inputs, seats, a centre console and a rear-view mirror. You can look around with the mouse, and the glass is see-through, so interiors are visible from outside too.
 - **HUD**: rev-light speedometer, rotating minimap with route and opponents, live race standings, world map with fast travel.
 - **Procedural audio**: an engine synthesised from RPM, throttle and cylinder count, tyre squeal, wind, impact sounds and UI beeps.
 - **Keyboard and gamepad** (Xbox, PlayStation, Switch Pro and other SDL-supported controllers), with hot-plugging.
@@ -77,7 +78,7 @@ cmake --build build -j
 | Start event / enter hub | `Enter` | `Y` / `△` |
 | Look around (orbit the camera) | move the mouse | Right stick |
 | Zoom camera | mouse wheel | |
-| Change camera (chase far, chase near, hood, bumper) | `C` | `RB` / `R1` |
+| Change camera (chase far, chase near, cockpit, hood, bumper) | `C` | `RB` / `R1` |
 | Look back | hold `B` | hold `B` / `○` |
 | Reset to road | `R` | `X` / `□` |
 | World map | `M` / `Tab` | `Back` / `Select` |
@@ -131,7 +132,7 @@ All makes and models are invented for this game.
 
 ## Settings
 
-Speed units (km/h or mph), motion blur, shadows, anti-aliasing (off, 2x, 4x, 8x MSAA), draw distance, fullscreen, V-Sync, volume, driving assists and grass. If the game runs slowly, turn off grass and shadows, and lower the draw distance and anti-aliasing.
+Speed units (km/h or mph), motion blur, shadows, anti-aliasing (off, 2x, 4x, 8x MSAA), draw distance (Low, Medium, High, Ultra), fullscreen, V-Sync, volume, driving assists and grass (off, near only, full distance). New installs start on Ultra with 8x MSAA, which suits an RTX 30-series or newer. On weaker GPUs, set grass to "near only", draw distance to Medium and anti-aliasing to 4x.
 
 ## Requirements
 

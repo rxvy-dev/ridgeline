@@ -16,13 +16,13 @@ struct Settings {
     bool mph = false;
     bool motionBlur = true;
     bool shadows = true;
-    int msaa = 4;
+    int msaa = 8;
     bool fullscreen = false;
     int volume = 80;
-    int drawDist = 1;   // 0 low, 1 medium, 2 high
+    int drawDist = 3;   // 0 low, 1 medium, 2 high, 3 ultra
     bool vsync = true;
     bool assists = true;
-    bool grass = true;
+    int grass = 2;  // 0 off, 1 low, 2 high
 };
 
 struct Toast { std::string text; vec4 col; float t; };
@@ -36,6 +36,7 @@ struct Options {
     int width = 1280, height = 720;
     float simSeconds = 0;  // simulate before shot
     float look = 0;        // initial camera orbit (testing)
+    int cam = -1;          // initial camera mode (testing)
 };
 
 class Game {
@@ -143,7 +144,7 @@ private:
     // render
     void render();
     void renderWorld(const Camera& c, bool showroom);
-    void drawCar(Racer& r, Shader& s);
+    void drawCar(Racer& r, Shader& s, bool glassPass = false);
     void drawHud();
     void drawSpeedo();
     void drawMinimap();
