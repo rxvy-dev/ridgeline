@@ -1,0 +1,13 @@
+1985 DeLorean DMC-12 Time Machine (BTTF)
+
+This work is based on "1985 DeLorean DMC-12 Time Machine (BTTF)"
+(https://sketchfab.com/3d-models/1985-delorean-dmc-12-time-machine-bttf-6fdfe2e2adba4886b48cc523871e88be)
+by VTX (https://sketchfab.com/VTX_car), licensed under CC-BY-NC-SA-4.0
+(http://creativecommons.org/licenses/by-nc-sa/4.0/).
+
+Changes: converted to Ridgeline's .rcar format with tools/import_car.py
+(rescaled to 4.27 m, wheels split for animation, textures resized to 1024 px).
+
+This folder (model.rcar, car.ini) is licensed under CC BY-NC-SA 4.0 - NOT under
+the MIT licence that covers the rest of Ridgeline. Non-commercial use only;
+modified versions must keep the same licence and this credit.

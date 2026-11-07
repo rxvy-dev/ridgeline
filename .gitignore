@@ -7,8 +7,10 @@ build-configure.log
 .idea/
 
 # local car packs and source models - never commit third-party models
-cars/
+cars/*
+!cars/delorean/
 *.rcar
+!cars/delorean/model.rcar
 *.fbx
 *.FBX
 *.glb
