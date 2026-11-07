@@ -2495,7 +2495,9 @@ void Game::drawMinimap() {
         label = E.name;
         dist = std::max(0.f, E.totalLength() - player.progress);
     } else if (gpsShown != -1 && !gps.path.empty()) {
-        label = gpsShown == -2 ? "Festival Hub" : events[gpsShown].name;
+        if (gpsShown == -2) label = "Festival Hub";
+        else if (gpsShown == -3) label = gpsEstate >= 0 && gpsEstate < int(world.estates.size()) ? world.estates[gpsEstate].name : "Home";
+        else if (gpsShown >= 0 && gpsShown < int(events.size())) label = events[gpsShown].name;
         dist = gps.pathLen;
     }
     if (!label.empty()) {
