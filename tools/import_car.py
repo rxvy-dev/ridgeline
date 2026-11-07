@@ -37,9 +37,10 @@ try:
 except ImportError:
     Image = None
 
-SPIN = re.compile(r"tire|tyre|rim|wheel|disc|disk|hub|spoke|rotor", re.I)
+TIRE_BRANDS = r"advan|pirelli|pzero|p.zero|michelin|bridgestone|potenza|yokohama|toyo|continental|goodyear|nitto|falken|hankook|dunlop|kumho|nankang"
+SPIN = re.compile(r"tire|tyre|rim|wheel|disc|disk|hub|spoke|rotor|" + TIRE_BRANDS, re.I)
 FIXED = re.compile(r"calliper|caliper|brake(?!disc)", re.I)
-TIRE = re.compile(r"tire|tyre", re.I)
+TIRE = re.compile(r"tire|tyre|" + TIRE_BRANDS, re.I)
 
 F_PAINT, F_GLASS, F_LIGHT, F_ALPHA, F_CHROME, F_TIRE, F_EMISSIVE, F_BLEND = 1, 2, 4, 8, 16, 32, 64, 128
 F_PAINTMASK = 256  # paint only the coloured areas of a livery texture
@@ -309,13 +310,36 @@ def load_gltf(path):
     images = js.get("images", [])
     textures = js.get("textures", [])
 
+    embed_dir = None
+
     def tex_path(info):
+        nonlocal embed_dir
         if not info:
             return None
         src = textures[info["index"]].get("source")
         if src is None:
             return None
-        return images[src].get("uri")
+        img = images[src]
+        if img.get("uri") and not img["uri"].startswith("data:"):
+            return img["uri"]
+        # embedded image (.glb bufferView or data: URI) - write it out so it can be packed like any other
+        import base64
+        import tempfile
+        if img.get("bufferView") is not None:
+            bv = js["bufferViews"][img["bufferView"]]
+            off = bv.get("byteOffset", 0)
+            raw = buffers[bv.get("buffer", 0)][off:off + bv["byteLength"]]
+        elif img.get("uri", "").startswith("data:"):
+            raw = base64.b64decode(img["uri"].split(",", 1)[1])
+        else:
+            return None
+        if embed_dir is None:
+            embed_dir = tempfile.mkdtemp(prefix="rcar_tex_")
+        ext = ".png" if raw[:4] == b"\x89PNG" else ".jpg"
+        fn = os.path.join(embed_dir, "embedded_%d%s" % (src, ext))
+        if not os.path.exists(fn):
+            open(fn, "wb").write(raw)
+        return fn
 
     materials = []
     for m in js.get("materials", []):
@@ -420,7 +444,7 @@ def classify(mat, names):
         f |= F_LIGHT
     if re.search(r"chrome|alumin|metal|exhaust|rim", n):
         f |= F_CHROME
-    if re.search(r"tire|tyre", n):
+    if TIRE.search(n):
         f |= F_TIRE
     if re.search(r"alpha|grille|grid|badge|decal|mask", n) or mat.tex.get("opacity"):
         f |= F_ALPHA
@@ -443,6 +467,8 @@ def main():
     ap.add_argument("--drop", default="", help="regex of part names to drop (e.g. lights bars)")
     ap.add_argument("--paint", default="", help="regex of material names that are body paint (overrides detection)")
     ap.add_argument("--no-glass", default="", help="regex of material names that are NOT glass (e.g. wiper)")
+    ap.add_argument("--tires", default="", help="regex of part/material names that are tyres (used to find the wheels)")
+    ap.add_argument("--spin", default="", help="regex of extra part/material names that rotate with the wheels (rim metals etc.)")
     a = ap.parse_args()
     if Image is None:
         sys.exit("Pillow is required: pip install pillow")
@@ -485,9 +511,13 @@ def main():
     wheel_tris = {k: [] for k in range(4)}
     out_parts = []
     spin_parts, fixed_parts, body_parts = [], [], []
+    extra_tire = re.compile(a.tires, re.I) if a.tires else None
+    extra_spin = re.compile(a.spin, re.I) if a.spin else None
     for p in parts:
         nm = part_names(p)
-        if FIXED.search(nm) and not SPIN.search(p.name if not FIXED.search(p.name) else ""):
+        if (extra_tire and extra_tire.search(nm)) or (extra_spin and extra_spin.search(nm)):
+            spin_parts.append(p)
+        elif FIXED.search(nm) and not SPIN.search(p.name if not FIXED.search(p.name) else ""):
             fixed_parts.append(p)
         elif SPIN.search(nm):
             spin_parts.append(p)
@@ -506,7 +536,8 @@ def main():
         return np.where(front, np.where(left, 0, 1), np.where(left, 2, 3))
 
     # tyre bounds per corner -> wheel centre / radius / width
-    tire_src = [p for p in spin_parts if TIRE.search(part_names(p)) and not re.search("steering", part_names(p), re.I)] or spin_parts
+    tire_src = [p for p in spin_parts if (TIRE.search(part_names(p)) or (extra_tire and extra_tire.search(part_names(p))))
+                and not re.search("steering", part_names(p), re.I)] or spin_parts
     corner_pts = [[] for _ in range(4)]
     for p in tire_src:
         tri = p.idx.reshape(-1, 3)
@@ -627,6 +658,10 @@ def main():
     mat_records = []
     for i, m in enumerate(materials):
         names = [p.name for p in parts if p.mat == i][:4]
+        if not names:
+            # material only used by dropped parts: keep the slot, but pack none of its textures
+            mat_records.append((m.name, m.color, -1, -1, -1, m.emissive, 0))
+            continue
         flags = classify(m, names)
         if a.paint and re.search(a.paint, m.name, re.I):
             flags |= F_PAINT

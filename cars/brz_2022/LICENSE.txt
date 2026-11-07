@@ -1,0 +1,15 @@
+Subaru BRZ (ZD8, 2022)
+
+This work is based on "Subaru BRZ 2022"
+(https://sketchfab.com/models/d079f59271df4702bcfdd449ec8241c1)
+by mixmamo.studio (https://sketchfab.com/mixmamo.studio), licensed under
+CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/).
+
+Changes: converted to Ridgeline's .rcar format with tools/import_car.py
+(re-oriented, rescaled to 4.27 m, display ground slab removed, one borrowed
+component with an unrelated texture sheet removed, rear-wheel steering
+straightened, wheels split for animation, body marked as repaintable paint).
+
+This folder (model.rcar, car.ini) is licensed under CC BY 4.0 - not under the
+MIT licence that covers the rest of Ridgeline. Subaru and BRZ are trademarks
+of Subaru Corporation; this fan project is not affiliated with them.

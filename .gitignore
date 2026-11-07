@@ -11,10 +11,12 @@ cars/*
 !cars/delorean/
 !cars/agera_rs/
 !cars/m3_e30/
+!cars/brz_2022/
 *.rcar
 !cars/delorean/model.rcar
 !cars/agera_rs/model.rcar
 !cars/m3_e30/model.rcar
+!cars/brz_2022/model.rcar
 *.fbx
 *.FBX
 *.glb
