@@ -333,7 +333,7 @@ bool Game::init(const Options& o) {
                 const Road& rd = world.roads[st.road];
                 int i = (st.a - (opt.scene == "timejump" ? 60 : 20) + int(rd.pts.size())) % int(rd.pts.size());
                 enterFreeRoam(rd.pts[i], std::atan2(rd.tan[i].x, rd.tan[i].z));
-                player.car.vel = rd.tan[i] * (opt.scene == "timejump" ? 33.f : 14.f);
+                player.car.vel = rd.tan[i] * (opt.scene == "timejump" ? 38.f : 14.f);
                 devRoad = st.road;
                 break;
             }
