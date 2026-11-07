@@ -99,7 +99,7 @@ struct Atmosphere {
 };
 
 struct Renderer {
-    Shader terrain, road, object, car, tree, grass, water, unlit, depth, depthTree, sky, post, hud, bright, blur;
+    Shader terrain, road, object, car, tree, grass, water, unlit, depth, depthTree, sky, post, hud, bright, blur, ssao;
     Textures tex;
     int width = 1280, height = 720;
     int msaa = 4;
@@ -112,6 +112,9 @@ struct Renderer {
     GLuint msFbo = 0, msColor = 0, msDepth = 0;
     GLuint bloomFbo[2] = {0, 0}, bloomTex[2] = {0, 0};
     GLuint reflFbo = 0, reflTex = 0, reflDepth = 0;
+    GLuint aoFbo = 0, aoTex = 0;
+    int aw = 0, ah = 0;
+    bool useAO = true;
     int rw = 0, rh = 0;
     float clipY = -1e9f;
     void beginReflection();
@@ -133,5 +136,5 @@ struct Renderer {
     void endShadowPasses();
     void beginScene();
     void drawSky(const Camera& cam);
-    void endScene(float blur, float flash);
+    void endScene(float blur, float flash, const Camera* cam = nullptr);
 };

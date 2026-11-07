@@ -1,0 +1,43 @@
+file(REMOVE_RECURSE
+  "CMakeFiles/ridgeline.dir/src/audio.cpp.o"
+  "CMakeFiles/ridgeline.dir/src/audio.cpp.o.d"
+  "CMakeFiles/ridgeline.dir/src/carimport.cpp.o"
+  "CMakeFiles/ridgeline.dir/src/carimport.cpp.o.d"
+  "CMakeFiles/ridgeline.dir/src/cars.cpp.o"
+  "CMakeFiles/ridgeline.dir/src/cars.cpp.o.d"
+  "CMakeFiles/ridgeline.dir/src/effects.cpp.o"
+  "CMakeFiles/ridgeline.dir/src/effects.cpp.o.d"
+  "CMakeFiles/ridgeline.dir/src/features.cpp.o"
+  "CMakeFiles/ridgeline.dir/src/features.cpp.o.d"
+  "CMakeFiles/ridgeline.dir/src/game.cpp.o"
+  "CMakeFiles/ridgeline.dir/src/game.cpp.o.d"
+  "CMakeFiles/ridgeline.dir/src/gl.cpp.o"
+  "CMakeFiles/ridgeline.dir/src/gl.cpp.o.d"
+  "CMakeFiles/ridgeline.dir/src/gps.cpp.o"
+  "CMakeFiles/ridgeline.dir/src/gps.cpp.o.d"
+  "CMakeFiles/ridgeline.dir/src/hud.cpp.o"
+  "CMakeFiles/ridgeline.dir/src/hud.cpp.o.d"
+  "CMakeFiles/ridgeline.dir/src/inflate.cpp.o"
+  "CMakeFiles/ridgeline.dir/src/inflate.cpp.o.d"
+  "CMakeFiles/ridgeline.dir/src/main.cpp.o"
+  "CMakeFiles/ridgeline.dir/src/main.cpp.o.d"
+  "CMakeFiles/ridgeline.dir/src/race.cpp.o"
+  "CMakeFiles/ridgeline.dir/src/race.cpp.o.d"
+  "CMakeFiles/ridgeline.dir/src/render.cpp.o"
+  "CMakeFiles/ridgeline.dir/src/render.cpp.o.d"
+  "CMakeFiles/ridgeline.dir/src/special.cpp.o"
+  "CMakeFiles/ridgeline.dir/src/special.cpp.o.d"
+  "CMakeFiles/ridgeline.dir/src/textures.cpp.o"
+  "CMakeFiles/ridgeline.dir/src/textures.cpp.o.d"
+  "CMakeFiles/ridgeline.dir/src/vehicle.cpp.o"
+  "CMakeFiles/ridgeline.dir/src/vehicle.cpp.o.d"
+  "CMakeFiles/ridgeline.dir/src/world.cpp.o"
+  "CMakeFiles/ridgeline.dir/src/world.cpp.o.d"
+  "ridgeline"
+  "ridgeline.pdb"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang CXX)
+  include(CMakeFiles/ridgeline.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()

@@ -223,6 +223,8 @@ private:
     vec4 cheatRect;
     State switchFrom = ST_FREEROAM;
     int devRoad = -1;
+    float menuOpenT = 0;
+    State lastState = ST_TITLE;
     void buildEras();
     std::string eraDate(int era) const;
     void updateSpecial(float dt);

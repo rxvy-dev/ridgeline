@@ -406,8 +406,9 @@ void main(){
     } else if (metal > 0.0) {
         col = mix(col, envColor(R) * (albedo * 0.7 + 0.3), metal * 0.8);
     }
+    // glTF: emission = factor x texture (a white factor with a mostly black map lights only the lamps)
     vec3 e = uEmis;
-    if (uHasEmis == 1) e += texture(tEmis, uv).rgb;
+    if (uHasEmis == 1) e = texture(tEmis, uv).rgb * (dot(uEmis, vec3(1.0)) > 0.001 ? uEmis : vec3(1.0));
     if ((uFlags & 4) != 0) {
         bool red = albedo.r > albedo.g * 1.8 && albedo.r > 0.2;
         if (red) e += albedo * (0.5 + uBrake * 2.5);
@@ -732,6 +733,49 @@ void main(){
     FragColor = vec4(c, 1.0);
 }
 )";
+static const char* kSsaoFS = R"(
+in vec2 vUV;
+uniform sampler2D uDepth;
+uniform vec4 uProj;   // near, far, tan(fovy/2), aspect
+uniform vec2 uTexel;  // full-res texel
+out vec4 FragColor;
+float linZ(float d){ float z = d * 2.0 - 1.0; return 2.0 * uProj.x * uProj.y / (uProj.y + uProj.x - z * (uProj.y - uProj.x)); }
+vec3 viewPos(vec2 uv){
+    float l = linZ(texture(uDepth, uv).r);
+    return vec3((uv.x * 2.0 - 1.0) * uProj.z * uProj.w * l, (uv.y * 2.0 - 1.0) * uProj.z * l, -l);
+}
+void main(){
+    float d = texture(uDepth, vUV).r;
+    if (d >= 0.99999) { FragColor = vec4(1.0); return; }
+    vec3 P = viewPos(vUV);
+    float dist = -P.z;
+    if (dist > 180.0) { FragColor = vec4(1.0); return; }
+    // normal from the nearer neighbour on each axis (keeps silhouettes clean)
+    vec3 px = viewPos(vUV + vec2(uTexel.x, 0.0)), nx = viewPos(vUV - vec2(uTexel.x, 0.0));
+    vec3 py = viewPos(vUV + vec2(0.0, uTexel.y)), ny = viewPos(vUV - vec2(0.0, uTexel.y));
+    vec3 dx = abs(px.z - P.z) < abs(nx.z - P.z) ? px - P : P - nx;
+    vec3 dy = abs(py.z - P.z) < abs(ny.z - P.z) ? py - P : P - ny;
+    vec3 N = normalize(cross(dx, dy));
+    float radius = mix(0.55, 2.2, smoothstep(10.0, 120.0, dist));
+    float rUV = radius / (dist * uProj.z * 2.0);
+    float noise = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+    float ao = 0.0;
+    const int N_S = 12;
+    for (int i = 0; i < N_S; i++) {
+        float a = (float(i) + noise) * 2.39996;
+        float r = sqrt((float(i) + 0.5) / float(N_S)) * rUV;
+        vec2 o = vec2(cos(a) / uProj.w, sin(a)) * r;
+        vec3 S = viewPos(vUV + o);
+        vec3 v = S - P;
+        float l = length(v);
+        float occ = max(dot(N, v / max(l, 1e-4)) - 0.08, 0.0);
+        ao += occ * (1.0 - smoothstep(radius * 0.6, radius * 1.6, l));
+    }
+    ao = 1.0 - ao / float(N_S) * 1.6;
+    ao = mix(clamp(ao, 0.0, 1.0), 1.0, smoothstep(120.0, 180.0, dist));
+    FragColor = vec4(ao, ao, ao, 1.0);
+}
+)";
 static const char* kPostFS = R"(
 in vec2 vUV;
 uniform sampler2D uScene;
@@ -741,11 +785,25 @@ uniform float uFlash;
 uniform float uBloomAmt;
 uniform vec2 uSunUV;
 uniform float uSunAmt;
+uniform sampler2D uAO;
+uniform float uAOAmt;
+uniform vec2 uAOTexel;
+uniform vec2 uTexelS;
+uniform float uGrainT;
 out vec4 FragColor;
 vec3 aces(vec3 x){ return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
 void main(){
     vec2 uv = vUV;
     vec3 c = texture(uScene, uv).rgb;
+    {
+        // contrast-adaptive sharpening: win back the detail MSAA and upscaled textures soften
+        vec3 n = texture(uScene, uv + vec2(0.0, uTexelS.y)).rgb, s2 = texture(uScene, uv - vec2(0.0, uTexelS.y)).rgb;
+        vec3 e = texture(uScene, uv + vec2(uTexelS.x, 0.0)).rgb, w = texture(uScene, uv - vec2(uTexelS.x, 0.0)).rgb;
+        vec3 mn = min(c, min(min(n, s2), min(e, w))), mx = max(c, max(max(n, s2), max(e, w)));
+        vec3 amp = sqrt(clamp(min(mn, 2.0 - mx) / max(mx, 1e-4), 0.0, 1.0));
+        vec3 wgt = -amp * 0.16;
+        c = clamp((c + (n + s2 + e + w) * wgt) / (1.0 + 4.0 * wgt), 0.0, 64.0);
+    }
     if (uBlur > 0.001) {
         vec2 dir = uv - vec2(0.5, 0.45);
         float amt = uBlur * smoothstep(0.06, 0.6, length(dir));
@@ -756,6 +814,15 @@ void main(){
             w += 1.0;
         }
         c = acc / w;
+    }
+    if (uAOAmt > 0.0) {
+        // ambient occlusion: contact shadows under cars, in wheel arches, at tree roots
+        float ao = 0.0;
+        ao += texture(uAO, uv + uAOTexel * vec2(-0.75, -0.75)).r;
+        ao += texture(uAO, uv + uAOTexel * vec2(0.75, -0.75)).r;
+        ao += texture(uAO, uv + uAOTexel * vec2(-0.75, 0.75)).r;
+        ao += texture(uAO, uv + uAOTexel * vec2(0.75, 0.75)).r;
+        c *= mix(1.0, ao * 0.25, uAOAmt);
     }
     c += texture(uBloom, uv).rgb * uBloomAmt;
     if (uSunAmt > 0.001) {
@@ -779,6 +846,9 @@ void main(){
     c = c * c * (3.0 - 2.0 * c) * 0.35 + c * 0.65;
     vec2 q = uv - 0.5;
     c *= 1.0 - dot(q, q) * 0.7;
+    // fine film grain (also hides banding in the sky gradients)
+    float g = fract(sin(dot(gl_FragCoord.xy + uGrainT * 61.7, vec2(12.9898, 78.233))) * 43758.5453);
+    c += (g - 0.5) * 0.018;
     c = mix(c, vec3(1.0), uFlash);
     FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
 }

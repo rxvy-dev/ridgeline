@@ -44,7 +44,8 @@ void Game::buildEras() {
 std::string Game::eraDate(int era) const {
     if (era == 1) return "NOV 05 1955   06:00 AM";
     if (era == 2) return "OCT 21 2015   04:29 PM";
-    std::time_t t = std::time(nullptr);
+    static const std::time_t start = std::time(nullptr);  // game clock: steady even while recording
+    std::time_t t = start + std::time_t(simTime);
     std::tm lt = *std::localtime(&t);
     static const char* mon[] = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
     int h = lt.tm_hour % 12;
@@ -148,7 +149,7 @@ void Game::updateSpecial(float dt) {
     bool cat = s.fx == "oiia";
     if (cat && s.sound != songFile) {
         songFile = s.sound;
-        if (!audio.loadSong(songFile)) audio.song.clear();
+        audio.loadSong(songFile);
     }
     if (cat && catSpin && !catWasSpinning) audio.songRestart = 1;
     catWasSpinning = cat && catSpin;
@@ -170,6 +171,7 @@ void Game::drawTimeCircuits() {
     if (!tmCar || vis < 0.01f) return;
     float u = hud.ui;
     float w = 430 * u, rh = 44 * u, x = hud.w * 0.5f - w * 0.5f, y = 22 * u;
+    if (hud.w < 900 * u) { w = std::min(w, hud.w - 40 * u); x = hud.w * 0.5f - w * 0.5f; y = 128 * u; }  // narrow / portrait: below the info panel
     hud.roundRect(x - 10 * u, y - 10 * u, w + 20 * u, rh * 3 + 34 * u, 8 * u, vec4(0.06f, 0.06f, 0.07f, 0.88f * vis));
     struct Row { const char* label; int era; vec4 col; };
     Row rows[3] = {{"DESTINATION TIME", (tm.era + 1) % 3, vec4(1.f, 0.22f, 0.15f, 1)},

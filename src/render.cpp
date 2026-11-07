@@ -318,6 +318,7 @@ bool Renderer::init() {
     ok &= hud.build("hud", kHudVS, kHudFS, false);
     ok &= bright.build("bright", kFullscreenVS, kBrightFS, false);
     ok &= blur.build("blur", kFullscreenVS, kBlurFS, false);
+    ok &= ssao.build("ssao", kFullscreenVS, kSsaoFS, false);
     if (!ok) return false;
     glGenVertexArrays(1, &emptyVao);
     tex.generate();
@@ -356,7 +357,10 @@ void Renderer::setShadowQuality(int nearSize) {
 void Renderer::destroyTargets() {
     if (sceneFbo) glDeleteFramebuffers(1, &sceneFbo);
     if (sceneTex) glDeleteTextures(1, &sceneTex);
-    if (sceneDepth) glDeleteRenderbuffers(1, &sceneDepth);
+    if (sceneDepth) glDeleteTextures(1, &sceneDepth);
+    if (aoFbo) glDeleteFramebuffers(1, &aoFbo);
+    if (aoTex) glDeleteTextures(1, &aoTex);
+    aoFbo = aoTex = 0;
     if (msFbo) glDeleteFramebuffers(1, &msFbo);
     if (msColor) glDeleteRenderbuffers(1, &msColor);
     if (msDepth) glDeleteRenderbuffers(1, &msDepth);
@@ -390,13 +394,17 @@ void Renderer::resize(int w, int h) {
     destroyTargets();
     usePost = true;
     sceneTex = makeColorTex(width, height);
-    glGenRenderbuffers(1, &sceneDepth);
-    glBindRenderbuffer(GL_RENDERBUFFER, sceneDepth);
-    glRenderbufferStorageMultisample(GL_RENDERBUFFER, 0, GL_DEPTH_COMPONENT24, width, height);
+    glGenTextures(1, &sceneDepth);
+    glBindTexture(GL_TEXTURE_2D, sceneDepth);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glGenFramebuffers(1, &sceneFbo);
     glBindFramebuffer(GL_FRAMEBUFFER, sceneFbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sceneTex, 0);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, sceneDepth);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, sceneDepth, 0);
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
         SDL_Log("Scene framebuffer incomplete, post-processing disabled");
         usePost = false;
@@ -409,6 +417,12 @@ void Renderer::resize(int w, int h) {
         glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo[i]);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bloomTex[i], 0);
     }
+    aw = std::max(width / 2, 8);
+    ah = std::max(height / 2, 8);
+    aoTex = makeColorTex(aw, ah);
+    glGenFramebuffers(1, &aoFbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, aoFbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, aoTex, 0);
     rw = std::max(width / 2, 8);
     rh = std::max(height / 2, 8);
     reflTex = makeColorTex(rw, rh);
@@ -558,17 +572,29 @@ void Renderer::drawSky(const Camera& cam) {
     glEnable(GL_DEPTH_TEST);
 }
 
-void Renderer::endScene(float blurAmt, float flash) {
+void Renderer::endScene(float blurAmt, float flash, const Camera* cam) {
     if (!usePost) return;
+    bool ao = cam && useAO;
     if (msFbo) {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, msFbo);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, sceneFbo);
-        glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT | (ao ? GL_DEPTH_BUFFER_BIT : 0), GL_NEAREST);
     }
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);
     glBindVertexArray(emptyVao);
+    if (ao) {
+        glViewport(0, 0, aw, ah);
+        glBindFramebuffer(GL_FRAMEBUFFER, aoFbo);
+        ssao.use();
+        ssao.set("uDepth", int(U_DEPTH));
+        ssao.set("uProj", vec4(cam->nearZ, cam->farZ, std::tan(cam->fov * 0.5f), cam->aspect));
+        ssao.set("uTexel", vec2(1.f / width, 1.f / height) * 2.f);
+        glActiveTexture(GL_TEXTURE0 + U_DEPTH);
+        glBindTexture(GL_TEXTURE_2D, sceneDepth);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+    }
     // bloom: bright pass at quarter res, then separable blur
     glViewport(0, 0, bw, bh);
     glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo[0]);
@@ -601,6 +627,13 @@ void Renderer::endScene(float blurAmt, float flash) {
     post.set("uBloomAmt", bloomAmount);
     post.set("uSunUV", sunUV);
     post.set("uSunAmt", sunAmt);
+    post.set("uAO", int(U_AO));
+    post.set("uTexelS", vec2(1.f / width, 1.f / height));
+    post.set("uGrainT", std::fmod(time, 10.f));
+    post.set("uAOAmt", ao ? 0.85f : 0.f);
+    post.set("uAOTexel", vec2(1.f / aw, 1.f / ah));
+    glActiveTexture(GL_TEXTURE0 + U_AO);
+    glBindTexture(GL_TEXTURE_2D, aoTex);
     glActiveTexture(GL_TEXTURE0 + U_BLOOM);
     glBindTexture(GL_TEXTURE_2D, bloomTex[0]);
     glActiveTexture(GL_TEXTURE0 + U_SCENE);

@@ -2,6 +2,10 @@
 #include "mathx.h"
 #include <cmath>
 #include <cstring>
+#include <string>
+#define DR_MP3_IMPLEMENTATION
+#define DR_MP3_NO_STDIO_DEPRECATION
+#include "dr_mp3.h"
 #include <vector>
 
 static const int RATE = 48000;
@@ -35,34 +39,51 @@ void Audio::shutdown() {
     stream = nullptr;
 }
 
-bool Audio::loadSong(const std::string& path) {
-    SDL_AudioSpec spec;
-    Uint8* data = nullptr;
-    Uint32 len = 0;
-    if (!SDL_LoadWAV(path.c_str(), &spec, &data, &len)) return false;
-    SDL_AudioSpec want{SDL_AUDIO_F32, 1, RATE};
-    Uint8* conv = nullptr;
-    int clen = 0;
-    bool ok = SDL_ConvertAudioSamples(&spec, data, int(len), &want, &conv, &clen);
-    SDL_free(data);
-    if (!ok) return false;
-    std::vector<float> s(size_t(clen) / sizeof(float));
-    std::memcpy(s.data(), conv, s.size() * sizeof(float));
-    SDL_free(conv);
-    if (stream) SDL_LockAudioStream(stream);
-    song.swap(s);
-    songPos = 0;
-    if (stream) SDL_UnlockAudioStream(stream);
-    return true;
+static bool fileExists(const std::string& p) {
+    SDL_PathInfo info;
+    return SDL_GetPathInfo(p.c_str(), &info) && info.type == SDL_PATHTYPE_FILE;
 }
 
-// one step of a state-variable band-pass filter
-static inline float svfBand(float x, float f, float q, float& low, float& band) {
-    float k = 2.f * std::sin(3.14159265f * f / RATE);
-    low += k * band;
-    float high = x - low - band / q;
-    band += k * high;
-    return band;
+// Loads the secret car's song: a .wav or .mp3 next to the car (same name, either extension).
+bool Audio::loadSong(const std::string& path) {
+    std::string stem = path.substr(0, path.find_last_of('.'));
+    std::vector<std::string> tries = {path, stem + ".wav", stem + ".mp3"};
+    SDL_AudioSpec want{SDL_AUDIO_F32, 1, RATE};
+    std::vector<float> out;
+    for (const auto& p : tries) {
+        if (!fileExists(p)) continue;
+        SDL_AudioSpec spec{};
+        Uint8* data = nullptr;
+        Uint32 len = 0;
+        bool mp3 = p.size() > 4 && (p.compare(p.size() - 4, 4, ".mp3") == 0 || p.compare(p.size() - 4, 4, ".MP3") == 0);
+        float* pcm = nullptr;
+        if (mp3) {
+            drmp3_config cfg;
+            drmp3_uint64 frames = 0;
+            pcm = drmp3_open_file_and_read_pcm_frames_f32(p.c_str(), &cfg, &frames, nullptr);
+            if (!pcm) continue;
+            spec = SDL_AudioSpec{SDL_AUDIO_F32, int(cfg.channels), int(cfg.sampleRate)};
+            data = reinterpret_cast<Uint8*>(pcm);
+            len = Uint32(frames * cfg.channels * sizeof(float));
+        } else if (!SDL_LoadWAV(p.c_str(), &spec, &data, &len)) {
+            continue;
+        }
+        Uint8* conv = nullptr;
+        int clen = 0;
+        bool ok = SDL_ConvertAudioSamples(&spec, data, int(len), &want, &conv, &clen);
+        if (mp3) drmp3_free(pcm, nullptr); else SDL_free(data);
+        if (!ok) continue;
+        out.resize(size_t(clen) / sizeof(float));
+        std::memcpy(out.data(), conv, out.size() * sizeof(float));
+        SDL_free(conv);
+        SDL_Log("Song loaded: %s (%.1f s)", p.c_str(), out.size() / float(RATE));
+        break;
+    }
+    if (stream) SDL_LockAudioStream(stream);
+    song.swap(out);
+    songPos = 0;
+    if (stream) SDL_UnlockAudioStream(stream);
+    return !song.empty();
 }
 
 void Audio::generate(float* out, int frames) {
@@ -141,23 +162,6 @@ void Audio::generate(float* out, int frames) {
             if (!song.empty()) {
                 sg = song[songPos] * 0.9f * songEnv;
                 if (++songPos >= song.size()) songPos = 0;
-            } else {
-                // "oo ee a ee a": glottal pulses through two vowel formants
-                static const float kF[3][2] = {{320, 800}, {280, 2250}, {760, 1150}};  // u, i, a
-                static const int kSeq[12] = {0, 1, 2, 1, 2, 0, 1, 0, 1, 2, 1, 2};
-                chantT += dt;
-                float step = 0.17f;
-                int idx = int(chantT / step) % 12, nxt = (idx + 1) % 12;
-                float fr = std::fmod(chantT, step) / step, bl = smoothstepf(0.7f, 1.f, fr);
-                float F1 = kF[kSeq[idx]][0] + (kF[kSeq[nxt]][0] - kF[kSeq[idx]][0]) * bl;
-                float F2 = kF[kSeq[idx]][1] + (kF[kSeq[nxt]][1] - kF[kSeq[idx]][1]) * bl;
-                float pitch = 560.f + 90.f * std::sin(chantT * 9.f) + (kSeq[idx] == 1 ? 140.f : 0.f);
-                chantPh += pitch * dt;
-                if (chantPh > 1) chantPh -= 1;
-                float src = std::exp(-chantPh * 9.f) - 0.11f;
-                float v = svfBand(src, F1, 6.f, f1a, f1b) + 0.6f * svfBand(src, F2, 8.f, f2a, f2b);
-                float gate = std::sin(std::min(fr, 0.95f) / 0.95f * 3.14159f);
-                sg = v * 0.5f * (0.4f + 0.6f * gate) * songEnv;
             }
         }
         // ---- time machine: charging whine + crackle, then a boom

@@ -333,7 +333,7 @@ bool Game::init(const Options& o) {
                 const Road& rd = world.roads[st.road];
                 int i = (st.a - (opt.scene == "timejump" ? 60 : 20) + int(rd.pts.size())) % int(rd.pts.size());
                 enterFreeRoam(rd.pts[i], std::atan2(rd.tan[i].x, rd.tan[i].z));
-                player.car.vel = rd.tan[i] * (opt.scene == "timejump" ? 38.f : 14.f);
+                player.car.vel = rd.tan[i] * (opt.scene == "timejump" ? 40.2f : 14.f);
                 devRoad = st.road;
                 break;
             }
@@ -1081,6 +1081,8 @@ std::vector<std::string> Game::settingsItems() const {
 // ====================================================================== update
 void Game::update(float dt) {
     stateTime += dt;
+    menuOpenT = (state == ST_PAUSE && lastState != ST_PAUSE) ? 0.f : menuOpenT + dt;
+    lastState = state;
     R.time += dt;
     simTime += dt;
     for (auto& t : toasts) t.t -= dt;
@@ -1735,7 +1737,7 @@ GLuint Game::captureThumb(const Camera& c0, const Atmosphere* atmo, float aspect
     thumbActive = false;
     float sa = R.sunAmt;
     R.sunAmt = 0;
-    R.endScene(0, 0);
+    R.endScene(0, 0, &c);
     R.sunAmt = sa;
     R.atmo = saved;
     int cw = R.width, ch = R.height;
@@ -1903,7 +1905,8 @@ void Game::render() {
             R.sunAmt = smoothstepf(0.1f, 0.6f, facing) * edge * (state == ST_TITLE ? 1.4f : 1.f);
         }
     }
-    R.endScene(blur, flash);
+    R.useAO = settings.shadows;
+    R.endScene(blur, flash, &cam);
     if (photoCapture && state == ST_PHOTO) {
         photoCapture = false;
         std::string path = prefPath + "photo-" + std::to_string(SDL_GetTicks()) + ".bmp";
@@ -2229,7 +2232,7 @@ void Game::drawHud() {
             hud.text(hud.w * 0.5f, py + 10 * u, 20 * u, "Festival Hub", WHITE, 1);
             hud.text(hud.w * 0.5f, py + 36 * u, 15 * u, pad ? "(Y) Dealership & Garage" : "ENTER  Dealership & Garage", ACCENT, 1, false);
         }
-        if (!opt.noHints) hud.text(hud.w - 18 * u, 18 * u, 13 * u, pad ? "START menu   BACK map   RB camera   Y rewind   R3 photo" : "ESC menu   M map   C camera   R reset   BKSP rewind   P photo   H horn", vec4(1, 1, 1, 0.5f), 2, false);
+        if (!opt.noHints) hud.text(hud.w - 18 * u, 18 * u, 13 * u, pad ? "START menu   BACK map   UP switch car   RB camera   Y rewind   R3 photo" : "ESC menu   M map   G switch car   C camera   R reset   BKSP rewind   P photo   H horn", vec4(1, 1, 1, 0.5f), 2, false);
     }
     drawChain();
     drawPopup();
@@ -2346,9 +2349,23 @@ void Game::drawPause() {
             bool sel = i == menuSel;
             float tx = x0 + t.x * (cw + gap), ty = gy + t.y * (ch + gap);
             float tw = t.w * cw + (t.w - 1) * gap, th = t.h * ch + (t.h - 1) * gap;
-            float grow = sel ? 6 * u : 0;
+            // smooth selection and a staggered slide-in when the menu opens
+            static float selAnim[kTileCount] = {};
+            selAnim[i] += ((sel ? 1.f : 0.f) - selAnim[i]) * 0.22f;
+            float intro = smoothstepf(0.f, 1.f, clampf((menuOpenT - i * 0.035f) / 0.28f, 0.f, 1.f));
+            ty += (1.f - intro) * 40 * u;
+            float grow = selAnim[i] * 7 * u;
             tx -= grow; ty -= grow; tw += grow * 2; th += grow * 2;
-            hud.rect(tx + 6 * u, ty + 8 * u, tw, th, vec4(0, 0, 0, 0.35f));  // drop shadow
+            hud.rect(tx + 6 * u, ty + 8 * u + selAnim[i] * 6 * u, tw, th, vec4(0, 0, 0, 0.35f + selAnim[i] * 0.2f));  // drop shadow
+            if (selAnim[i] > 0.02f) {
+                float pulse = 0.75f + 0.25f * std::sin(R.time * 4.f);
+                float b = 3 * u;
+                vec4 oc(1, 1, 1, selAnim[i] * pulse);
+                hud.rect(tx - b, ty - b, tw + 2 * b, b, oc);
+                hud.rect(tx - b, ty + th, tw + 2 * b, b, oc);
+                hud.rect(tx - b, ty, b, th, oc);
+                hud.rect(tx + tw, ty, b, th, oc);
+            }
             hud.rect(tx, ty, tw, th, vec4(0.09f, 0.09f, 0.10f, 1));
             GLuint img = i < 8 ? menuThumb[i] : 0;
             if (i == 1) {  // live map preview
