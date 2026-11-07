@@ -190,8 +190,8 @@ void main(){
         vec2 cf = vec2(fract(x / 2.6 + 0.5), fract(v / 7.0));
         float inPatch = step(ph, 0.05) * step(0.12, cf.x) * step(cf.x, 0.88) * step(0.15, cf.y) * step(cf.y, 0.85);
         float seam = inPatch * (1.0 - step(0.15, min(min(cf.x - 0.12, 0.88 - cf.x) * 2.6, min(cf.y - 0.15, 0.85 - cf.y) * 7.0)));
-        c = mix(c, c * (0.78 + 0.1 * vnoise(vec2(x, v) * 1.3)), inPatch);
-        c = mix(c, vec3(0.06), seam * 0.5);
+        c = mix(c, c * (0.90 + 0.06 * vnoise(vec2(x, v) * 1.3)), inPatch);
+        c = mix(c, c * 0.6, seam * 0.35);
         // polished tyre lines in each lane, lighter grey dust on the crown and edges
         float lane = abs(abs(x) - width * 0.25);
         float tracks = exp(-pow((lane - 0.85) * 2.2, 2.0)) * (0.7 + 0.3 * vnoise(vec2(x * 2.0, v * 0.05)));
@@ -846,6 +846,12 @@ void main(){
     c = c * c * (3.0 - 2.0 * c) * 0.35 + c * 0.65;
     vec2 q = uv - 0.5;
     c *= 1.0 - dot(q, q) * 0.7;
+    {
+        float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+        c = mix(vec3(l), c, 1.10);
+        c = clamp(c, 0.0, 1.0);
+        c = c * c * (3.0 - 2.0 * c) * 0.22 + c * 0.78;  // gentle S-curve
+    }
     // fine film grain (also hides banding in the sky gradients)
     float g = fract(sin(dot(gl_FragCoord.xy + uGrainT * 61.7, vec2(12.9898, 78.233))) * 43758.5453);
     c += (g - 0.5) * 0.018;

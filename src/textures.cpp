@@ -227,23 +227,50 @@ Img makeDirt() {
     return im;
 }
 
+// tileable cellular noise: distance to the nearest and second-nearest jittered cell centre
+static void worley(float u, float v, int cells, unsigned seed, float& f1, float& f2, float& id) {
+    float x = u * cells, y = v * cells;
+    int cx = int(std::floor(x)), cy = int(std::floor(y));
+    f1 = f2 = 9.f;
+    id = 0;
+    for (int j = -1; j <= 1; j++)
+        for (int i = -1; i <= 1; i++) {
+            int gx = cx + i, gy = cy + j;
+            int wx = ((gx % cells) + cells) % cells, wy = ((gy % cells) + cells) % cells;
+            unsigned h = (unsigned(wx) * 73856093u) ^ (unsigned(wy) * 19349663u) ^ (seed * 83492791u);
+            h = (h ^ (h >> 13)) * 1274126177u;
+            float jx = float(h & 0xFFFF) / 65535.f, jy = float((h >> 16) & 0xFFFF) / 65535.f;
+            float dx = gx + 0.15f + jx * 0.7f - x, dy = gy + 0.15f + jy * 0.7f - y;
+            float d = std::sqrt(dx * dx + dy * dy);
+            if (d < f1) { f2 = f1; f1 = d; id = float((h >> 8) & 0xFF) / 255.f; }
+            else if (d < f2) f2 = d;
+        }
+}
+
 Img makeRock(Img& height) {
+    // granite-like cliff rock: fractured blocks (cellular edges), weathered faces, faint bedding
     const int S = 1024;
     Img im(S, S);
     for (int y = 0; y < S; y++)
         for (int x = 0; x < S; x++) {
             float u = x / float(S), v = y / float(S);
-            float warp = tfbm(u, v, 4, 4, 501);
-            // horizontal strata
-            float strata = std::sin((v * 14.f + warp * 2.2f) * 6.2831853f) * 0.5f + 0.5f;
-            float strata2 = std::sin((v * 37.f + warp * 4.f) * 6.2831853f) * 0.5f + 0.5f;
+            float wu = tfbm(u, v, 4, 3, 501) - 0.5f, wv = tfbm(u, v, 4, 3, 511) - 0.5f;
+            float f1, f2, id, g1, g2, gid;
+            worley(u + wu * 0.16f, v + wv * 0.16f, 4, 7, f1, f2, id);       // big blocks
+            worley(u + wu * 0.09f, v + wv * 0.09f, 13, 13, g1, g2, gid);    // smaller fractures
+            float edge = (1.f - smoothstepf(0.0f, 0.035f, f2 - f1)) * smoothstepf(0.35f, 0.6f, tfbm(u, v, 6, 3, 507));
+            float edge2 = (1.f - smoothstepf(0.0f, 0.03f, g2 - g1)) * smoothstepf(0.45f, 0.7f, tfbm(u, v, 9, 3, 508));
             float n = tfbm(u, v, 8, 5, 502);
-            float crack = std::fabs(tfbm(u, v, 6, 4, 503) - 0.5f);
-            float cr = 1.f - smoothstepf(0.0f, 0.03f, crack);
-            float hgt = strata * 0.45f + strata2 * 0.2f + n * 0.5f - cr * 0.5f;
-            vec3 base = lerp(vec3(0.40f, 0.38f, 0.35f), vec3(0.62f, 0.58f, 0.52f), strata * 0.6f + n * 0.4f);
-            base = lerp(base, vec3(0.55f, 0.47f, 0.38f), smoothstepf(0.55f, 0.8f, tfbm(u, v, 3, 3, 504)) * 0.5f);  // iron stains
-            base = base * (1.f - cr * 0.6f) * (0.85f + 0.3f * strata2);
+            float fine = tfbm(u, v, 48, 3, 505);
+            float bedding = std::sin((v * 9.f + wu * 1.6f) * 6.2831853f) * 0.5f + 0.5f;
+            // each block leans a little lighter/darker and warmer/cooler
+            float tone = 0.82f + 0.32f * id + 0.18f * (n - 0.5f);
+            vec3 base = lerp(vec3(0.43f, 0.42f, 0.40f), vec3(0.60f, 0.57f, 0.52f), clampf(0.35f + (n - 0.5f) * 0.9f + (gid - 0.5f) * 0.2f, 0.f, 1.f));
+            base = lerp(base, vec3(0.56f, 0.48f, 0.39f), smoothstepf(0.55f, 0.8f, tfbm(u, v, 3, 3, 504)) * 0.45f);  // iron stains
+            base = lerp(base, vec3(0.33f, 0.36f, 0.27f), smoothstepf(0.62f, 0.85f, tfbm(u, v, 5, 4, 506)) * 0.35f);  // lichen
+            base = base * tone * (0.9f + 0.2f * fine) * (0.95f + 0.05f * bedding);
+            base = base * (1.f - edge * 0.38f) * (1.f - edge2 * 0.2f);
+            float hgt = 0.55f + (f1 * 0.35f) + n * 0.35f + fine * 0.1f - edge * 0.55f - edge2 * 0.25f + bedding * 0.04f;
             im.at(x, y) = vec4(base, 1);
             height.at(x, y) = vec4(0, 0, 0, hgt);
         }

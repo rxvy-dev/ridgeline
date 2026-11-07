@@ -1100,7 +1100,15 @@ void Game::update(float dt) {
     stateTime += dt;
     menuOpenT = (state == ST_PAUSE && lastState != ST_PAUSE) ? 0.f : menuOpenT + dt;
     hintT = (state == ST_FREEROAM && lastState != ST_FREEROAM && lastState != ST_PAUSE) ? 0.f : hintT + dt;
+    if (state != lastState) {
+        auto big = [](State s) { return s == ST_TITLE || s == ST_DEALER || s == ST_GARAGE || s == ST_WHEELSPIN || s == ST_UPGRADE ||
+                                        s == ST_RESULTS || s == ST_RACE_INTRO || s == ST_MAP; };
+        if (big(state) || big(lastState)) { transT = 0; transDur = 0.6f; }
+    }
+    transT += dt;
     lastState = state;
+    if (std::fabs(credits - creditsShown) < 1.0 || creditsShown <= 0) creditsShown = double(credits);
+    else creditsShown += (double(credits) - creditsShown) * double(damp(5.f, dt));
     R.time += dt;
     simTime += dt;
     for (auto& t : toasts) t.t -= dt;
@@ -1287,8 +1295,50 @@ vec3 Game::showroomSpot() const {
     return p;
 }
 
+int Game::cameraContext() const {
+    if (state == ST_TITLE) return 2;
+    if (state == ST_DEALER || state == ST_GARAGE) return 1;
+    if (state == ST_RACE_INTRO && stateTime < 2.5f) return 3;
+    if (state == ST_RESULTS) return 4;
+    return 10 + (lookBack ? 9 : camMode);
+}
+
 void Game::updateCamera(float dt) {
+    vec3 lp = cam.pos, lt = cam.target;
+    float lf = cam.fov;
+    int ctx = cameraContext();
+    Racer& tr = state == ST_TITLE ? titleCar : player;
+    if (ctx != camCtx && camCtx >= 0) {
+        // glide from wherever the last camera was, relative to the car so it keeps up at speed
+        bool chaseSwap = ctx >= 10 && camCtx >= 10;
+        blendFromOff = lp - tr.car.pos;
+        blendFromTgtOff = lt - tr.car.pos;
+        blendFromFov = lf;
+        blendT = 0;
+        blendDur = chaseSwap ? 0.32f : 1.25f;
+        blendLift = chaseSwap ? 0.f : 2.2f;
+        if (length(blendFromOff) > 80.f || ctx == 3) blendT = 99;  // too far to fly: the screen wipe covers the cut
+    }
+    camCtx = ctx;
+    updateCameraRaw(dt);
+    if (blendT < blendDur) {
+        blendT += dt;
+        float t = clampf(blendT / blendDur, 0.f, 1.f);
+        t = t * t * t * (t * (t * 6.f - 15.f) + 10.f);  // smootherstep
+        vec3 from = tr.car.pos + blendFromOff, fromT = tr.car.pos + blendFromTgtOff;
+        vec3 p = from + (cam.pos - from) * t;
+        p.y += std::sin(t * PI) * blendLift;
+        p.y = std::max(p.y, world.heightAt(p.x, p.z) + 0.4f);
+        cam.target = fromT + (cam.target - fromT) * t;
+        cam.pos = p;
+        cam.fov = blendFromFov + (cam.fov - blendFromFov) * t;
+        cam.update();
+    }
+}
+
+void Game::updateCameraRaw(float dt) {
     int pw = R.width, ph = R.height;
+    cam.roll = 0;
     cam.aspect = float(pw) / float(ph);
     cam.nearZ = 0.25f;
     bool showroom = state == ST_DEALER || state == ST_GARAGE;
@@ -1299,21 +1349,37 @@ void Game::updateCamera(float dt) {
 
     if (showroom) {
         vec3 c = showroomSpot();
-        float a = stateTime * 0.22f + 0.6f;
-        cam.pos = c + vec3(std::cos(a) * 7.5f, 2.0f, std::sin(a) * 7.5f);
-        cam.target = c + vec3(0, 0.55f, 0);
-        cam.fov = 0.85f;
+        if (subSel != lastSubSel) { showKick += 0.9f; lastSubSel = subSel; }
+        showKickSm += (showKick - showKickSm) * damp(3.5f, dt);
+        float a = stateTime * 0.16f + 0.6f + showKickSm;
+        float rad = 7.6f + 0.9f * std::sin(stateTime * 0.21f);
+        float hgt = 1.55f + 0.55f * std::sin(stateTime * 0.13f + 1.f);
+        cam.pos = c + vec3(std::cos(a) * rad, hgt, std::sin(a) * rad);
+        cam.target = c + vec3(0, 0.6f, 0);
+        cam.fov = 0.80f + 0.03f * std::sin(stateTime * 0.17f);
         cam.update();
         return;
     }
     if (state == ST_TITLE) {
+        // three slow cinematic shots on a loop: front three-quarter, low side track, high rear
         vec3 f = car.forward(), rgt = car.right();
-        float a = std::sin(stateTime * 0.08f) * 0.35f;
-        vec3 off = f * (std::cos(a) * 5.8f) - rgt * (std::sin(a) * 5.8f + 2.6f);
-        cam.pos = car.pos + off + vec3(0, 0.85f, 0);
-        cam.pos.y = std::max(cam.pos.y, world.heightAt(cam.pos.x, cam.pos.z) + 0.5f);
-        cam.target = car.pos + vec3(0, 0.75f, 0) - f * 0.4f - rgt * 1.6f;
-        cam.fov = 0.82f;
+        int shot = keyArt ? 0 : int(stateTime / 8.f) % 3;
+        float t = keyArt ? 0.f : std::fmod(stateTime, 8.f) / 8.f;
+        if (shot == 0) {
+            float a = std::sin(stateTime * 0.08f) * 0.35f;
+            float d = 5.8f - t * 0.8f;
+            vec3 off = f * (std::cos(a) * d) - rgt * (std::sin(a) * d + 2.6f);
+            cam.pos = car.pos + off + vec3(0, 0.85f, 0);
+            cam.target = car.pos + vec3(0, 0.75f, 0) - f * 0.4f - rgt * 1.6f;
+        } else if (shot == 1) {
+            cam.pos = car.pos + rgt * 5.2f + f * (-4.5f + 7.5f * t) + vec3(0, 0.55f, 0);
+            cam.target = car.pos + f * (-1.f + 2.f * t) + vec3(0, 0.55f, 0);
+        } else {
+            cam.pos = car.pos - f * 9.f - rgt * 3.5f + vec3(0, 4.2f - 2.4f * t, 0);
+            cam.target = car.pos + f * 2.f + vec3(0, 0.4f, 0);
+        }
+        cam.pos.y = std::max(cam.pos.y, world.heightAt(cam.pos.x, cam.pos.z) + 0.45f);
+        cam.fov = 0.80f;
         cam.update();
         return;
     }
@@ -1337,14 +1403,31 @@ void Game::updateCamera(float dt) {
     }
 
     // chase cameras
+    // body-relative acceleration drives the camera's weight: it hangs back when you launch,
+    // creeps in under braking and swings wide through corners
+    if (dt > 0) {
+        vec3 acc = (car.vel - prevCarVel) / dt;
+        if (length(acc) > 60.f) acc = vec3(0, 0, 0);  // teleports and resets
+        accLongSm += (clampf(dot(acc, fwd), -25.f, 25.f) - accLongSm) * damp(2.6f, dt);
+        accLatSm += (clampf(dot(acc, car.right()), -25.f, 25.f) - accLatSm) * damp(2.2f, dt);
+        if (car.grounded && !wasGrounded && prevVy < -3.5f) shake = std::max(shake, std::min(0.7f, -prevVy * 0.07f));
+        wasGrounded = car.grounded;
+        prevVy = car.vel.y;
+        prevCarVel = car.vel;
+    }
     float velYaw = car.yaw;
     if (v > 4.f && car.forwardSpeed() > 0) velYaw = std::atan2(car.vel.x, car.vel.z);
-    float targetYaw = lerpf(car.yaw, car.yaw + wrapAngle(velYaw - car.yaw), 0.5f);
-    camYaw += wrapAngle(targetYaw - camYaw) * damp(4.5f, dt);
+    float targetYaw = lerpf(car.yaw, car.yaw + wrapAngle(velYaw - car.yaw), 0.55f);
+    float yerr = wrapAngle(targetYaw - camYaw);
+    if (std::fabs(yerr) > 2.4f) { camYaw = targetYaw; camYawVel = 0; }
+    else {
+        camYawVel += (yerr * 26.f - camYawVel * 9.f) * dt;  // spring: eases in and out of turns
+        camYaw += camYawVel * dt;
+    }
     float yaw = camYaw + (lookBack ? PI : 0.f);
     vec3 cf(std::sin(yaw), 0, std::cos(yaw));
     float kmh = v * 3.6f;
-    float fovT = 1.08f + clampf(kmh / 300.f, 0.f, 1.f) * 0.32f;
+    float fovT = 1.08f + clampf(kmh / 300.f, 0.f, 1.f) * 0.32f + clampf(accLongSm / 12.f, -0.4f, 1.f) * 0.07f;
     fovSm += (fovT - fovSm) * damp(3.f, dt);
     cam.fov = fovSm;
     // free look: gamepad right stick (springs back) or mouse (recentres after a pause)
@@ -1372,14 +1455,17 @@ void Game::updateCamera(float dt) {
         float hgt = camMode == 0 ? 1.95f : 1.45f;
         dist *= car.spec->length / 4.4f;
         if (car.spec->body == BODY_TRUCK) hgt += 0.4f;
-        dist += clampf(kmh / 300.f, 0.f, 1.f) * 0.8f;
+        dist += clampf(kmh / 300.f, 0.f, 1.f) * 0.8f + accLongSm * 0.045f;
+        hgt -= accLongSm * 0.006f;
         float lyaw = yaw + lookYaw;
         float el = clampf(std::atan2(hgt - 0.95f, dist) + lookPitch, -0.08f, 1.35f);
         float D = std::sqrt(dist * dist + (hgt - 0.95f) * (hgt - 0.95f)) * lookZoom;
         vec3 pivot = car.pos + vec3(0, 0.95f, 0);
         vec3 back(std::sin(lyaw) * std::cos(el), -std::sin(el), std::cos(lyaw) * std::cos(el));
-        cam.pos = pivot - back * D;
-        cam.target = pivot + cf * (3.f * (1.f - orbit));
+        cam.pos = pivot - back * D - car.right() * (accLatSm * 0.045f);
+        cam.target = pivot + cf * (3.f * (1.f - orbit)) - car.right() * (accLatSm * 0.02f);
+        camRollSm += (clampf(accLatSm * 0.0028f, -0.04f, 0.04f) - camRollSm) * damp(3.f, dt);
+        cam.roll = camRollSm * (1.f - orbit);
     } else {
         mat4 bm = car.bodyMatrix();
         const CarModel& m = *tr.model;
@@ -1395,9 +1481,14 @@ void Game::updateCamera(float dt) {
         float g = world.heightAt(cam.pos.x, cam.pos.z) + 0.5f;
         cam.pos.y = std::max(cam.pos.y, g);
     }
-    float sh = shake * 0.12f + clampf((kmh - 200.f) / 200.f, 0.f, 1.f) * 0.015f;
+    float sh = shake * 0.12f + clampf((kmh - 160.f) / 200.f, 0.f, 1.f) * 0.02f + (car.grounded ? 0.f : 0.f);
     if (sh > 0) {
-        cam.pos += vec3(std::sin(simTime * 53.f), std::sin(simTime * 61.f + 1.f), std::cos(simTime * 47.f)) * sh;
+        // layered, non-repeating wobble (smoother than one sine per axis)
+        float t = simTime;
+        vec3 n(std::sin(t * 31.f) * 0.6f + std::sin(t * 57.3f + 1.7f) * 0.4f, std::sin(t * 43.1f + 0.4f) * 0.6f + std::sin(t * 71.7f) * 0.4f,
+               std::sin(t * 37.9f + 2.2f) * 0.6f + std::sin(t * 63.f + 0.9f) * 0.4f);
+        cam.pos += n * sh;
+        cam.target += n * sh * 0.4f;
     }
     cam.update();
 }
@@ -1946,7 +2037,7 @@ void Game::render() {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     }
     hud.begin(R.width, R.height);
-    if (!opt.noHud) drawHud();
+    if (!opt.noHud) { drawHud(); drawTransition(); }
     hud.end();
 }
 
@@ -2237,7 +2328,7 @@ void Game::drawHud() {
         // credits & car
         hud.rect(18 * u, 18 * u, 250 * u, 62 * u, PANEL);
         hud.rect(18 * u, 18 * u, 5 * u, 62 * u, ACCENT);
-        hud.text(34 * u, 24 * u, 26 * u, "CR " + fmtThousands(credits), WHITE);
+        hud.text(34 * u, 24 * u, 26 * u, crText(), WHITE);
         hud.text(34 * u, 56 * u, 14 * u, carName(*player.car.spec) + "  |  Class " + std::string(1, player.car.spec->cls), DIM, 0, false);
         hud.rect(18 * u, 84 * u, 250 * u, 22 * u, PANEL);
         hud.text(28 * u, 87 * u, 13 * u, "LVL " + std::to_string(level), WHITE, 0, false);
@@ -2279,11 +2370,17 @@ void Game::drawHud() {
     // toasts
     float ty = hud.h * 0.13f;
     for (auto& t : toasts) {
-        float a = clampf(t.t * 2.f, 0.f, 1.f);
-        vec4 col = t.col;
-        col.w *= a;
-        hud.text(hud.w * 0.5f, ty, 22 * u, t.text, col, 1);
-        ty += 30 * u;
+        float age = 3.f - t.t;
+        float in = clampf(age / 0.3f, 0.f, 1.f);
+        float back = 1.f + 2.7f * std::pow(in - 1.f, 3.f) + 1.7f * std::pow(in - 1.f, 2.f);  // ease-out-back
+        float a = clampf(t.t * 2.f, 0.f, 1.f) * in;
+        float tw = hud.textWidth(20 * u, t.text) + 44 * u;
+        float x = hud.w * 0.5f - tw * 0.5f, y = ty - (1.f - back) * 24 * u;
+        hud.rect(x, y - 6 * u, tw, 36 * u, vec4(0.02f, 0.02f, 0.03f, 0.72f * a));
+        hud.rect(x, y - 6 * u, 4 * u, 36 * u, vec4(t.col.x, t.col.y, t.col.z, a));
+        vec4 col = vec4(1, 1, 1, a);
+        hud.text(hud.w * 0.5f + 2 * u, y, 20 * u, t.text, col, 1, false);
+        ty += 44 * u;
     }
     drawSpeedo();
     drawMinimap();
@@ -2753,6 +2850,23 @@ void Game::drawResults() {
     hud.text(x + w - 24 * u, by + 4 * u, 16 * u, pad ? "(A) continue" : "ENTER continue", WHITE, 2, false);
 }
 
+std::string Game::crText() const { return "CR " + fmtThousands((long long)(creditsShown + 0.5)); }
+
+// Forza-style wipe: a slanted dark panel with a pink leading edge sweeps off the screen
+void Game::drawTransition() {
+    if (transT >= transDur || opt.noHud || !opt.shot.empty()) return;
+    float u = hud.ui;
+    float t = clampf(transT / transDur, 0.f, 1.f);
+    t = t < 0.5f ? 4.f * t * t * t : 1.f - std::pow(-2.f * t + 2.f, 3.f) / 2.f;
+    float sl = hud.h * 0.35f, band = 26 * u;
+    float e = -sl + (hud.w + sl * 2.f + band * 3.f) * t;  // reveal edge, top
+    hud.quad(vec2(e, 0), vec2(hud.w + sl + 4, 0), vec2(hud.w + sl + 4, hud.h), vec2(e - sl, hud.h), vec4(0.03f, 0.03f, 0.05f, 1));
+    hud.quad(vec2(e - band, 0), vec2(e, 0), vec2(e - sl, hud.h), vec2(e - sl - band, hud.h), ACCENT);
+    hud.quad(vec2(e - band * 2.6f, 0), vec2(e - band * 1.8f, 0), vec2(e - sl - band * 1.8f, hud.h), vec2(e - sl - band * 2.6f, hud.h),
+             vec4(1.f, 0.47f, 0.1f, 0.9f));
+    if (t < 0.35f && logoTex) drawLogo(e + 80 * u, hud.h * 0.5f - 40 * u, 260 * u, 1.f - t / 0.35f);
+}
+
 void Game::drawLogo(float x, float y, float w, float alpha) {
     if (!logoTex) { hud.text(x, y, w * 0.16f, "RIDGELINE", vec4(1, 1, 1, alpha)); return; }
     hud.image(x, y, w, w * kLogoH / kLogoW, logoTex, vec4(1, 1, 1, alpha), vec2(0, 0), vec2(1, 1));
@@ -2768,7 +2882,7 @@ void Game::drawMenuHeader(float x0, float y0, float W, const std::string& sectio
     hud.text(x0 + lw + 32 * u, y0 + lh * 0.5f - 15 * u, 24 * u, section, WHITE, 0, true);
     // driver panel
     float rx = x0 + W;
-    std::string cr = "CR " + fmtThousands(credits);
+    std::string cr = crText();
     float cw = hud.textWidth(26 * u, cr);
     hud.text(rx, y0 - 2 * u, 26 * u, cr, WHITE, 2);
     hud.textFit(rx, y0 + 30 * u, 13 * u, carName(*player.car.spec) + "  |  CLASS " + std::string(1, player.car.spec->cls) + "  |  " +
@@ -2781,6 +2895,11 @@ void Game::drawMenuHeader(float x0, float y0, float W, const std::string& sectio
 
 void Game::drawTitle() {
     float u = hud.ui;
+    if (!keyArt) {
+        float tl = std::fmod(stateTime, 8.f);
+        float fade = std::max(1.f - smoothstepf(0.f, 0.6f, tl), smoothstepf(7.5f, 8.f, tl));
+        if (fade > 0.01f) hud.rect(0, 0, hud.w, hud.h, vec4(0, 0, 0, fade * (stateTime < 1.f ? 1.f : 0.85f)));
+    }
     hud.rectV(0, hud.h * 0.45f, hud.w, hud.h * 0.55f, vec4(0, 0, 0, 0), vec4(0, 0, 0, 0.65f));
     hud.rectH(0, 0, hud.w * 0.5f, hud.h, vec4(0, 0, 0, 0.25f), vec4(0, 0, 0, 0));
     float in = smoothstepf(0.f, 1.f, clampf(stateTime / 0.8f, 0.f, 1.f));

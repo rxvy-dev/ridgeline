@@ -224,6 +224,21 @@ private:
     State switchFrom = ST_FREEROAM;
     int devRoad = -1;
     float menuOpenT = 0, hintT = 0;
+    // camera dynamics and transitions
+    vec3 prevCarVel;
+    float accLongSm = 0, accLatSm = 0, camYawVel = 0, camRollSm = 0, prevVy = 0;
+    bool wasGrounded = true;
+    int camCtx = -1;
+    vec3 blendFromOff, blendFromTgtOff;
+    float blendFromFov = 1, blendT = 99, blendDur = 1, blendLift = 0;
+    float showKick = 0, showKickSm = 0;
+    int lastSubSel = 0;
+    float transT = 99, transDur = 0.55f;
+    double creditsShown = 0;
+    int cameraContext() const;
+    void updateCameraRaw(float dt);
+    void drawTransition();
+    std::string crText() const;
     GLuint logoTex = 0;
     void drawLogo(float x, float y, float w, float alpha = 1.f);
     void drawMenuHeader(float x0, float y0, float W, const std::string& section);

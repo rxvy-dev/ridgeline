@@ -79,9 +79,16 @@ struct MeshBuilder {
 struct Camera {
     vec3 pos, target;
     float fov = 1.1f, aspect = 1.77f, nearZ = 0.25f, farZ = 4000.f;
+    float roll = 0;  // radians, banks the horizon
     mat4 view, proj, viewProj;
     void update() {
-        view = lookAt(pos, target, vec3(0, 1, 0));
+        vec3 up(0, 1, 0);
+        if (roll != 0.f) {
+            vec3 f = normalize(target - pos);
+            vec3 r = normalize(cross(f, up));
+            up = cross(r, f) * std::cos(roll) + r * std::sin(roll);
+        }
+        view = lookAt(pos, target, up);
         proj = perspective(fov, aspect, nearZ, farZ);
         viewProj = proj * view;
     }
