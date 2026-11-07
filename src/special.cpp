@@ -10,7 +10,7 @@
 
 static const vec4 S_WHITE(1, 1, 1, 1);
 static const vec4 S_DIM(1, 1, 1, 0.6f);
-static const vec4 S_ACCENT(1.0f, 0.42f, 0.12f, 1.f);
+static const vec4 S_ACCENT(0.96f, 0.10f, 0.50f, 1.f);
 
 static std::string carName(const CarSpec& s) { return s.make + " " + s.model; }
 
@@ -304,8 +304,7 @@ void Game::drawSwitcher() {
     hud.text(48 * u, hud.h - 300 * u, 13 * u, "QUICK SWITCH", S_DIM, 0, false);
     hud.text(48 * u, hud.h - 282 * u, 30 * u, carName(s), S_WHITE);
     drawCarCards(true, hud.h - 236 * u, 160 * u);
-    hud.text(hud.w * 0.5f, hud.h - 38 * u, 14 * u,
-             pad ? "LEFT/RIGHT choose   (A) drive   (B) cancel" : "LEFT/RIGHT choose   ENTER drive   G / ESC cancel", vec4(1, 1, 1, 0.75f), 1, false);
+    hud.prompts(hud.w * 0.5f, hud.h - 38 * u, 14 * u, pad ? "LEFT/RIGHT choose   (A) drive   (B) cancel" : "LEFT/RIGHT choose   ENTER drive   G / ESC cancel", 1);
 }
 
 void Game::switcherAction(Action a) {

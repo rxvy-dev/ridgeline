@@ -126,11 +126,15 @@ void Hud::arc(vec2 c, float r0, float r1, float a0, float a1, vec4 col, int seg)
     }
 }
 
+// big text uses the condensed italic display face, small text the clean body face
+int Hud::fontFor(float px) const { return forceFont >= 0 ? forceFont : (px >= 19.5f * ui ? 1 : 0); }
+
 float Hud::textWidth(float px, const std::string& s) const {
-    float sc = px / FONT_SIZE, x = 0;
+    int f = fontFor(px);
+    float sc = px / kFontSize[f], x = 0;
     for (unsigned char ch : s) {
         if (ch < 32 || ch > 126) ch = '?';
-        x += kFontGlyphs[ch - 32].adv * sc;
+        x += kFontGlyphs[f][ch - 32].adv * sc;
     }
     return x;
 }
@@ -139,12 +143,13 @@ float Hud::text(float x, float y, float px, const std::string& s, vec4 col, int 
     float wdt = textWidth(px, s);
     if (align == 1) x -= wdt * 0.5f;
     else if (align == 2) x -= wdt;
-    float sc = px / FONT_SIZE;
+    int f = fontFor(px);
+    float sc = px / kFontSize[f];
     auto emit = [&](float ox, float oy, vec4 c) {
         float cx = x + ox;
         for (unsigned char ch : s) {
             if (ch < 32 || ch > 126) ch = '?';
-            const FontGlyph& g = kFontGlyphs[ch - 32];
+            const FontGlyph& g = kFontGlyphs[f][ch - 32];
             if (ch != ' ') {
                 float gx = cx + g.ox * sc, gy = y + oy + g.oy * sc, gw = g.w * sc, gh = g.h * sc;
                 float u0 = g.x / float(FONT_ATLAS_W), v0 = g.y / float(FONT_ATLAS_H);
@@ -218,4 +223,76 @@ std::string fmtTime(float t) {
     char buf[32];
     std::snprintf(buf, sizeof(buf), "%d:%05.2f", m, s);
     return buf;
+}
+
+float Hud::textFit(float x, float y, float px, const std::string& s, vec4 col, int align, float maxW, bool shadow) {
+    float wdt = textWidth(px, s);
+    if (wdt <= maxW) return text(x, y, px, s, col, align, shadow);
+    float p2 = std::max(px * 0.8f, px * maxW / wdt);
+    int keep = forceFont;
+    forceFont = fontFor(px);  // keep the face when shrinking
+    std::string t = s;
+    while (t.size() > 1 && textWidth(p2, t + (t.size() < s.size() ? "..." : "")) > maxW) t.pop_back();
+    if (t.size() < s.size()) t += "...";
+    float r = text(x, y + (px - p2) * 0.5f, p2, t, col, align, shadow);
+    forceFont = keep;
+    return r;
+}
+
+float Hud::prompts(float x, float y, float px, const std::string& spec, int align, float alpha, bool measureOnly) {
+    struct P { std::string key, label; };
+    std::vector<P> items;
+    size_t i = 0;
+    while (i < spec.size()) {
+        size_t j = spec.find("   ", i);
+        std::string g = spec.substr(i, j == std::string::npos ? std::string::npos : j - i);
+        i = j == std::string::npos ? spec.size() : spec.find_first_not_of(' ', j);
+        if (i == std::string::npos) i = spec.size();
+        std::vector<std::string> tok;
+        size_t a = 0;
+        while (a < g.size()) {
+            size_t b = g.find(' ', a);
+            if (b == std::string::npos) b = g.size();
+            if (b > a) tok.push_back(g.substr(a, b - a));
+            a = b + 1;
+        }
+        if (tok.empty()) continue;
+        P p{tok[0], ""};
+        size_t k = 1;
+        while (k + 1 < tok.size() && tok[k] == "/") { p.key += " / " + tok[k + 1]; k += 2; }
+        if (!p.key.empty() && p.key.back() == ':') p.key.pop_back();
+        for (; k < tok.size(); k++) p.label += (p.label.empty() ? "" : " ") + tok[k];
+        items.push_back(p);
+    }
+    int keep = forceFont;
+    forceFont = 0;
+    float kp = px * 0.86f, capH = px * 1.45f, gap = px * 1.3f, total = 0;
+    std::vector<float> kw(items.size());
+    for (size_t n = 0; n < items.size(); n++) {
+        const std::string& k = items[n].key;
+        bool padBtn = k.size() == 3 && k[0] == '(' && k[2] == ')';
+        kw[n] = padBtn ? capH : std::max(capH, textWidth(kp, k) + px * 0.9f);
+        total += kw[n] + px * 0.45f + textWidth(px, items[n].label) + (n + 1 < items.size() ? gap : 0);
+    }
+    if (measureOnly) { forceFont = keep; return total; }
+    float cx = align == 1 ? x - total * 0.5f : align == 2 ? x - total : x;
+    float cy = y - (capH - px) * 0.5f;
+    for (size_t n = 0; n < items.size(); n++) {
+        const std::string& k = items[n].key;
+        bool padBtn = k.size() == 3 && k[0] == '(' && k[2] == ')';
+        if (padBtn) {
+            vec4 bc = k[1] == 'A' ? vec4(0.30f, 0.78f, 0.30f, alpha) : k[1] == 'B' ? vec4(0.90f, 0.24f, 0.22f, alpha)
+                    : k[1] == 'X' ? vec4(0.22f, 0.50f, 1.f, alpha) : vec4(1.f, 0.78f, 0.12f, alpha);
+            circle(vec2(cx + capH * 0.5f, cy + capH * 0.5f), capH * 0.5f, bc, 24);
+            text(cx + capH * 0.5f, cy + (capH - kp) * 0.5f - kp * 0.06f, kp, std::string(1, k[1]), vec4(1, 1, 1, alpha), 1, false);
+        } else {
+            roundRect(cx, cy, kw[n], capH, capH * 0.22f, vec4(1, 1, 1, 0.92f * alpha));
+            text(cx + kw[n] * 0.5f, cy + (capH - kp) * 0.5f - kp * 0.06f, kp, k, vec4(0.06f, 0.06f, 0.08f, alpha), 1, false);
+        }
+        cx += kw[n] + px * 0.45f;
+        cx += text(cx, y, px, items[n].label, vec4(1, 1, 1, 0.88f * alpha), 0, true);
+        cx += gap;
+    }
+    forceFont = keep;
+    return total;
 }

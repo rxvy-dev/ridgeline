@@ -223,7 +223,10 @@ private:
     vec4 cheatRect;
     State switchFrom = ST_FREEROAM;
     int devRoad = -1;
-    float menuOpenT = 0;
+    float menuOpenT = 0, hintT = 0;
+    GLuint logoTex = 0;
+    void drawLogo(float x, float y, float w, float alpha = 1.f);
+    void drawMenuHeader(float x0, float y0, float W, const std::string& section);
     State lastState = ST_TITLE;
     void buildEras();
     std::string eraDate(int era) const;

@@ -5,7 +5,7 @@
 #include <cmath>
 #include <cstdio>
 
-static const vec4 F_ACCENT(1.0f, 0.42f, 0.12f, 1.f);
+static const vec4 F_ACCENT(0.96f, 0.10f, 0.50f, 1.f);
 static const vec4 F_WHITE(1, 1, 1, 1);
 static const vec4 F_DIM(1, 1, 1, 0.6f);
 static const vec4 F_PINK(1.f, 0.25f, 0.55f, 1.f);
@@ -69,11 +69,7 @@ void Game::drawUpgrades() {
     CarSpec now = tunedSpec(oc);
     hud.rectV(0, 0, hud.w, 150 * u, vec4(0.01f, 0.01f, 0.02f, 0.85f), vec4(0, 0, 0, 0));
     float x0 = 48 * u;
-    hud.text(x0, 30 * u, 13 * u, "MY GARAGE  /  UPGRADES", F_DIM, 0, false);
-    hud.text(x0, 48 * u, 38 * u, "UPGRADE SHOP", F_WHITE);
-    hud.rect(x0, 98 * u, 90 * u, 4 * u, F_ACCENT);
-    hud.text(hud.w - x0, 34 * u, 26 * u, "CR " + fmtThousands(credits), F_WHITE, 2);
-    hud.text(hud.w - x0, 70 * u, 14 * u, fname(before), F_DIM, 2, false);
+    drawMenuHeader(x0, 30 * u, hud.w - 2 * x0, "UPGRADE SHOP");
 
     float pw = 520 * u, px = x0, py = 140 * u;
     const char* names[3] = {"ENGINE", "WEIGHT REDUCTION", "TYRES & SUSPENSION"};
@@ -126,7 +122,7 @@ void Game::drawUpgrades() {
     }
     std::snprintf(buf, sizeof(buf), "%d HP   %d KG   grip %.2f", int(now.powerKW * 1.341f), int(now.massKg), now.grip);
     hud.text(qx + 22 * u, qy + 252 * u, 14 * u, buf, F_WHITE, 0, false);
-    hud.text(hud.w * 0.5f, hud.h - 38 * u, 14 * u, pad ? "D-pad select   (A) buy upgrade   (B) back" : "UP/DOWN select   ENTER buy upgrade   ESC back", vec4(1, 1, 1, 0.75f), 1, false);
+    hud.prompts(hud.w * 0.5f, hud.h - 38 * u, 14 * u, pad ? "D-pad select   (A) buy upgrade   (B) back" : "UP/DOWN select   ENTER buy upgrade   ESC back", 1);
     float ty = hud.h * 0.72f;
     for (auto& t : toasts) { hud.text(hud.w * 0.5f, ty, 22 * u, t.text, t.col, 1); ty += 30 * u; }
 }
@@ -541,10 +537,8 @@ void Game::drawPhoto() {
         hud.rect(hud.w * i / 3.f, 54 * u, 1, hud.h - 108 * u, vec4(1, 1, 1, 0.12f));
         hud.rect(0, hud.h * i / 3.f, hud.w, 1, vec4(1, 1, 1, 0.12f));
     }
-    hud.text(hud.w * 0.5f, hud.h - 36 * u, 14 * u,
-             pad ? "L-stick orbit   R-stick zoom / lens   (A) take photo   (Y) hide UI   (B) exit"
-                 : "WASD orbit   Q/E zoom   Z/X lens   ENTER take photo   H hide UI   ESC exit",
-             vec4(1, 1, 1, 0.8f), 1, false);
+    hud.prompts(hud.w * 0.5f, hud.h - 36 * u, 14 * u, pad ? "L-stick orbit   R-stick zoom / lens   (A) take photo   (Y) hide UI   (B) exit"
+                 : "WASD orbit   Q/E zoom   Z/X lens   ENTER take photo   H hide UI   ESC exit", 1);
 }
 
 // ====================================================================== wheelspin
@@ -609,11 +603,8 @@ void Game::drawWheelspin() {
     float u = hud.ui;
     hud.rectV(0, 0, hud.w, hud.h, vec4(0.08f, 0.02f, 0.06f, 0.88f), vec4(0.02f, 0.01f, 0.03f, 0.94f));
     float x0 = 48 * u;
-    hud.text(x0, 30 * u, 13 * u, "FESTIVAL  /  REWARDS", F_DIM, 0, false);
-    hud.text(x0, 48 * u, 38 * u, "WHEELSPIN", F_WHITE);
-    hud.rect(x0, 98 * u, 90 * u, 4 * u, F_PINK);
-    hud.text(hud.w - x0, 34 * u, 26 * u, std::to_string(wheelspins) + (wheelspins == 1 ? " SPIN" : " SPINS"), F_WHITE, 2);
-    hud.text(hud.w - x0, 70 * u, 14 * u, "Level " + std::to_string(level) + "   |   CR " + fmtThousands(credits), F_DIM, 2, false);
+    drawMenuHeader(x0, 30 * u, hud.w - 2 * x0, "WHEELSPIN");
+    hud.text(hud.w - x0, 80 * u, 12 * u, std::to_string(wheelspins) + (wheelspins == 1 ? " SPIN READY" : " SPINS READY"), F_DIM, 2, false);
     // reel
     float cy = hud.h * 0.5f, rowH = 92 * u, w = 560 * u, x = hud.w * 0.5f - w * 0.5f;
     hud.rect(x - 12 * u, cy - rowH * 2.5f, w + 24 * u, rowH * 5, vec4(0, 0, 0, 0.45f));
@@ -648,7 +639,7 @@ void Game::drawWheelspin() {
     hud.text(bx + bw, by - 22 * u, 13 * u, fmtThousands(xp) + " / " + fmtThousands(xpToNext()) + " XP", F_DIM, 2, false);
     hud.rect(bx, by, bw, 8 * u, vec4(1, 1, 1, 0.12f));
     hud.rect(bx, by, bw * xp / float(xpToNext()), 8 * u, F_PINK);
-    hud.text(hud.w * 0.5f, hud.h - 38 * u, 14 * u, pad ? "(A) spin   (B) back" : "ENTER spin   ESC back", vec4(1, 1, 1, 0.75f), 1, false);
+    hud.prompts(hud.w * 0.5f, hud.h - 38 * u, 14 * u, pad ? "(A) spin   (B) back" : "ENTER spin   ESC back", 1);
     if (spinT >= 4.2f && spinResult >= 0 && spinResult < int(spinReel.size())) {
         const SpinPrize& p = spinReel[spinResult];
         float a = clampf((spinT - 4.2f) * 3.f, 0.f, 1.f);
