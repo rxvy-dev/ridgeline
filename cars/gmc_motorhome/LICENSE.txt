@@ -1,0 +1,9 @@
+GMC Motorhome (reimagined)
+
+This work is based on "FREE GMC Motorhome reimagined low poly"
+(https://sketchfab.com/3d-models/free-gmc-motorhome-reimagined-low-poly-6hiH0iyDqXqtdD9wbqSbyLLhKmz)
+by Karol Miklas (https://sketchfab.com/karolmiklas), licensed under CC-BY-4.0
+(http://creativecommons.org/licenses/by/4.0/).
+
+Changes: converted to Ridgeline's .rcar format with tools/import_car.py
+(rescaled to 7.9 m, rear axle and front wheels split for animation, textures resized).

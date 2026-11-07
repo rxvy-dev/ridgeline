@@ -214,6 +214,11 @@ std::vector<ImportedModel*> loadImportedCars(const std::vector<std::string>& dir
             s.cylinders = int(num("cylinders", 6));
             s.credit = kv.count("credit") ? kv["credit"] : "";
             s.starter = num("starter", 0) != 0;
+            s.hidden = num("hidden", 0) != 0;
+            s.secret = kv.count("secret") ? kv["secret"] : "";
+            s.fx = kv.count("fx") ? kv["fx"] : "";
+            s.sound = kv.count("sound") ? dir + "/" + kv["sound"] : "";
+            s.dir = dir;
             s.importIdx = int(out.size());
             kCars.push_back(s);
             out.push_back(m);

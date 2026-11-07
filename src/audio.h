@@ -2,6 +2,8 @@
 #pragma once
 #include <SDL3/SDL.h>
 #include <atomic>
+#include <string>
+#include <vector>
 
 struct Audio {
     SDL_AudioStream* stream = nullptr;
@@ -11,6 +13,17 @@ struct Audio {
     std::atomic<float> beepFreq{0}, beepLen{0};
     std::atomic<int> horn{0};
     float hornEnv = 0, hornPh1 = 0, hornPh2 = 0, hornLp = 0;
+    // secret-car song (a wav file next to the car, or a little vowel synth if there is none)
+    std::vector<float> song;          // mono, 48 kHz
+    std::atomic<int> songOn{0};
+    std::atomic<int> songRestart{0};
+    size_t songPos = 0;
+    float songEnv = 0, chantT = 0, chantPh = 0, f1a = 0, f1b = 0, f2a = 0, f2b = 0;
+    // time machine: rising charge whine and the boom when it jumps
+    std::atomic<float> charge{0};
+    std::atomic<float> boomReq{0};
+    float chargeSm = 0, chargePh = 0, boomEnv = 0, boomLp = 0, boomPh = 0;
+    bool loadSong(const std::string& path);
     // synth state (audio thread only)
     double phase = 0, subPhase = 0;
     float lp = 0, lp2 = 0, noiseLp = 0, bp1 = 0, bp2 = 0, windLp = 0;

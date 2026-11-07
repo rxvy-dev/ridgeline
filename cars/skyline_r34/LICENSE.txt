@@ -1,0 +1,9 @@
+Nissan Skyline GT-R R34
+
+This work is based on "GTR-r34"
+(https://sketchfab.com/3d-models/gtr-r34-f040d64eefbb41fc9766aef2fd1f0f0a)
+by ARjun.JS (https://sketchfab.com/ARjun.JS), licensed under CC-BY-4.0
+(http://creativecommons.org/licenses/by/4.0/).
+
+Changes: converted to Ridgeline's .rcar format with tools/import_car.py
+(rescaled to 4.6 m, ground plane and suspension mesh removed, front wheels straightened and split for animation).

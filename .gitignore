@@ -12,11 +12,23 @@ cars/*
 !cars/agera_rs/
 !cars/m3_e30/
 !cars/brz_2022/
+!cars/gmc_motorhome/
+!cars/daewoo_nexia/
+!cars/skyline_r34/
+!cars/oiia_cat/
 *.rcar
 !cars/delorean/model.rcar
 !cars/agera_rs/model.rcar
 !cars/m3_e30/model.rcar
 !cars/brz_2022/model.rcar
+!cars/gmc_motorhome/model.rcar
+!cars/daewoo_nexia/model.rcar
+!cars/skyline_r34/model.rcar
+!cars/oiia_cat/model.rcar
+# meme audio for the secret car: not ours to redistribute, stays local
+cars/oiia_cat/*.wav
+cars/oiia_cat/*.mp3
+cars/oiia_cat/*.ogg
 *.fbx
 *.FBX
 *.glb

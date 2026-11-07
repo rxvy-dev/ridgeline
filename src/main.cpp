@@ -19,7 +19,11 @@ static void usage() {
         "  --car N                give and use car N\n  --at X,Z,YAW           spawn point for --scene spot\n"
         "  --sim SECONDS          fast-forward the simulation before rendering\n"
         "  --shot FILE.bmp        render, save a screenshot and quit\n"
-        "  --frames N             quit after N frames\n");
+        "  --frames N             quit after N frames\n"
+        "  --record 'CMD'         pipe raw RGBA frames at a fixed 30 fps into CMD (e.g. ffmpeg)\n"
+        "  --record-seconds S     length of the recording (default 3)\n"
+        "  --record-audio FILE    also write the game audio (f32le stereo 48 kHz)\n"
+        "  --orbit RAD_PER_S      auto-orbit the camera in photo/keyart scenes\n");
 }
 
 int main(int argc, char** argv) {
@@ -40,6 +44,11 @@ int main(int argc, char** argv) {
         else if (!std::strcmp(argv[i], "--look")) o.look = float(std::atof(next()));
         else if (!std::strcmp(argv[i], "--cam")) o.cam = std::atoi(next());
         else if (!std::strcmp(argv[i], "--at")) o.at = next();
+        else if (!std::strcmp(argv[i], "--record")) { o.recordCmd = next(); o.noHints = true; }
+        else if (!std::strcmp(argv[i], "--record-audio")) o.recordAudio = next();
+        else if (!std::strcmp(argv[i], "--record-seconds")) o.recordSec = float(std::atof(next()));
+        else if (!std::strcmp(argv[i], "--orbit")) o.orbit = float(std::atof(next()));
+        else if (!std::strcmp(argv[i], "--no-hud")) o.noHud = true;
     }
     if (o.width < 320) o.width = 1280;
     if (o.height < 240) o.height = 720;

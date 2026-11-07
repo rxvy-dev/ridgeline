@@ -40,7 +40,7 @@ void Hud::init(Shader* s, GLuint map) {
 void Hud::begin(int width, int height) {
     w = float(width);
     h = float(height);
-    ui = h / 720.f;
+    ui = std::min(h / 720.f, w / 720.f);  // portrait screens scale by width
     verts.clear();
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, width, height);

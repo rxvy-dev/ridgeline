@@ -21,7 +21,7 @@ add_executable(ridgeline
   src/textures.cpp
   src/world.cpp
   src/cars.cpp
-  src/carimport.cpp src/gps.cpp src/features.cpp src/effects.cpp
+  src/carimport.cpp src/gps.cpp src/features.cpp src/effects.cpp src/special.cpp
   src/inflate.cpp
   src/vehicle.cpp
   src/race.cpp

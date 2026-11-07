@@ -68,6 +68,7 @@ bool Game::init(const Options& o) {
     prefPath = pp ? pp : "./";
     SDL_free((void*)pp);
     bool haveSave = load();
+    if (!opt.recordCmd.empty()) settings.msaa = std::min(settings.msaa, 4);
 
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
@@ -123,6 +124,11 @@ bool Game::init(const Options& o) {
             dirs.push_back(b + "../cars");
         }
         importedModels = loadImportedCars(dirs);
+        // the community car models replace the old procedural placeholder cars
+        int real = 0;
+        for (auto& c : kCars) real += (c.importIdx >= 0 && !c.hidden) ? 1 : 0;
+        if (real >= 4)
+            for (auto& c : kCars) if (c.importIdx < 0) c.hidden = true;
     }
     models.resize(kCars.size());
     for (size_t i = 0; i < kCars.size(); i++) {
@@ -139,8 +145,8 @@ bool Game::init(const Options& o) {
         cm.bumperCam = m->bumper;
     }
     haveSave = load();  // resolve saved garage entries now that imported cars exist
-    dealerOrder.resize(kCars.size());
-    for (int i = 0; i < int(kCars.size()); i++) dealerOrder[i] = i;
+    dealerOrder.clear();
+    for (int i = 0; i < int(kCars.size()); i++) if (listed(kCars[i])) dealerOrder.push_back(i);
     std::stable_sort(dealerOrder.begin(), dealerOrder.end(), [](int a, int b) { return kCars[a].price < kCars[b].price; });
     carThumb.assign(kCars.size(), 0);
     events = buildEvents(world);
@@ -190,7 +196,7 @@ bool Game::init(const Options& o) {
         b.build(ringMesh);
     }
 
-    audio.init();
+    if (opt.recordCmd.empty()) audio.init();  // when recording, audio is rendered offline in lock-step
     audio.master = settings.volume / 100.f;
     int npads = 0;
     SDL_JoystickID* ids = SDL_GetGamepads(&npads);
@@ -199,8 +205,8 @@ bool Game::init(const Options& o) {
 
     if (!haveSave) newGame();
     // title attract car
-    titleCar.car.init(&kCars[7], vec3(0, 0, 0), 0);
-    titleCar.model = &models[7];
+    titleCar.car.init(&kCars[showcaseSpec()], vec3(0, 0, 0), 0);
+    titleCar.model = &models[showcaseSpec()];
     titleCar.paint = kPaints[9];
     titleCar.stripe = vec3(0.85f, 0.2f, 0.1f);
     titleCar.skill = 0.95f;
@@ -211,6 +217,7 @@ bool Game::init(const Options& o) {
     }
     showCar.model = &models[0];
     dayAtmo = R.atmo;
+    buildEras();
     setupTitle();
     setPlayerCar(std::clamp(current, 0, int(garage.size()) - 1));
     player.car.placeAt(world.hubSpawn, world.hubYaw, world);
@@ -253,7 +260,7 @@ bool Game::init(const Options& o) {
     // test / screenshot scenes
     if (!opt.scene.empty()) {
         if (opt.car >= 0 && opt.car < int(kCars.size())) {
-            garage.push_back({opt.car, kCars[opt.car].stripes ? 0 : 2, kCars[opt.car].stripes});
+            garage.push_back({opt.car, stockPaint(kCars[opt.car]), kCars[opt.car].stripes});
             setPlayerCar(int(garage.size()) - 1);
         }
         if (opt.scene == "drive") {
@@ -267,6 +274,14 @@ bool Game::init(const Options& o) {
             float x = 0, z = 0, yw = 0;
             std::sscanf(opt.at.c_str(), "%f,%f,%f", &x, &z, &yw);
             enterFreeRoam(vec3(x, world.heightAt(x, z), z), yw);
+            if (opt.orbit != 0) {
+                enterPhoto();
+                photoHideUi = true;
+                photoYaw = opt.look != 0 ? opt.look : 2.6f;
+                photoPitch = 0.12f;
+                photoDist = player.car.spec->length * 1.7f + 2.5f;
+                photoFov = 0.9f;
+            }
         }
         else if (opt.scene == "race") { enterFreeRoam(world.hubSpawn, world.hubYaw); autopilot = true; startRace(std::clamp(opt.event, 0, int(events.size()) - 1)); }
         else if (opt.scene == "dealer") { enterFreeRoam(world.hubSpawn, world.hubYaw); state = ST_DEALER; subSel = std::clamp(opt.event, 0, int(kCars.size()) - 1); dealerPaint = stockPaint(kCars[dealerSpec()]); }
@@ -298,8 +313,31 @@ bool Game::init(const Options& o) {
             photoPitch = 0.03f;
             photoDist = player.car.spec->length * 1.0f + 1.0f;
             photoFov = 0.66f;
+            if (opt.height > opt.width) { photoDist = player.car.spec->length * 1.6f + 2.2f; photoFov = 0.85f; photoPitch = 0.08f; }
         }
         else if (opt.scene == "photo") { enterFreeRoam(world.hubSpawn, world.hubYaw); enterPhoto(); }
+        else if (opt.scene == "kitty") {
+            // type the secret code into the Autoshow's hidden box
+            enterFreeRoam(world.hubSpawn, world.hubYaw);
+            state = ST_DEALER;
+            dealerPaint = stockPaint(kCars[dealerSpec()]);
+            setCheatFocus(true);
+            cheatBuf = "kittycat";
+            submitCheat();
+        }
+        else if (opt.scene == "switch") { enterFreeRoam(world.hubSpawn, world.hubYaw); openSwitcher(); }
+        else if (opt.scene == "catspin" || opt.scene == "timejump") {
+            // full throttle down the straightest road; the cat brakes after a while
+            if (opt.scene == "timejump") settings.mph = true;
+            for (auto& st : stunts) if (st.type == 0) {
+                const Road& rd = world.roads[st.road];
+                int i = (st.a - (opt.scene == "timejump" ? 60 : 20) + int(rd.pts.size())) % int(rd.pts.size());
+                enterFreeRoam(rd.pts[i], std::atan2(rd.tan[i].x, rd.tan[i].z));
+                player.car.vel = rd.tan[i] * (opt.scene == "timejump" ? 33.f : 14.f);
+                devRoad = st.road;
+                break;
+            }
+        }
         else if (opt.scene == "trap") {
             // drive through the first speed trap
             for (auto& st : stunts) if (st.type == 0) {
@@ -504,13 +542,13 @@ void Game::startRace(int ev) {
     if (!opt.scene.empty()) rng = Rng(42 + ev);
     char cls = player.car.spec->cls;
     std::vector<int> cand;
-    for (int i = 0; i < int(kCars.size()); i++) if (kCars[i].cls == cls) cand.push_back(i);
+    for (int i = 0; i < int(kCars.size()); i++) if (kCars[i].cls == cls && listed(kCars[i])) cand.push_back(i);
     const char order[] = "DCBAS";
     int ci = int(std::string(order).find(cls));
     if (cand.size() < 2) {
         for (int i = 0; i < int(kCars.size()); i++) {
             int cj = int(std::string(order).find(kCars[i].cls));
-            if (cj == ci - 1) cand.push_back(i);
+            if (listed(kCars[i]) && std::abs(cj - ci) == 1) cand.push_back(i);
         }
     }
     if (cand.empty()) cand.push_back(player.car.spec - kCars.data());
@@ -636,6 +674,22 @@ Controls Game::readDriving() {
     c.throttle = (k[SDL_SCANCODE_W] || k[SDL_SCANCODE_UP]) ? 1.f : 0.f;
     c.brake = (k[SDL_SCANCODE_S] || k[SDL_SCANCODE_DOWN]) ? 1.f : 0.f;
     c.handbrake = k[SDL_SCANCODE_SPACE] ? 1.f : 0.f;
+    if (devRoad >= 0) {
+        // dev scenes: hold the road, floor it (the cat brakes and spins after 2 s)
+        int r, si;
+        if (world.nearestRoad(player.car.pos, r, si)) {
+            const Road& rd = world.roads[r];
+            vec3 t = rd.tan[si];
+            if (dot(t, player.car.forward()) < 0) t = -t;
+            vec3 off = player.car.pos - rd.pts[si];
+            float lat = dot(off, player.car.right());
+            float hd = std::asin(clampf(dot(cross(player.car.forward(), t), vec3(0, 1, 0)), -1.f, 1.f));
+            c.steer = clampf(-hd * 2.5f - lat * 0.25f, -1.f, 1.f);
+        }
+        bool cat = player.car.spec->fx == "oiia";
+        c.throttle = (!cat || simTime < 2.f) ? 1.f : 0.f;
+        c.brake = (cat && simTime >= 2.f) ? 1.f : 0.f;
+    }
     lookBack = k[SDL_SCANCODE_B];
     if (pad) {
         float ax = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTX) / 32767.f;
@@ -660,6 +714,7 @@ Controls Game::readDriving() {
 
 void Game::handleEvent(const SDL_Event& e) {
     Action a = A_NONE;
+    if (cheatEvent(e)) return;
     switch (e.type) {
         case SDL_EVENT_QUIT: running = false; return;
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: R.resize(e.window.data1, e.window.data2); return;
@@ -699,6 +754,7 @@ void Game::handleEvent(const SDL_Event& e) {
             else if (k == SDLK_P) a = A_PHOTO;
             else if (k == SDLK_U && !driving) a = A_UPGRADE;
             else if (k == SDLK_H && state == ST_PHOTO) a = A_HIDE;
+            else if (k == SDLK_G && (state == ST_FREEROAM || state == ST_SWITCH)) a = A_SWITCH;
             if (state == ST_PHOTO && a != A_HIDE && a != A_PHOTO && a != A_BACK && a != A_PAUSE && a != A_CONFIRM && a != A_INTERACT) a = A_NONE;
             if (k == SDLK_BACKSPACE && driving) a = A_NONE;  // held for rewind
             if (driving && (a == A_UP || a == A_DOWN || a == A_LEFT || a == A_RIGHT)) a = A_NONE;
@@ -708,7 +764,7 @@ void Game::handleEvent(const SDL_Event& e) {
         case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {
             bool driving = state == ST_FREEROAM || state == ST_RACE || state == ST_RACE_INTRO;
             switch (e.gbutton.button) {
-                case SDL_GAMEPAD_BUTTON_DPAD_UP: a = driving ? A_NONE : A_UP; break;
+                case SDL_GAMEPAD_BUTTON_DPAD_UP: a = state == ST_FREEROAM ? A_SWITCH : driving ? A_NONE : A_UP; break;
                 case SDL_GAMEPAD_BUTTON_DPAD_DOWN: a = driving ? A_NONE : A_DOWN; break;
                 case SDL_GAMEPAD_BUTTON_DPAD_LEFT: a = driving ? A_NONE : A_LEFT; break;
                 case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: a = driving ? A_NONE : A_RIGHT; break;
@@ -776,6 +832,7 @@ void Game::handleAction(Action a) {
             if (a == A_PAUSE || a == A_BACK) { state = ST_PAUSE; returnState = ST_FREEROAM; menuSel = 0; pauseShotPending = true; }
             else if (a == A_MAP) { state = ST_MAP; subSel = 0; }
             else if (a == A_PHOTO) enterPhoto();
+            else if (a == A_SWITCH) openSwitcher();
             else if (a == A_CAMERA) camMode = (camMode + 1) % 5;
             else if (a == A_RESET) {
                 int r, s;
@@ -792,6 +849,7 @@ void Game::handleAction(Action a) {
                 else if (nearHub) { state = ST_PAUSE; returnState = ST_FREEROAM; menuSel = 3; pauseShotPending = true; }
             }
             break;
+        case ST_SWITCH: switcherAction(a); break;
         case ST_RACE_INTRO:
             if (a == A_CONFIRM || a == A_INTERACT) { if (stateTime < 2.5f) stateTime = 2.5f; }
             else if (a == A_PAUSE) { state = ST_PAUSE; returnState = ST_RACE_INTRO; menuSel = 0; }
@@ -1031,7 +1089,7 @@ void Game::update(float dt) {
     shake = std::max(0.f, shake - dt * 3.f);
 
     Vehicle* audioCar = &player.car;
-    R.atmo = (state == ST_TITLE || keyArt) ? titleAtmo : dayAtmo;
+    R.atmo = currentAtmo();
     {
         const bool* kb = SDL_GetKeyboardState(nullptr);
         bool hornHeld = (kb[SDL_SCANCODE_H] && state != ST_PHOTO) || (pad && SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_LEFT_STICK));
@@ -1112,6 +1170,7 @@ void Game::update(float dt) {
         default:
             break;
     }
+    updateSpecial(dt);
     updateCamera(dt);
     if (opt.shot.empty()) {
         bool wantMouse = (state == ST_FREEROAM || state == ST_RACE || state == ST_RACE_INTRO) && (SDL_GetWindowFlags(win) & SDL_WINDOW_INPUT_FOCUS);
@@ -1325,7 +1384,7 @@ void Game::updateCamera(float dt) {
 
 // ====================================================================== render
 mat4 Game::importedPartMatrix(Racer& r, int role) const {
-    if (role == 0) return r.car.bodyMatrix();
+    if (role == 0) return r.car.fxSpin != 0.f ? r.car.bodyMatrix() * rotateY(r.car.fxSpin) : r.car.bodyMatrix();
     int k = (role - 1) % 4;
     bool spin = role <= 4;
     mat4 M = r.car.chassisMatrix() * translate(r.model->wheelPos[k]);
@@ -1403,8 +1462,8 @@ void Game::renderWorld(const Camera& c, bool showroom) {
     vec3 hf(std::sin(world.hubYaw), 0, std::cos(world.hubYaw)), hr(-hf.z, 0, hf.x);
     int displaySpecs[3] = {0, 0, 0};
     {
-        std::vector<int> byPrice(kCars.size());
-        for (int i = 0; i < int(kCars.size()); i++) byPrice[i] = i;
+        std::vector<int> byPrice;
+        for (int i = 0; i < int(kCars.size()); i++) if (listed(kCars[i])) byPrice.push_back(i);
         std::sort(byPrice.begin(), byPrice.end(), [](int a, int b) { return kCars[a].price > kCars[b].price; });
         for (int i = 0; i < 3; i++) displaySpecs[i] = byPrice[std::min(i, int(byPrice.size()) - 1)];
         std::swap(displaySpecs[0], displaySpecs[1]);
@@ -1617,6 +1676,7 @@ void Game::renderWorld(const Camera& c, bool showroom) {
     glDisable(GL_BLEND);
     glEnable(GL_CULL_FACE);
     if (!thumbActive) fx.drawParticles(R, c);
+    if (!thumbActive) fx.drawGlow(R, c);
 
     // ---- blended overlays
     glEnable(GL_BLEND);
@@ -1741,8 +1801,7 @@ void Game::buildMenuThumbs() {
     const float aspect = 4.f / 3.f;
     // dealership: the priciest car posed at the lake
     {
-        int best = 0;
-        for (int i = 0; i < int(kCars.size()); i++) if (kCars[i].price > kCars[best].price) best = i;
+        int best = showcaseSpec();
         vec3 cp, ct, pp;
         float yaw;
         photoSpot(pp, yaw, cp, ct, kCars[best].length);
@@ -1866,7 +1925,7 @@ void Game::render() {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     }
     hud.begin(R.width, R.height);
-    drawHud();
+    if (!opt.noHud) drawHud();
     hud.end();
 }
 
@@ -2134,8 +2193,10 @@ void Game::drawHud() {
         case ST_PHOTO: drawPhoto(); return;
         case ST_WHEELSPIN: drawWheelspin(); return;
         case ST_UPGRADE: drawUpgrades(); return;
+        case ST_SWITCH: drawSwitcher(); return;
         default: break;
     }
+    drawTimeCircuits();
     if (state == ST_RACE || state == ST_RACE_INTRO) drawRaceHud();
     else {
         // credits & car
@@ -2168,7 +2229,7 @@ void Game::drawHud() {
             hud.text(hud.w * 0.5f, py + 10 * u, 20 * u, "Festival Hub", WHITE, 1);
             hud.text(hud.w * 0.5f, py + 36 * u, 15 * u, pad ? "(Y) Dealership & Garage" : "ENTER  Dealership & Garage", ACCENT, 1, false);
         }
-        hud.text(hud.w - 18 * u, 18 * u, 13 * u, pad ? "START menu   BACK map   RB camera   Y rewind   R3 photo" : "ESC menu   M map   C camera   R reset   BKSP rewind   P photo   H horn", vec4(1, 1, 1, 0.5f), 2, false);
+        if (!opt.noHints) hud.text(hud.w - 18 * u, 18 * u, 13 * u, pad ? "START menu   BACK map   RB camera   Y rewind   R3 photo" : "ESC menu   M map   C camera   R reset   BKSP rewind   P photo   H horn", vec4(1, 1, 1, 0.5f), 2, false);
     }
     drawChain();
     drawPopup();
@@ -2608,6 +2669,8 @@ void Game::drawDealer(bool garageMode) {
     hud.text(hud.w * 0.5f, hud.h - 38 * u, 14 * u, hint, vec4(1, 1, 1, 0.75f), 1, false);
     float ty = hud.h * 0.42f;
     for (auto& t : toasts) { hud.text(hud.w * 0.5f, ty, 22 * u, t.text, t.col, 1); ty += 30 * u; }
+    if (!garageMode) drawCheatBox();
+    drawPopup();
 }
 
 void Game::drawSettings() {
@@ -2673,6 +2736,31 @@ void Game::saveShot(const std::string& path) {
 
 // ====================================================================== main loop
 void Game::run() {
+    if (!opt.recordCmd.empty()) {
+        // offline capture: fixed 30 fps, frames piped to an encoder, audio rendered in lock-step
+        FILE* pipe = popen(opt.recordCmd.c_str(), "w");
+        FILE* aud = opt.recordAudio.empty() ? nullptr : std::fopen(opt.recordAudio.c_str(), "wb");
+        if (!pipe) { SDL_Log("could not start: %s", opt.recordCmd.c_str()); return; }
+        int total = int(opt.recordSec * 30.f + 0.5f);
+        std::vector<uint8_t> px(size_t(R.width) * R.height * 4);
+        std::vector<float> ab(1600 * 2);
+        for (int f = 0; f < total && running; f++) {
+            SDL_Event e;
+            while (SDL_PollEvent(&e)) {}
+            update(1.f / 30.f);
+            render();
+            glPixelStorei(GL_PACK_ALIGNMENT, 1);
+            glReadPixels(0, 0, R.width, R.height, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+            for (size_t i = 3; i < px.size(); i += 4) px[i] = 255;
+            std::fwrite(px.data(), 1, px.size(), pipe);
+            if (aud) { audio.generate(ab.data(), 1600); std::fwrite(ab.data(), sizeof(float), ab.size(), aud); }
+            SDL_GL_SwapWindow(win);
+            if (f % 15 == 0) SDL_Log("recorded %d / %d", f, total);
+        }
+        pclose(pipe);
+        if (aud) std::fclose(aud);
+        return;
+    }
     Uint64 last = SDL_GetPerformanceCounter();
     double freq = double(SDL_GetPerformanceFrequency());
     while (running) {

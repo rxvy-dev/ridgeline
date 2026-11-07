@@ -378,6 +378,8 @@ def load_gltf(path):
         n = js["nodes"][i]
         W = Wp @ node_local(n)
         name = n.get("name", pname)
+        if re.match(r"^Object_\d+$", name) and pname != "root":
+            name = pname  # Sketchfab glTF: the meaningful name is on the parent node
         if "mesh" in n:
             for prim in js["meshes"][n["mesh"]]["primitives"]:
                 if prim.get("mode", 4) != 4:
@@ -468,6 +470,8 @@ def main():
     ap.add_argument("--paint", default="", help="regex of material names that are body paint (overrides detection)")
     ap.add_argument("--no-glass", default="", help="regex of material names that are NOT glass (e.g. wiper)")
     ap.add_argument("--tires", default="", help="regex of part/material names that are tyres (used to find the wheels)")
+    ap.add_argument("--fixed", default="", help="regex of part/material names that follow the wheel but don't spin (calipers)")
+    ap.add_argument("--no-wheels", action="store_true", help="model has no wheels: add invisible contact points")
     ap.add_argument("--spin", default="", help="regex of extra part/material names that rotate with the wheels (rim metals etc.)")
     a = ap.parse_args()
     if Image is None:
@@ -513,9 +517,12 @@ def main():
     spin_parts, fixed_parts, body_parts = [], [], []
     extra_tire = re.compile(a.tires, re.I) if a.tires else None
     extra_spin = re.compile(a.spin, re.I) if a.spin else None
+    extra_fixed = re.compile(a.fixed, re.I) if a.fixed else None
     for p in parts:
         nm = part_names(p)
-        if (extra_tire and extra_tire.search(nm)) or (extra_spin and extra_spin.search(nm)):
+        if extra_fixed and extra_fixed.search(nm):
+            fixed_parts.append(p)
+        elif (extra_tire and extra_tire.search(nm)) or (extra_spin and extra_spin.search(nm)):
             spin_parts.append(p)
         elif FIXED.search(nm) and not SPIN.search(p.name if not FIXED.search(p.name) else ""):
             fixed_parts.append(p)
@@ -523,9 +530,12 @@ def main():
             spin_parts.append(p)
         else:
             body_parts.append(p)
-    if not spin_parts:
-        sys.exit("no wheel parts found (looked for tire/rim/wheel in names)")
-    ground = min(p.pos[:, 1].min() for p in spin_parts)
+    if a.no_wheels:
+        body_parts += spin_parts + fixed_parts
+        spin_parts, fixed_parts = [], []
+    elif not spin_parts:
+        sys.exit("no wheel parts found (looked for tire/rim/wheel in names) - use --no-wheels for a wheel-less model")
+    ground = min(p.pos[:, 1].min() for p in (spin_parts or parts))
     for p in parts:
         p.pos = p.pos - np.array([center[0], ground, center[2]])
 
@@ -536,43 +546,65 @@ def main():
         return np.where(front, np.where(left, 0, 1), np.where(left, 2, 3))
 
     # tyre bounds per corner -> wheel centre / radius / width
-    tire_src = [p for p in spin_parts if (TIRE.search(part_names(p)) or (extra_tire and extra_tire.search(part_names(p))))
-                and not re.search("steering", part_names(p), re.I)] or spin_parts
-    corner_pts = [[] for _ in range(4)]
-    for p in tire_src:
-        tri = p.idx.reshape(-1, 3)
-        cent = p.pos[tri].mean(1)
-        cor = corner_of(cent)
+    if a.no_wheels:
+        # no wheels in the model (a creature, a hovercraft...): put four invisible contact points under it
+        allb = np.concatenate([p.pos for p in parts])
+        lo_, hi_ = allb.min(0), allb.max(0)
+        r = 0.3
+        wheels = [(np.array([sx * (hi_[0] - lo_[0]) * 0.3, r, z]), r, 0.25)
+                  for z in (hi_[2] * 0.6, lo_[2] * 0.6) for sx in (1, -1)]
+        steer = [0.0] * 4
+        print("no wheels: virtual contact points at", [np.round(w[0], 2).tolist() for w in wheels])
+    else:
+        tire_src = [p for p in spin_parts if (TIRE.search(part_names(p)) or (extra_tire and extra_tire.search(part_names(p))))
+                    and not re.search("steering", part_names(p), re.I)] or spin_parts
+        corner_pts = [[] for _ in range(4)]
+        for p in tire_src:
+            tri = p.idx.reshape(-1, 3)
+            cent = p.pos[tri].mean(1)
+            cor = corner_of(cent)
+            for k in range(4):
+                sel = np.unique(tri[cor == k].reshape(-1))
+                if len(sel):
+                    corner_pts[k].append(p.pos[sel])
+        # tandem axles (trucks, motorhomes): keep the outermost axle of each corner as the
+        # simulated wheel; the inner axle's geometry then stays on the body.
         for k in range(4):
-            sel = np.unique(tri[cor == k].reshape(-1))
-            if len(sel):
-                corner_pts[k].append(p.pos[sel])
-    wheels = []
-    steer = [0.0] * 4
-    for k in range(4):
-        if not corner_pts[k]:
-            sys.exit("could not find wheel %d - try --forward" % k)
-        P = np.concatenate(corner_pts[k])
-        cen = (P.min(0) + P.max(0)) / 2
-        # wheels modelled pre-steered: the rolling direction is the long axis in the ground plane
-        d = P[:, [0, 2]] - cen[[0, 2]]
-        w, v = np.linalg.eigh(np.cov(d.T))
-        roll = v[:, 1]
-        ang = math.atan2(roll[0], roll[1])
-        if ang > math.pi / 2: ang -= math.pi
-        if ang < -math.pi / 2: ang += math.pi
-        if abs(ang) < math.radians(2.5) or w[1] < w[0] * 1.3:
-            ang = 0.0
-        steer[k] = ang
-        c, s_ = math.cos(-ang), math.sin(-ang)
-        loc = P - cen
-        xr = loc[:, 0] * c + loc[:, 2] * s_
-        rad = (P[:, 1].max() - P[:, 1].min()) / 2
-        wid = xr.max() - xr.min()
-        cen[0] += (xr.max() + xr.min()) / 2 * c  # re-centre across the tyre after un-steering
-        wheels.append((cen, rad, wid))
-        print("wheel %d: centre %s radius %.3f width %.3f%s" % (k, np.round(cen, 3), rad, wid,
-              ("  (straightened %.1f deg of modelled steering)" % math.degrees(ang)) if ang else ""))
+            groups = corner_pts[k]
+            if len(groups) < 2:
+                continue
+            zc = [((g[:, 2].min() + g[:, 2].max()) / 2) for g in groups]
+            rad = max((g[:, 1].max() - g[:, 1].min()) / 2 for g in groups)
+            if max(zc) - min(zc) > rad * 1.5:
+                outer = max(abs(z) for z in zc)
+                corner_pts[k] = [g for g, z in zip(groups, zc) if abs(z) > outer - rad * 0.75]
+                print("wheel %d: %d axles found, using the outer one" % (k, len(groups)))
+        wheels = []
+        steer = [0.0] * 4
+        for k in range(4):
+            if not corner_pts[k]:
+                sys.exit("could not find wheel %d - try --forward" % k)
+            P = np.concatenate(corner_pts[k])
+            cen = (P.min(0) + P.max(0)) / 2
+            # wheels modelled pre-steered: the rolling direction is the long axis in the ground plane
+            d = P[:, [0, 2]] - cen[[0, 2]]
+            w, v = np.linalg.eigh(np.cov(d.T))
+            roll = v[:, 1]
+            ang = math.atan2(roll[0], roll[1])
+            if ang > math.pi / 2: ang -= math.pi
+            if ang < -math.pi / 2: ang += math.pi
+            if abs(ang) < math.radians(2.5) or w[1] < w[0] * 1.3:
+                ang = 0.0
+            steer[k] = ang
+            c, s_ = math.cos(-ang), math.sin(-ang)
+            loc = P - cen
+            xr = loc[:, 0] * c + loc[:, 2] * s_
+            rad = (P[:, 1].max() - P[:, 1].min()) / 2
+            wid = xr.max() - xr.min()
+            cen[0] += (xr.max() + xr.min()) / 2 * c  # re-centre across the tyre after un-steering
+            wheels.append((cen, rad, wid))
+            print("wheel %d: centre %s radius %.3f width %.3f%s" % (k, np.round(cen, 3), rad, wid,
+                  ("  (straightened %.1f deg of modelled steering)" % math.degrees(ang)) if ang else ""))
 
     def unsteer(k, pos, nrm):
         ang = steer[k]

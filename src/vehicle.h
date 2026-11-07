@@ -33,9 +33,12 @@ struct Vehicle {
     float shiftTimer = 0;
     bool assists = true;  // traction control + stability assist
     float tcsLight = 0, absLight = 0, scLight = 0;  // HUD indicator intensities
+    float alphaFs = 0, alphaRs = 0;  // slip angles after tyre relaxation
+    float fxSpin = 0, fxSpinVel = 0; // special-effect body spin (secret car)
 
     // derived constants
     float finalDrive = 3.5f, dragK = 0.4f, rollRes = 200.f, inertia = 2500.f, aFront = 1.3f, bRear = 1.3f;
+    float hcg = 0.5f, downK = 0.35f, rollFront = 0.55f;
 
     void init(const CarSpec* s, vec3 p, float heading);
     void update(float dt, const World& w, const Controls& in);

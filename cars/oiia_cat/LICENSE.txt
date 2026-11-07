@@ -1,0 +1,9 @@
+OIIAI Cat
+
+This work is based on "Oiiaioooooiai Cat"
+(https://sketchfab.com/3d-models/oiiaioooooiai-cat-30d27bf7fb224849b76e208a6eccdb36)
+by Zhuier (https://sketchfab.com/Zhuier), licensed under CC-BY-4.0
+(http://creativecommons.org/licenses/by/4.0/).
+
+Changes: converted to Ridgeline's .rcar format with tools/import_car.py
+(rescaled to 3.4 m, given invisible contact points so it can be driven).

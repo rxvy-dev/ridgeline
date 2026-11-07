@@ -31,7 +31,13 @@ struct CarSpec {
     int importIdx = -1;
     std::string credit = "";
     bool starter = false;
+    bool hidden = false;      // not sold, not raced against (secret cars, retired built-ins)
+    std::string secret = "";  // cheat code that unlocks a hidden car
+    std::string fx = "";      // special effect: "timemachine", "oiia"
+    std::string sound = "";   // optional sound file in the car folder (fx use)
+    std::string dir = "";
 };
+inline bool listed(const CarSpec& s) { return !s.hidden; }
 
 extern std::vector<CarSpec> kCars;
 std::string carId(const CarSpec& s);

@@ -18,6 +18,11 @@ void Vehicle::init(const CarSpec* s, vec3 p, float heading) {
     float P = s->powerKW * 1000.f;
     dragK = std::max(0.1f, (0.9f * P - rollRes * vTop) / (vTop * vTop * vTop));
     inertia = s->massKg * (s->length * s->length + s->width * s->width) / 12.f * 1.1f;
+    // centre of gravity height and aero: tall vans roll and pitch, wings press hypercars down
+    hcg = clampf(s->height * 0.38f, 0.38f, 1.1f);
+    downK = s->body == BODY_HYPER ? 0.9f : s->body == BODY_MIDENGINE ? 0.6f : s->body == BODY_TRUCK ? 0.05f : 0.3f;
+    rollFront = s->drive == FWD ? 0.62f : s->drive == RWD ? 0.5f : 0.56f;
+    alphaFs = alphaRs = 0;
     pos = p;
     yaw = heading;
     vel = vec3(0, 0, 0);
@@ -49,6 +54,14 @@ static float engineTorque(const CarSpec& s, float rpm) {
 }
 
 static float tyreCurve(float a) { return std::sin(1.6f * std::atan(7.5f * a)); }
+
+// Tyres grip less per kilo the harder they are pressed: an axle that takes more load
+// gains grip, but not proportionally. Load transfer therefore costs total grip, which
+// is what makes weight balance, braking into corners and lift-off oversteer work.
+static float loadGrip(float Fz, float Fz0) {
+    float r = Fz / std::max(Fz0, 1.f);
+    return Fz * (1.08f - 0.08f * r);
+}
 
 void Vehicle::update(float dt, const World& w, const Controls& in) {
     const CarSpec& s = *spec;
@@ -116,16 +129,31 @@ void Vehicle::update(float dt, const World& w, const Controls& in) {
     float FxTot = 0, FyTot = 0, torque = 0;
     tyreSlip = 0;
     if (grounded) {
-        float hcg = 0.5f;
-        float down = 0.35f * dragK * v * v;
+        float down = downK * dragK * v * v;
+        float FzF0 = m * G * bRear / wb, FzR0 = m * G * aFront / wb;
         float FzF = (m * G * n.y * bRear / wb) - longAccel * m * hcg / wb + down * 0.45f;
         float FzR = (m * G * n.y * aFront / wb) + longAccel * m * hcg / wb + down * 0.55f;
         FzF = std::max(FzF, 0.15f * m * G) * contact;
         FzR = std::max(FzR, 0.15f * m * G) * contact;
+        // lateral load transfer: the outside tyre can't make up what the inside one loses
+        float track = std::max(1.2f, s.width * 0.85f);
+        float dLat = std::fabs(latAccel) * m * hcg / track;
+        float effF = FzF, effR = FzR;
+        {
+            float tf = std::min(dLat * rollFront, FzF * 0.5f * 0.95f), tr = std::min(dLat * (1.f - rollFront), FzR * 0.5f * 0.95f);
+            effF = loadGrip(FzF * 0.5f + tf, FzF0 * 0.5f) + loadGrip(FzF * 0.5f - tf, FzF0 * 0.5f);
+            effR = loadGrip(FzR * 0.5f + tr, FzR0 * 0.5f) + loadGrip(FzR * 0.5f - tr, FzR0 * 0.5f);
+        }
 
         float vAbs = std::max(std::fabs(vF), 3.f);
         float alphaF = std::atan2(vR + yawRate * aFront, vAbs) - delta * (vF >= 0 ? 1.f : -1.f);
         float alphaR = std::atan2(vR - yawRate * bRear, vAbs);
+        // tyre relaxation: slip builds up over a short rolling distance (calmer at low speed)
+        float relax = std::min(1.f, (v + 2.f) * dt / 0.45f);
+        alphaFs += (alphaF - alphaFs) * relax;
+        alphaRs += (alphaR - alphaRs) * relax;
+        alphaF = alphaFs;
+        alphaR = alphaRs;
         float muF = mu, muR = mu * (1.f - 0.55f * handbrake);
 
         // drive and brakes
@@ -143,19 +171,30 @@ void Vehicle::update(float dt, const World& w, const Controls& in) {
             // traction control: keep the driven tyres just under their grip limit,
             // and back off further when the tyres are already working hard sideways
             float latF = std::fabs(tyreCurve(alphaF)), latR = std::fabs(tyreCurve(alphaR));
-            float capF = muF * FzF * (0.92f - 0.45f * latF), capR = muR * FzR * (0.92f - 0.45f * latR);
+            float capF = muF * effF * (0.92f - 0.45f * latF), capR = muR * effR * (0.92f - 0.45f * latR);
             float pre = std::fabs(driveF) + std::fabs(driveR);
             driveF = clampf(driveF, -capF, capF);
             if (handbrake < 0.1f) driveR = clampf(driveR, -capR, capR);
             if (pre > (std::fabs(driveF) + std::fabs(driveR)) * 1.05f && throttle > 0.2f) tcsLight = 1.f;
-            if (brake > 0.7f && v > 6.f) absLight = 1.f;
         }
         float dir = vF > 0.3f ? 1.f : (vF < -0.3f ? -1.f : 0.f);
-        float brakeF = brake * m * G * 1.15f * 0.6f * dir;
-        float brakeR = brake * m * G * 1.15f * 0.4f * dir + handbrake * m * G * 0.5f * dir;
+        float brakeF = brake * m * G * 1.2f * 0.62f * dir;
+        float brakeR = brake * m * G * 1.2f * 0.38f * dir + handbrake * m * G * 0.5f * dir;
+        // engine braking when you lift
+        if (gear > 0 && shiftTimer <= 0 && throttle < 0.05f && std::fabs(vF) > 2.f) {
+            float eb = engineTorque(s, s.redline * 0.6f) * 0.16f * (rpm / s.redline) * ratio * finalDrive / R * dir;
+            if (s.drive == FWD) brakeF += eb;
+            else if (s.drive == RWD) brakeR += eb;
+            else { brakeF += eb * 0.4f; brakeR += eb * 0.6f; }
+        }
         float FxF = driveF - brakeF, FxR = driveR - brakeR;
 
-        float maxF = muF * FzF, maxR = muR * FzR;
+        float maxF = muF * effF, maxR = muR * effR;
+        if (assists && brake > 0.3f) {
+            // ABS: stop just short of locking so the fronts can still steer
+            if (std::fabs(FxF) > maxF * 0.88f) { FxF = clampf(FxF, -maxF * 0.88f, maxF * 0.88f); absLight = 1.f; }
+            if (std::fabs(FxR) > maxR * 0.88f && handbrake < 0.1f) FxR = clampf(FxR, -maxR * 0.88f, maxR * 0.88f);
+        }
         float spinF = 0, spinR = 0;
         if (std::fabs(FxF) > maxF) { spinF = std::fabs(FxF) / maxF - 1.f; FxF = clampf(FxF, -maxF, maxF); }
         if (std::fabs(FxR) > maxR) { spinR = std::fabs(FxR) / maxR - 1.f; FxR = clampf(FxR, -maxR, maxR); }
@@ -166,6 +205,9 @@ void Vehicle::update(float dt, const World& w, const Controls& in) {
         FyF = clampf(FyF, -availF, availF);
         FyR = clampf(FyR, -availR, availR);
 
+        // a sliding (locked or spinning) tyre has much less sideways grip
+        if (spinF > 0.02f) FyF *= 0.55f;
+        if (spinR > 0.02f) FyR *= 0.6f;
         float cd = std::cos(delta), sd = std::sin(delta);
         float FxFc = FxF * cd - FyF * sd;
         float FyFc = FxF * sd + FyF * cd;

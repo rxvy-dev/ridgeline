@@ -31,9 +31,121 @@ void main(){
 }
 )";
 
+static const char* kGlowFS = R"(
+in vec3 vPos; in vec3 vNrm; in vec4 vCol; in vec3 vObj;
+out vec4 FragColor;
+void main(){
+    // vNrm.xy: quad coords, vNrm.z: 0 = round sprite, 1 = streak (soft across, hard along)
+    vec2 q = vNrm.xy * 2.0 - 1.0;
+    float r = vNrm.z > 0.5 ? abs(q.y) : length(q);
+    float a = pow(clamp(1.0 - r, 0.0, 1.0), 1.6) * vCol.a;
+    if (a < 0.002) discard;
+    float fogK = clamp(exp(-uFogDensity * length(vPos - uCamPos) * 0.6), 0.0, 1.0);
+    FragColor = vec4(vCol.rgb * a * fogK, 1.0);
+}
+)";
+
+void Effects::glow(vec3 p, vec3 v, float life, float size, vec3 col, float grav) {
+    if (glows.size() >= 4000) return;
+    glows.push_back({p, v, 0.f, life, size, grav, col});
+}
+
+void Effects::arc(vec3 a, vec3 b, float width, vec3 col, float jag) {
+    Arc A;
+    A.width = width;
+    A.col = col;
+    int n = 7;
+    vec3 d = b - a;
+    vec3 side = normalize(cross(d, vec3(0.3f, 1, 0.2f)));
+    vec3 side2 = normalize(cross(d, side));
+    for (int i = 0; i <= n; i++) {
+        float t = float(i) / n;
+        float k = (i == 0 || i == n) ? 0.f : jag * std::sin(t * 3.14159f);
+        A.pts.push_back(a + d * t + side * ((rnd() - 0.5f) * k) + side2 * ((rnd() - 0.5f) * k));
+    }
+    arcs.push_back(A);
+}
+
+void Effects::updateGlow(float dt) {
+    for (auto& g : glows) {
+        g.life += dt;
+        g.v = g.v * (1.f - std::min(1.f, dt * 1.2f));
+        g.v.y -= g.grav * dt;
+        g.p += g.v * dt;
+    }
+    glows.erase(std::remove_if(glows.begin(), glows.end(), [](const Glow& g) { return g.life >= g.maxLife; }), glows.end());
+    // burning tracks: flames licking up along each segment, dying down over a few seconds
+    for (auto& f : fires) {
+        f.age += dt;
+        float heat = 1.f - smoothstepf(2.5f, 7.f, f.age);
+        float n = 26.f * dt * heat * std::max(0.3f, length(f.b - f.a));
+        while (n > 0) {
+            if (n >= 1 || rnd() < n) {
+                vec3 p = f.a + (f.b - f.a) * rnd() + vec3(rnd() - 0.5f, 0, rnd() - 0.5f) * 0.12f;
+                float hot = rnd();
+                glow(p + vec3(0, 0.05f, 0), vec3(0, 1.1f + rnd() * 1.6f * heat, 0), 0.35f + rnd() * 0.45f, 0.10f + 0.16f * heat * rnd(),
+                     vec3(3.2f, 1.1f + hot * 0.9f, 0.18f) * (1.5f + heat * 2.f), -0.6f);
+            }
+            n -= 1;
+        }
+    }
+    fires.erase(std::remove_if(fires.begin(), fires.end(), [](const Fire& f) { return f.age > 7.f; }), fires.end());
+}
+
+void Effects::drawGlow(Renderer& R, const Camera& c) {
+    if (glows.empty() && arcs.empty() && fires.empty()) return;
+    vec3 fwd = normalize(c.target - c.pos);
+    vec3 right = normalize(cross(fwd, vec3(0, 1, 0)));
+    vec3 up = cross(right, fwd);
+    static std::vector<Vertex> v;
+    v.clear();
+    for (auto& g : glows) {
+        float t = g.life / g.maxLife;
+        float a = std::min(1.f, g.life * 20.f) * (1.f - t);
+        float s = g.size * (1.f - 0.4f * t);
+        vec4 col(g.col.x, g.col.y, g.col.z, a);
+        Vertex A{g.p - right * s - up * s, vec3(0, 0, 0), col}, B{g.p + right * s - up * s, vec3(1, 0, 0), col};
+        Vertex C{g.p + right * s + up * s, vec3(1, 1, 0), col}, D{g.p - right * s + up * s, vec3(0, 1, 0), col};
+        v.insert(v.end(), {A, B, C, A, C, D});
+    }
+    auto streak = [&](vec3 a, vec3 b, float w, vec4 col) {
+        vec3 d = b - a;
+        vec3 mid = (a + b) * 0.5f;
+        vec3 sd = cross(d, mid - c.pos);
+        float l = length(sd);
+        if (l < 1e-5f) return;
+        sd = sd / l * w;
+        Vertex A{a - sd, vec3(0, 0, 1), col}, B{b - sd, vec3(1, 0, 1), col}, C{b + sd, vec3(1, 1, 1), col}, D{a + sd, vec3(0, 1, 1), col};
+        v.insert(v.end(), {A, B, C, A, C, D});
+    };
+    for (auto& A : arcs) {
+        for (size_t i = 0; i + 1 < A.pts.size(); i++) {
+            streak(A.pts[i], A.pts[i + 1], A.width * 4.f, vec4(A.col.x, A.col.y, A.col.z, 0.25f));
+            streak(A.pts[i], A.pts[i + 1], A.width, vec4(A.col.x * 2.f, A.col.y * 2.f, A.col.z * 2.f, 1.f));
+        }
+    }
+    // the burning tracks themselves: a glowing line on the road
+    for (auto& f : fires) {
+        float heat = 1.f - smoothstepf(1.5f, 7.f, f.age);
+        streak(f.a + vec3(0, 0.04f, 0), f.b + vec3(0, 0.04f, 0), 0.16f, vec4(3.5f, 1.2f, 0.2f, heat));
+    }
+    arcs.clear();
+    if (v.empty()) return;
+    R.setCommon(glowSh, c);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_CULL_FACE);
+    stream(v);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glEnable(GL_CULL_FACE);
+}
+
 bool Effects::init() {
     bool ok = smoke.build("smoke", kLitVS, kSmokeFS, true);
     ok &= skid.build("skid", kLitVS, kSkidFS, true);
+    ok &= glowSh.build("glow", kLitVS, kGlowFS, true);
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
     glGenBuffers(1, &vbo);
@@ -66,6 +178,7 @@ void Effects::update(float dt, const std::vector<Racer*>& cars, const World& w) 
     }
     parts.erase(std::remove_if(parts.begin(), parts.end(), [](const Particle& p) { return p.life >= p.maxLife; }), parts.end());
     for (auto& s : skids) s.age += dt;
+    updateGlow(dt);
 
     for (Racer* r : cars) {
         if (!r || !r->model) continue;

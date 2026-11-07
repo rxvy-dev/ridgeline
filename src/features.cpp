@@ -509,7 +509,7 @@ void Game::updatePhoto(float dt) {
         if (std::fabs(ry) > 0.15f) zr += ry;
         if (std::fabs(rx) > 0.15f) fr += rx;
     }
-    photoYaw += yr * dt * 1.4f;
+    photoYaw += yr * dt * 1.4f + opt.orbit * dt;
     photoPitch = clampf(photoPitch + pr * dt * 0.9f, -0.05f, 1.3f);
     photoDist = clampf(photoDist + zr * dt * 6.f, 2.5f, 30.f);
     photoFov = clampf(photoFov + fr * dt * 0.5f, 0.25f, 1.4f);
@@ -563,7 +563,7 @@ void Game::startWheelspin() {
             for (int k = 0; k < int(kCars.size()); k++) {
                 bool owned = false;
                 for (auto& g : garage) owned |= g.spec == k;
-                if (!owned && kCars[k].price < 400000) pool.push_back(k);
+                if (!owned && listed(kCars[k]) && kCars[k].price < 400000) pool.push_back(k);
             }
             if (!pool.empty()) p.car = pool[int(rnd() * pool.size()) % pool.size()];
             else p.credits = 50000;

@@ -10,8 +10,8 @@
 #include <functional>
 #include <vector>
 
-enum State { ST_TITLE, ST_FREEROAM, ST_PAUSE, ST_MAP, ST_DEALER, ST_GARAGE, ST_SETTINGS, ST_RACE_INTRO, ST_RACE, ST_RESULTS, ST_PHOTO, ST_WHEELSPIN, ST_UPGRADE };
-enum Action { A_NONE, A_UP, A_DOWN, A_LEFT, A_RIGHT, A_CONFIRM, A_BACK, A_PAUSE, A_CAMERA, A_RESET, A_MAP, A_INTERACT, A_TOGGLE, A_SELL, A_PHOTO, A_UPGRADE, A_HIDE };
+enum State { ST_TITLE, ST_FREEROAM, ST_PAUSE, ST_MAP, ST_DEALER, ST_GARAGE, ST_SETTINGS, ST_RACE_INTRO, ST_RACE, ST_RESULTS, ST_PHOTO, ST_WHEELSPIN, ST_UPGRADE, ST_SWITCH };
+enum Action { A_NONE, A_UP, A_DOWN, A_LEFT, A_RIGHT, A_CONFIRM, A_BACK, A_PAUSE, A_CAMERA, A_RESET, A_MAP, A_INTERACT, A_TOGGLE, A_SELL, A_PHOTO, A_UPGRADE, A_HIDE, A_SWITCH };
 
 struct OwnedCar { int spec; int paint; bool stripes; int up[3] = {0, 0, 0}; };  // upgrades: engine, weight, tyres
 
@@ -49,6 +49,12 @@ struct Options {
     float look = 0;        // initial camera orbit (testing)
     int cam = -1;          // initial camera mode (testing)
     std::string at;        // "x,z,yaw" spawn point for --scene drive (testing)
+    std::string recordCmd; // pipe raw RGBA frames (fixed 30 fps) into this command (e.g. ffmpeg)
+    std::string recordAudio; // write the engine audio (f32 stereo 48 kHz) to this file
+    float recordSec = 3.f;
+    float orbit = 0.f;     // photo mode: auto-orbit speed (rad/s)
+    bool noHints = false;
+    bool noHud = false;
 };
 
 class Game {
@@ -176,6 +182,12 @@ private:
     int xpToNext() const { return 1000 + (level - 1) * 400; }
     void addXP(int amount);
     CarSpec tunedSpec(const OwnedCar& oc) const;
+    int showcaseSpec() const {  // priciest car in the dealership
+        int best = -1;
+        for (int i = 0; i < int(kCars.size()); i++)
+            if (listed(kCars[i]) && (best < 0 || kCars[i].price > kCars[best].price)) best = i;
+        return best < 0 ? 0 : best;
+    }
     void rebuildTuned();
     int upgradeCost(const OwnedCar& oc, int part) const;
     void buildStunts();
@@ -200,6 +212,29 @@ private:
     bool photoCapture = false;
 
     Effects fx;
+    // special cars (special.cpp)
+    struct TimeMachine { float charge = 0, panel = 0, trailT = 0, jumpT = 99; int era = 0, lastEra = 0; bool armed = true; vec3 last[2]; } tm;
+    Atmosphere eraAtmo[3];
+    std::string songFile;
+    bool catWasSpinning = false;
+    std::string cheatBuf;
+    bool cheatFocus = false;
+    float cheatFlash = 0, cheatFail = 0;
+    vec4 cheatRect;
+    State switchFrom = ST_FREEROAM;
+    int devRoad = -1;
+    void buildEras();
+    std::string eraDate(int era) const;
+    void updateSpecial(float dt);
+    Atmosphere currentAtmo() const;
+    void drawTimeCircuits();
+    void drawCheatBox();
+    void setCheatFocus(bool on);
+    bool cheatEvent(const SDL_Event& e);
+    void submitCheat();
+    void openSwitcher();
+    void drawSwitcher();
+    void switcherAction(Action a);
     // GPS
     Gps gps;
     int gpsEvent = -1;          // user-selected waypoint event (-1 = auto: nearest unfinished event)
