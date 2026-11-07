@@ -31,7 +31,7 @@ Written in C++17 with **SDL3** and OpenGL 3.3. No engine and no downloaded asset
 - **Photo mode**: freeze the moment, orbit the car, change the lens, hide the UI and save the shot.
 - **GPS**: a road-network route to the event you pick on the world map, or to the nearest unfinished event, with distance.
 - **HUD in the style of the 2012 original**: an analogue tachometer with redline and a rim needle, digital speed with dim leading zeros, gear and shift light, ABS/TCS/SC lamps, and a round rotating minimap with white roads, the purple GPS line, opponents, events and PR stunts.
-- **10 fictional built-in cars** in 5 classes (D, C, B, A, S), the **DeLorean DMC-12 Time Machine** (a community model, see [Credits](#credits)), plus any cars you import.
+- **10 fictional built-in cars** in 5 classes (D, C, B, A, S), two community models (the **Koenigsegg Agera RS** and the **DeLorean DMC-12 Time Machine**, see [Credits](#credits)), plus any cars you import.
 - **Driving physics**: a tyre model with slip angles and a friction circle, weight transfer, a 6-speed automatic gearbox, handbrake drifts, jumps and landings, grip that changes between asphalt, dirt, grass and water, and collisions with trees, rocks and other cars. Imported cars use exactly the same physics with their own wheel positions and tyre sizes. Traction control and a stability assist are on by default and can be turned off.
 - **Graphics**:
   - **Lighting and post**: golden-hour lighting, two 4096² shadow cascades with soft filtering, HDR bloom, sun shafts, filmic grading and speed-based motion blur.
@@ -172,11 +172,13 @@ python3 tools/import_car.py ~/Downloads/mycar/source/car.fbx cars/mycar \
 - `--length` rescales the car to a real length in metres.
 - `--max-tex` limits the texture size (default 1024).
 - `--drop 'regex'` removes parts you don't want, such as light bars or a driver.
+- `--paint 'regex'` marks materials as body paint. On a coloured livery, only the coloured areas get repainted, and carbon, black trim and decals are kept.
+- `--no-glass 'regex'` fixes parts wrongly detected as glass, such as a "windshieldwiper".
 - Edit the generated `cars/mycar/car.ini` to set the name, class, price, power, weight, top speed, drivetrain, grip, cylinders, stock colour, credits, and `starter=1` if you want to start with it.
 
 Put the folder in `~/.local/share/rxvy/ridgeline/cars/` to use it right away. You can also keep packs in `cars/` next to `install.sh`, and `./install.sh` installs them along with the game. Imported cars appear in the autoshow and wheelspins, and you can paint, upgrade, sell and race them like any other car.
 
-**Licensing:** other model files are git-ignored (`cars/`, `*.rcar`, `*.fbx` and `*.glb`), so only models whose licence allows sharing get committed here. `cars/delorean` is the exception and comes with its own licence. Only import models whose licence allows it, and keep their credit line in `car.ini`; it is shown in the autoshow.
+**Licensing:** other model files are git-ignored (`cars/`, `*.rcar`, `*.fbx` and `*.glb`), so only models whose licence allows sharing get committed here. `cars/agera_rs` and `cars/delorean` are the exceptions and come with their own licences. Only import models whose licence allows it, and keep their credit line in `car.ini`; it is shown in the autoshow.
 
 ## Settings
 
@@ -236,12 +238,13 @@ Pull requests are welcome: new built-in cars (add an entry to `kCars` in `src/ca
 
 ## Credits
 
+- **Koenigsegg Agera RS** (`cars/agera_rs/`): based on ["Koenigsegg Agera RS"](https://sketchfab.com/3d-models/koenigsegg-agera-rs-a30e098257254fcfa1323f2841e26d13) by [RongstadJ](https://sketchfab.com/RongstadJ), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). It was converted to `.rcar`, rescaled, given split wheels and a repaintable livery. That folder is CC BY 4.0.
 - **DeLorean DMC-12 Time Machine** (`cars/delorean/`): based on ["1985 DeLorean DMC-12 Time Machine (BTTF)"](https://sketchfab.com/3d-models/1985-delorean-dmc-12-time-machine-bttf-6fdfe2e2adba4886b48cc523871e88be) by [VTX](https://sketchfab.com/VTX_car), licensed under [CC BY-NC-SA 4.0](http://creativecommons.org/licenses/by-nc-sa/4.0/). It was converted to `.rcar`, rescaled and given split wheels. That folder is CC BY-NC-SA 4.0, not MIT, and is for non-commercial use only. The credit is also shown in the in-game autoshow.
 - **Font**: DejaVu Sans Bold.
 - **SDL3** by the SDL contributors (zlib licence), bundled by the installer when your distro has no SDL3 package.
 
 ## License
 
-The code is MIT, see [LICENSE](LICENSE). `cars/delorean/` is CC BY-NC-SA 4.0, see its `LICENSE.txt`. The embedded font is DejaVu Sans Bold (Bitstream Vera / DejaVu license).
+The code is MIT, see [LICENSE](LICENSE). `cars/agera_rs/` is CC BY 4.0 and `cars/delorean/` is CC BY-NC-SA 4.0; see the `LICENSE.txt` in each folder. The embedded font is DejaVu Sans Bold (Bitstream Vera / DejaVu license).
 
 Ridgeline is an independent fan project inspired by open-world festival racing games. It is not affiliated with, endorsed by or connected to any commercial racing game, publisher or car manufacturer, and it contains no assets from any of them. Car models you import yourself remain under their own licences and are not part of this project.

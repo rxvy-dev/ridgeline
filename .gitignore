@@ -9,8 +9,10 @@ build-configure.log
 # local car packs and source models - never commit third-party models
 cars/*
 !cars/delorean/
+!cars/agera_rs/
 *.rcar
 !cars/delorean/model.rcar
+!cars/agera_rs/model.rcar
 *.fbx
 *.FBX
 *.glb

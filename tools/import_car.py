@@ -42,6 +42,7 @@ FIXED = re.compile(r"calliper|caliper|brake(?!disc)", re.I)
 TIRE = re.compile(r"tire|tyre", re.I)
 
 F_PAINT, F_GLASS, F_LIGHT, F_ALPHA, F_CHROME, F_TIRE, F_EMISSIVE, F_BLEND = 1, 2, 4, 8, 16, 32, 64, 128
+F_PAINTMASK = 256  # paint only the coloured areas of a livery texture
 
 
 # ----------------------------------------------------------------------------- math helpers
@@ -440,6 +441,8 @@ def main():
     ap.add_argument("--name", default="")
     ap.add_argument("--max-tex", type=int, default=1024)
     ap.add_argument("--drop", default="", help="regex of part names to drop (e.g. lights bars)")
+    ap.add_argument("--paint", default="", help="regex of material names that are body paint (overrides detection)")
+    ap.add_argument("--no-glass", default="", help="regex of material names that are NOT glass (e.g. wiper)")
     a = ap.parse_args()
     if Image is None:
         sys.exit("Pillow is required: pip install pillow")
@@ -595,6 +598,11 @@ def main():
     for i, m in enumerate(materials):
         names = [p.name for p in parts if p.mat == i][:4]
         flags = classify(m, names)
+        if a.paint and re.search(a.paint, m.name, re.I):
+            flags |= F_PAINT
+            flags &= ~(F_GLASS | F_CHROME | F_LIGHT)
+        if a.no_glass and re.search(a.no_glass, m.name, re.I):
+            flags &= ~(F_GLASS | F_BLEND)
         base = tex_id(m.tex.get("base"), m.tex.get("opacity"), big=bool(flags & F_PAINT))
         nrm = tex_id(m.tex.get("normal"))
         emi = tex_id(m.tex.get("emissive"))
@@ -603,7 +611,8 @@ def main():
             arr = np.asarray(tex_list[base].convert("RGB").resize((64, 64)), float) / 255
             sat = (arr.max(2) - arr.min(2)).mean()
             if sat > 0.18:
-                flags &= ~F_PAINT
+                # coloured livery: keep it, but let the paint shop recolour just its coloured areas
+                flags = (flags | F_PAINTMASK) if (a.paint and re.search(a.paint, m.name, re.I)) else (flags & ~F_PAINT)
         if base >= 0 and tex_list[base].mode == "RGBA":
             alpha = np.asarray(tex_list[base].getchannel("A").resize((64, 64)), float)
             if alpha.min() < 128 and not flags & F_GLASS:

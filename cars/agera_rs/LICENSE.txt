@@ -1,0 +1,14 @@
+Koenigsegg Agera RS
+
+This work is based on "Koenigsegg Agera RS"
+(https://sketchfab.com/3d-models/koenigsegg-agera-rs-a30e098257254fcfa1323f2841e26d13)
+by RongstadJ (https://sketchfab.com/RongstadJ), licensed under CC-BY-4.0
+(http://creativecommons.org/licenses/by/4.0/).
+
+Changes: converted to Ridgeline's .rcar format with tools/import_car.py
+(rescaled to 4.29 m, wheels split for animation, body panels marked as a
+repaintable livery, textures limited to 1024 px).
+
+This folder (model.rcar, car.ini) is licensed under CC BY 4.0 - not under the
+MIT licence that covers the rest of Ridgeline. Koenigsegg is a trademark of
+Koenigsegg Automotive AB; this fan project is not affiliated with them.

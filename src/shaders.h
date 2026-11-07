@@ -376,6 +376,13 @@ void main(){
     float spec = 0.15, gloss = 40.0, coat = 0.0, metal = 0.0;
     if (paint) {
         float l = dot(base.rgb, vec3(0.299, 0.587, 0.114));
+        if ((uFlags & 256) != 0) {
+            // livery: repaint only the saturated (coloured) areas, keep carbon, black trim and decals
+            float mx = max(base.r, max(base.g, base.b)), mn = min(base.r, min(base.g, base.b));
+            float sat = (mx - mn) / max(mx, 1e-3);
+            float mask = smoothstep(0.35, 0.6, sat) * smoothstep(0.12, 0.3, mx);
+            albedo = mix(base.rgb, uPaint * clamp(mx / 0.8, 0.35, 1.25), mask);
+        } else
         albedo = uPaint * clamp(mix(1.0, l / 0.72, 0.65), 0.2, 1.3);
         float fl = texture(tFlakes, vObj.xz * 3.1 + vObj.y * 1.7).r;
         albedo *= 0.94 + 0.12 * fl;

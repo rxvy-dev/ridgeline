@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-enum ImpFlags { IF_PAINT = 1, IF_GLASS = 2, IF_LIGHT = 4, IF_ALPHA = 8, IF_CHROME = 16, IF_TIRE = 32, IF_EMISSIVE = 64, IF_BLEND = 128 };
+enum ImpFlags { IF_PAINT = 1, IF_GLASS = 2, IF_LIGHT = 4, IF_ALPHA = 8, IF_CHROME = 16, IF_TIRE = 32, IF_EMISSIVE = 64, IF_BLEND = 128, IF_PAINTMASK = 256 };
 
 struct ImpMaterial {
     vec4 color;
