@@ -78,7 +78,7 @@ void Effects::updateGlow(float dt) {
     for (auto& f : fires) {
         f.age += dt;
         float heat = 1.f - smoothstepf(2.5f, 7.f, f.age);
-        float n = 26.f * dt * heat * std::max(0.3f, length(f.b - f.a));
+        float n = 60.f * dt * heat * std::max(0.3f, length(f.b - f.a));
         while (n > 0) {
             if (n >= 1 || rnd() < n) {
                 vec3 p = f.a + (f.b - f.a) * rnd() + vec3(rnd() - 0.5f, 0, rnd() - 0.5f) * 0.12f;
@@ -127,7 +127,8 @@ void Effects::drawGlow(Renderer& R, const Camera& c) {
     // the burning tracks themselves: a glowing line on the road
     for (auto& f : fires) {
         float heat = 1.f - smoothstepf(1.5f, 7.f, f.age);
-        streak(f.a + vec3(0, 0.04f, 0), f.b + vec3(0, 0.04f, 0), 0.16f, vec4(3.5f, 1.2f, 0.2f, heat));
+        streak(f.a + vec3(0, 0.05f, 0), f.b + vec3(0, 0.05f, 0), 0.32f, vec4(4.f, 1.3f, 0.2f, heat));
+        streak(f.a + vec3(0, 0.05f, 0), f.b + vec3(0, 0.05f, 0), 0.9f, vec4(2.f, 0.6f, 0.1f, heat * 0.25f));
     }
     arcs.clear();
     if (v.empty()) return;

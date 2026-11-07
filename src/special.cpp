@@ -112,7 +112,7 @@ void Game::updateSpecial(float dt) {
             vec4 q = player.car.chassisMatrix() * vec4(wp.x, 0.f, wp.z, 1.f);
             tm.last[k] = vec3(q.x, world.heightAt(q.x, q.z), q.z);
         }
-        showPopup("TIME CIRCUITS", eraDate(tm.era), tm.era == 0 ? "BACK TO THE PRESENT" : tm.era == 1 ? "WELCOME TO 1955" : "WELCOME TO 2015", 0, true,
+        showPopup("TIME CIRCUITS", eraDate(tm.era), tm.era == 0 ? "BACK TO THE PRESENT" : tm.era == 1 ? "WELCOME TO 1955" : "WELCOME TO 2015", 0, false,
                   vec4(1.f, 0.25f, 0.2f, 1));
     }
     tm.jumpT += dt;
@@ -279,7 +279,7 @@ void Game::submitCheat() {
         save();
         audio.beep(1760, 0.5f);
         flash = 0.6f;
-        showPopup("SECRET CAR UNLOCKED", carName(kCars[i]), "HOLD BRAKE", 0, true, vec4(1.f, 0.25f, 0.55f, 1));
+        showPopup("SECRET CAR UNLOCKED", carName(kCars[i]), "HOLD BRAKE", 0, false, vec4(1.f, 0.25f, 0.55f, 1));
         toast("Secret car unlocked: " + carName(kCars[i]) + "!", vec4(1.f, 0.35f, 0.65f, 1));
         return;
     }
