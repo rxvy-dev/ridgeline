@@ -1,14 +1,16 @@
-// Car database (all makes and models are fictional) and procedural car meshes.
+// Car database: built-in fictional cars (procedural meshes) plus any cars the
+// player imports with tools/import_car.py (loaded from disk at startup).
 #pragma once
 #include "render.h"
+#include <string>
 #include <vector>
 
 enum Drive { FWD = 0, RWD = 1, AWD = 2 };
 enum Body { BODY_HATCH, BODY_MUSCLE, BODY_COUPE, BODY_MIDENGINE, BODY_TRUCK, BODY_GT, BODY_HYPER, BODY_RALLY };
 
 struct CarSpec {
-    const char* make;
-    const char* model;
+    std::string make;
+    std::string model;
     char cls;          // D C B A S
     int price;         // credits
     float powerKW;
@@ -23,9 +25,16 @@ struct CarSpec {
     bool stripes;
     bool spoiler;
     float length, width, height, wheelbase, wheelR;
+    // imported cars
+    std::string id = "";
+    int cylinders = 0;
+    int importIdx = -1;
+    std::string credit = "";
+    bool starter = false;
 };
 
-extern const std::vector<CarSpec> kCars;
+extern std::vector<CarSpec> kCars;
+std::string carId(const CarSpec& s);
 extern const vec3 kPaints[];
 extern const int kPaintCount;
 extern const char* kPaintNames[];
@@ -42,6 +51,7 @@ struct CarModel {
     Mesh steering;  // steering wheel, in its own frame (axis = local z)
     mat4 steeringBase;  // car space placement of the steering wheel
     vec3 eye, hoodCam, bumperCam;  // camera anchors in car space
+    struct ImportedModel* imp = nullptr;  // set for imported cars
     vec3 wheelPos[4];   // FL, FR, RL, RR in car space (+z forward, +x left)
     float wheelR, wheelW;
     void build(const CarSpec& s);

@@ -79,7 +79,9 @@ vec3 envColor(vec3 R){
     }
     return mix(vec3(0.16, 0.14, 0.10) * (uSkyAmb + uSunColor * 0.4), vec3(0.09, 0.08, 0.06), clamp(-R.y * 2.0, 0.0, 1.0));
 }
+uniform float uClipY;
 vec3 applyFog(vec3 col, vec3 wp){
+    if (wp.y < uClipY) discard;
     vec3 v = wp - uCamPos; float dist = length(v); vec3 dir = v / max(dist, 0.001);
     float hf = exp(-max(wp.y - 15.0, 0.0) * 0.005);
     float f = 1.0 - exp(-dist * uFogDensity * (0.5 + 0.9 * hf));
@@ -174,19 +176,39 @@ void main(){
     vec3 c; float spec = 0.0, gloss = 30.0;
     vec3 nn = n;
     if (mat == 10) {
-        c = texture(tAsphalt, uv).rgb * vec3(1.08, 1.02, 0.94);
-        vec3 tn = texture(tAsphaltN, uv).xyz * 2.0 - 1.0;
-        nn = normalize(n + vec3(tn.x, 0.0, tn.y) * 0.35);
-        float wear = exp(-pow((abs(x) - width * 0.25) * 1.1, 2.0));
-        c *= 1.0 + wear * 0.12;
-        c *= 0.92 + 0.16 * vnoise(p.xz * 0.05);
-        float breakup = smoothstep(0.25, 0.6, texture(tAsphalt, uv * 3.1).r + vnoise(vec2(x, v) * 2.0) * 0.4);
-        float yellow = step(0.07, abs(x)) * step(abs(x), 0.19);
+        vec2 auv = vec2(x, v) / 4.0;
+        c = texture(tAsphalt, auv).rgb * vec3(1.06, 1.02, 0.97);
+        // break up tiling with a second, rotated lookup and large-scale tone variation
+        c = mix(c, texture(tAsphalt, vec2(auv.y, -auv.x) * 0.61 + 0.3).rgb, 0.3);
+        float macro = fbm2(vec2(x, v) * 0.045);
+        c *= 0.86 + 0.28 * macro;
+        vec3 tn = texture(tAsphaltN, auv).xyz * 2.0 - 1.0;
         float hw = width * 0.5;
-        float white = step(hw - 0.62, abs(x)) * step(abs(x), hw - 0.45);
-        c = mix(c, vec3(0.90, 0.68, 0.16), yellow * breakup * 0.95);
-        c = mix(c, vec3(0.88, 0.87, 0.82), white * breakup * 0.95);
-        spec = 0.12;
+        // repair patches: darker, fresher rectangles with a seam
+        vec2 cell = vec2(floor(x / 2.6 + 0.5), floor(v / 7.0));
+        float ph = fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453);
+        vec2 cf = vec2(fract(x / 2.6 + 0.5), fract(v / 7.0));
+        float inPatch = step(ph, 0.05) * step(0.12, cf.x) * step(cf.x, 0.88) * step(0.15, cf.y) * step(cf.y, 0.85);
+        float seam = inPatch * (1.0 - step(0.15, min(min(cf.x - 0.12, 0.88 - cf.x) * 2.6, min(cf.y - 0.15, 0.85 - cf.y) * 7.0)));
+        c = mix(c, c * (0.78 + 0.1 * vnoise(vec2(x, v) * 1.3)), inPatch);
+        c = mix(c, vec3(0.06), seam * 0.5);
+        // polished tyre lines in each lane, lighter grey dust on the crown and edges
+        float lane = abs(abs(x) - width * 0.25);
+        float tracks = exp(-pow((lane - 0.85) * 2.2, 2.0)) * (0.7 + 0.3 * vnoise(vec2(x * 2.0, v * 0.05)));
+        c *= 1.0 - tracks * 0.22;
+        float dust = smoothstep(hw - 1.4, hw, abs(x)) + exp(-pow(x * 1.6, 2.0)) * 0.5;
+        c = mix(c, c * 1.25 + vec3(0.02, 0.018, 0.012), dust * 0.6);
+        // edge crumble
+        float crumble = smoothstep(hw - 0.35, hw, abs(x) + (vnoise(vec2(v * 1.7, x)) - 0.5) * 0.5);
+        c = mix(c, vec3(0.30, 0.27, 0.22), crumble * 0.7);
+        nn = normalize(n + vec3(tn.x, 0.0, tn.y) * (0.45 - tracks * 0.25));
+        // markings: double yellow centre, white edge lines, all worn
+        float breakup = smoothstep(0.22, 0.55, texture(tAsphalt, auv * 2.3).r + vnoise(vec2(x, v) * 2.5) * 0.45);
+        float yellow = step(0.07, abs(x)) * step(abs(x), 0.2);
+        float white = step(hw - 0.66, abs(x)) * step(abs(x), hw - 0.48);
+        float paint = max(yellow, white) * breakup;
+        c = mix(c, yellow > 0.5 ? vec3(0.92, 0.66, 0.12) : vec3(0.90, 0.89, 0.85), paint * 0.92);
+        spec = 0.1 + tracks * 0.25 + paint * 0.15; gloss = 26.0 + tracks * 30.0;
     } else if (mat == 11) {
         c = texture(tDirt, uv * 1.2).rgb * 1.08;
         float rut = exp(-pow((abs(x) - width * 0.2) * 1.4, 2.0));
@@ -271,6 +293,17 @@ void main(){
     else if (mat == 10) { albedo = vec3(0.30, 0.31, 0.33) * (1.0 + uHeadlights); coat = 1.0; sharp = 1.0; refl = 0.35; }
     else if (mat == 11) { albedo = vec3(0.65, 0.07, 0.05); spec = 0.5; gloss = 50.0; }
     else if (mat == 12) { albedo = vec3(0.86, 0.86, 0.82); spec = 0.2; }
+    else if (mat == 13) {
+        // stone paving: running-bond slabs with darker joints and per-slab tone
+        vec2 q = vPos.xz / vec2(1.6, 0.8);
+        float row = floor(q.y);
+        q.x += mod(row, 2.0) * 0.5;
+        vec2 f = fract(q), id = floor(q);
+        float joint = 1.0 - smoothstep(0.0, 0.035, min(min(f.x, 1.0 - f.x) * 1.6, min(f.y, 1.0 - f.y) * 0.8));
+        float tone = 0.86 + 0.26 * fract(sin(dot(id, vec2(12.9898, 78.233))) * 43758.5453);
+        albedo = vCol.rgb * tone * (1.0 - joint * 0.55) * (0.88 + 0.24 * vnoise(vPos.xz * 0.35));
+        spec = 0.08; gloss = 22.0;
+    }
     vec3 col = lighting(albedo, n, sh) + albedo * uSunColor * fill * (1.0 - sh) * 0.5;
     vec3 H = normalize(V + uSunDir);
     float ndh = max(dot(n, H), 0.0);
@@ -288,6 +321,92 @@ void main(){
         vec3 env = envColor(R);
         col = mix(col, env * (mat == 4 ? vec3(1.0) : albedo * 2.0), refl);
     }
+    FragColor = vec4(applyFog(col, vPos), 1.0);
+}
+)";
+
+// Imported (textured) car models. vCol.xy = uv.
+static const char* kCarFS = R"(
+in vec3 vPos; in vec3 vNrm; in vec4 vCol; in vec3 vObj;
+uniform sampler2D tBase, tNormal, tEmis, tFlakes;
+uniform vec4 uColor;
+uniform int uFlags, uHasBase, uHasNormal, uHasEmis, uGlassPass;
+uniform vec3 uEmis, uPaint;
+uniform float uBrake;
+out vec4 FragColor;
+void main(){
+    vec2 uv = vCol.xy;
+    vec4 base = uColor * (uHasBase == 1 ? texture(tBase, uv) : vec4(1.0));
+    bool glass = (uFlags & 2) != 0 || (uFlags & 128) != 0;
+    if ((uGlassPass == 1) != glass) discard;
+    if (!glass && (uFlags & 8) != 0 && base.a < 0.45) discard;
+    vec3 n = normalize(vNrm);
+    if (!gl_FrontFacing) n = -n;
+    if (uHasNormal == 1) {
+        vec3 dp1 = dFdx(vPos), dp2 = dFdy(vPos);
+        vec2 du1 = dFdx(uv), du2 = dFdy(uv);
+        vec3 dp2perp = cross(dp2, n), dp1perp = cross(n, dp1);
+        vec3 T = dp2perp * du1.x + dp1perp * du2.x;
+        vec3 B = dp2perp * du1.y + dp1perp * du2.y;
+        float inv = inversesqrt(max(max(dot(T, T), dot(B, B)), 1e-12));
+        vec3 tn = texture(tNormal, uv).xyz * 2.0 - 1.0;
+        tn.xy *= 0.8;
+        vec3 pn = normalize(mat3(T * inv, B * inv, n) * tn);
+        if (!any(isnan(pn))) n = pn;
+    }
+    vec3 V = normalize(uCamPos - vPos);
+    float ndv = max(dot(n, V), 0.0);
+    float sh = shadowFactor(vPos, n);
+    vec3 R = reflect(-V, n);
+    if (glass) {
+        float F = 0.05 + 0.95 * pow(1.0 - ndv, 5.0);
+        vec3 env = envColor(R);
+        vec3 H = normalize(V + uSunDir);
+        vec3 spec = uSunColor * pow(max(dot(n, H), 0.0), 900.0) * 4.0 * sh;
+        float baseA = gl_FrontFacing ? clamp(base.a * 0.55, 0.25, 0.7) : 0.12;
+        if ((uFlags & 4) != 0) baseA = clamp(base.a, 0.2, 0.9);
+        vec3 tint = base.rgb * 0.15 * (ambient(n) + uSunColor * 0.3);
+        float a = 1.0 - (1.0 - baseA) * (1.0 - F);
+        vec3 c = (tint * baseA * (1.0 - F) + env * F + spec) / max(a, 0.01);
+        FragColor = vec4(applyFog(c, vPos), clamp(a, 0.0, 1.0));
+        return;
+    }
+    vec3 albedo = base.rgb;
+    bool paint = (uFlags & 1) != 0;
+    float spec = 0.15, gloss = 40.0, coat = 0.0, metal = 0.0;
+    if (paint) {
+        float l = dot(base.rgb, vec3(0.299, 0.587, 0.114));
+        albedo = uPaint * clamp(mix(1.0, l / 0.72, 0.65), 0.2, 1.3);
+        float fl = texture(tFlakes, vObj.xz * 3.1 + vObj.y * 1.7).r;
+        albedo *= 0.94 + 0.12 * fl;
+        coat = 1.0; spec = 0.4;
+    } else if ((uFlags & 16) != 0) {
+        metal = 0.7; spec = 0.9; gloss = 90.0;
+    } else if ((uFlags & 32) != 0) {
+        spec = 0.06; gloss = 12.0;
+        // rubber: many packs ship a light detail/AO map for tyres - treat it as a mask on dark rubber
+        float lum = dot(albedo, vec3(0.333));
+        if (lum > 0.25) albedo = vec3(0.035, 0.035, 0.038) * (0.55 + 0.6 * lum);
+    }
+    vec3 col = lighting(albedo * (1.0 - metal * 0.6), n, sh);
+    vec3 H = normalize(V + uSunDir);
+    float ndh = max(dot(n, H), 0.0);
+    col += uSunColor * pow(ndh, gloss) * spec * sh;
+    if (coat > 0.0) {
+        float F = 0.06 + 0.94 * pow(1.0 - ndv, 5.0);
+        col = col * (1.0 - F) + envColor(R) * F * 1.25;
+        col += uSunColor * pow(ndh, 800.0) * 4.0 * sh;
+    } else if (metal > 0.0) {
+        col = mix(col, envColor(R) * (albedo * 0.7 + 0.3), metal * 0.8);
+    }
+    vec3 e = uEmis;
+    if (uHasEmis == 1) e += texture(tEmis, uv).rgb;
+    if ((uFlags & 4) != 0) {
+        bool red = albedo.r > albedo.g * 1.8 && albedo.r > 0.2;
+        if (red) e += albedo * (0.5 + uBrake * 2.5);
+        else e += albedo * smoothstep(0.6, 0.95, dot(albedo, vec3(0.33))) * 0.6;
+    }
+    col += e * 1.5;
     FragColor = vec4(applyFog(col, vPos), 1.0);
 }
 )";
@@ -496,21 +615,68 @@ void main(){
 
 static const char* kWaterFS = R"(
 in vec3 vPos; in vec3 vNrm; in vec4 vCol; in vec3 vObj;
+uniform sampler2D tHeight, tRefl;
+uniform mat4 uReflVP;
+uniform int uHasRefl;
+uniform float uHalf, uWaterLevel;
 out vec4 FragColor;
+vec2 waveGrad(vec2 p, float t){
+    vec2 g = vec2(0.0);
+    // a few directional swells plus noise ripples
+    vec2 d1 = normalize(vec2(0.8, 0.6)), d2 = normalize(vec2(-0.5, 0.86)), d3 = normalize(vec2(0.2, -1.0));
+    g += d1 * cos(dot(p, d1) * 0.35 + t * 1.1) * 0.06;
+    g += d2 * cos(dot(p, d2) * 0.62 + t * 1.6) * 0.04;
+    g += d3 * cos(dot(p, d3) * 1.3 + t * 2.3) * 0.025;
+    g.x += (vnoise(p * 0.9 + vec2(t * 0.5, 0.0)) - 0.5) * 0.10 + (vnoise(p * 3.1 - t * 0.9) - 0.5) * 0.05;
+    g.y += (vnoise(p * 0.9 + vec2(4.0, t * 0.45)) - 0.5) * 0.10 + (vnoise(p * 2.9 + vec2(t * 0.8, 2.0)) - 0.5) * 0.05;
+    return g;
+}
 void main(){
     vec2 p = vPos.xz; float t = uTime;
-    float nx = (vnoise(p * 0.12 + vec2(t * 0.25, 0.0)) - 0.5) * 0.18 + (vnoise(p * 0.7 + vec2(0.0, -t * 0.6)) - 0.5) * 0.10 + (vnoise(p * 2.3 + t) - 0.5) * 0.05;
-    float nz = (vnoise(p * 0.12 + vec2(7.0, t * 0.2)) - 0.5) * 0.18 + (vnoise(p * 0.7 + vec2(t * 0.5, 3.0)) - 0.5) * 0.10 + (vnoise(p * 2.1 - t) - 0.5) * 0.05;
-    vec3 n = normalize(vec3(nx, 1.0, nz));
+    float ground = texture(tHeight, (p + uHalf) / (2.0 * uHalf)).r;
+    float depth = uWaterLevel - ground;
+    if (depth < -0.05) discard;
+    vec2 g = waveGrad(p, t);
+    float calm = smoothstep(0.0, 1.5, depth);
+    vec3 n = normalize(vec3(-g.x * calm, 1.0, -g.y * calm));
     vec3 V = normalize(uCamPos - vPos);
+    float dist = length(uCamPos - vPos);
+    n = normalize(mix(n, vec3(0, 1, 0), smoothstep(150.0, 900.0, dist) * 0.6));
+    float ndv = max(dot(n, V), 0.0);
+    float fres = 0.025 + 0.975 * pow(1.0 - ndv, 5.0);
     vec3 R = reflect(-V, n);
     vec3 refl = envColor(R);
-    float fres = 0.03 + 0.97 * pow(1.0 - max(dot(n, V), 0.0), 5.0);
-    vec3 deep = vec3(0.03, 0.10, 0.11) * (uSkyAmb + uSunColor * 0.35);
-    vec3 col = mix(deep, refl, clamp(fres, 0.0, 1.0));
+    if (uHasRefl == 1) {
+        vec4 cp = uReflVP * vec4(vPos, 1.0);
+        vec2 ruv = cp.xy / cp.w * 0.5 + 0.5 + n.xz * 0.035;
+        vec3 pr = texture(tRefl, clamp(ruv, 0.002, 0.998)).rgb;
+        float edge = smoothstep(0.0, 0.04, ruv.x) * smoothstep(1.0, 0.96, ruv.x) * smoothstep(1.0, 0.95, ruv.y);
+        refl = mix(refl, pr, edge);
+    }
+    // water body: turquoise shallows to deep blue-green, lit by sky and sun
+    float k = 1.0 - exp(-depth * 0.28);
+    vec3 shallow = vec3(0.10, 0.30, 0.27), deepC = vec3(0.012, 0.055, 0.075);
+    vec3 body = mix(shallow, deepC, k) * (uSkyAmb * 1.1 + uSunColor * 0.45 * max(uSunDir.y, 0.0));
+    float sh = shadowFactor(vPos, vec3(0, 1, 0));
+    body *= 0.6 + 0.4 * sh;
+    // sun-lit scattering in wave crests
+    float sss = pow(max(dot(-V, uSunDir) * 0.5 + 0.5, 0.0), 4.0) * max(g.x + g.y, 0.0) * 4.0;
+    body += vec3(0.05, 0.16, 0.13) * sss * sh;
+    vec3 col = mix(body, refl, clamp(fres * 1.05, 0.0, 1.0));
     vec3 H = normalize(V + uSunDir);
-    col += uSunColor * pow(max(dot(n, H), 0.0), 300.0) * 4.0 * shadowFactor(vPos, vec3(0, 1, 0));
-    FragColor = vec4(applyFog(col, vPos), 1.0);
+    float ndh = max(dot(n, H), 0.0);
+    col += uSunColor * (pow(ndh, 600.0) * 6.0 + pow(ndh, 80.0) * 0.25) * sh;
+    // shoreline foam lapping in and out
+    float wave = sin(depth * 6.0 - t * 1.8 + vnoise(p * 0.3) * 4.0) * 0.5 + 0.5;
+    float foamN = vnoise(p * 1.8 + vec2(t * 0.3, -t * 0.2)) * 0.6 + vnoise(p * 5.0 - t * 0.5) * 0.4;
+    float shore = 1.0 - smoothstep(0.0, 0.9, depth);
+    float foam = smoothstep(0.45, 0.7, foamN * (0.6 + 0.6 * wave) + shore * 0.55) * smoothstep(0.0, 0.25, shore + 0.05) * (shore > 0.0 ? 1.0 : 0.0);
+    foam *= 1.0 - smoothstep(0.6, 1.4, depth);
+    col = mix(col, vec3(0.88, 0.92, 0.93) * (uSkyAmb + uSunColor * 0.6 * sh), foam * 0.85);
+    // transparency in the shallows so the lake bed shows through
+    float alpha = clamp(max(1.0 - exp(-depth * 1.4), fres) + foam, 0.0, 1.0);
+    alpha = max(alpha, smoothstep(60.0, 300.0, dist));
+    FragColor = vec4(applyFog(col, vPos), alpha);
 }
 )";
 
@@ -628,11 +794,13 @@ static const char* kHudFS = R"(
 in vec2 vUV; in vec4 vCol; in float vMode; in vec2 vPix;
 uniform sampler2D uFont;
 uniform sampler2D uMap;
+uniform sampler2D uImg;
 uniform vec3 uClip;
 out vec4 FragColor;
 void main(){
     vec4 c = vCol;
     if (vMode > 0.5 && vMode < 1.5) c.a *= texture(uFont, vUV).r;
+    else if (vMode > 2.5) c *= texture(uImg, vUV);
     else if (vMode > 1.5) c *= vec4(texture(uMap, vUV).rgb, 1.0);
     if (uClip.z > 0.0) {
         float d = length(vPix - uClip.xy);

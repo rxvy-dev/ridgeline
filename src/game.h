@@ -3,14 +3,25 @@
 #include "audio.h"
 #include "hud.h"
 #include "race.h"
+#include "gps.h"
+#include "effects.h"
 #include <SDL3/SDL.h>
 #include <string>
+#include <functional>
 #include <vector>
 
-enum State { ST_TITLE, ST_FREEROAM, ST_PAUSE, ST_MAP, ST_DEALER, ST_GARAGE, ST_SETTINGS, ST_RACE_INTRO, ST_RACE, ST_RESULTS };
-enum Action { A_NONE, A_UP, A_DOWN, A_LEFT, A_RIGHT, A_CONFIRM, A_BACK, A_PAUSE, A_CAMERA, A_RESET, A_MAP, A_INTERACT, A_TOGGLE };
+enum State { ST_TITLE, ST_FREEROAM, ST_PAUSE, ST_MAP, ST_DEALER, ST_GARAGE, ST_SETTINGS, ST_RACE_INTRO, ST_RACE, ST_RESULTS, ST_PHOTO, ST_WHEELSPIN, ST_UPGRADE };
+enum Action { A_NONE, A_UP, A_DOWN, A_LEFT, A_RIGHT, A_CONFIRM, A_BACK, A_PAUSE, A_CAMERA, A_RESET, A_MAP, A_INTERACT, A_TOGGLE, A_SELL, A_PHOTO, A_UPGRADE, A_HIDE };
 
-struct OwnedCar { int spec; int paint; bool stripes; };
+struct OwnedCar { int spec; int paint; bool stripes; int up[3] = {0, 0, 0}; };  // upgrades: engine, weight, tyres
+
+struct PRStunt {
+    int type = 0;            // 0 speed trap, 1 speed zone
+    std::string name;
+    int road = 0, a = 0, b = 0;
+    float thr[3] = {0, 0, 0}; // km/h for 1..3 stars
+    float best = 0;
+};
 
 struct Settings {
     bool mph = false;
@@ -37,6 +48,7 @@ struct Options {
     float simSeconds = 0;  // simulate before shot
     float look = 0;        // initial camera orbit (testing)
     int cam = -1;          // initial camera mode (testing)
+    std::string at;        // "x,z,yaw" spawn point for --scene drive (testing)
 };
 
 class Game {
@@ -60,6 +72,7 @@ private:
     Hud hud;
     Audio audio;
     std::vector<CarModel> models;
+    std::vector<struct ImportedModel*> importedModels;
     std::vector<EventDef> events;
     Mesh blobMesh, beaconMesh, ringMesh, gateMesh;
 
@@ -93,6 +106,24 @@ private:
     Camera cam;
     int camMode = 0;
     float camYaw = 0;
+    float mapRangeSm = 260.f;
+    const Camera* drawCam = nullptr;  // camera of the pass being rendered (main or reflection)
+    // menu art: rendered once from the live world
+    GLuint menuThumb[8] = {};
+    bool menuThumbsBuilt = false, pauseShotPending = false;
+    std::vector<GLuint> carThumb;     // per spec, lazily rendered
+    std::vector<Racer*> thumbCars;
+    bool thumbActive = false;
+    std::vector<int> dealerOrder;     // dealership listing order (by class/price)
+    int sellConfirm = -1;             // garage slot awaiting a second sell press
+    int dealerSpec() const { return dealerOrder.empty() ? 0 : dealerOrder[std::clamp(subSel, 0, int(dealerOrder.size()) - 1)]; }
+    GLuint captureThumb(const Camera& c, const Atmosphere* atmo, float aspect);
+    void buildMenuThumbs();
+    void buildCarThumb(int spec);
+    Racer makeShowCar(int spec, int paint, vec3 pos, float yaw);
+    void photoSpot(vec3& carPos, float& carYaw, vec3& camPos, vec3& camTarget, float len);
+    void drawCarCards(bool garageMode, float y, float h);
+    int sellValue(const OwnedCar& oc) const;
     vec3 camPos;
     float shake = 0;
     bool lookBack = false;
@@ -109,7 +140,73 @@ private:
     std::vector<Controls> ctl;     // per racer (race) controls
     Controls playerCtl;
     bool autopilot = false;
+    bool devDonut = false;
+    bool keyArt = false;
     int nearEvent = -1;
+    // ---- progression & Horizon-style features (features.cpp)
+    int xp = 0, level = 1, wheelspins = 0;
+    std::vector<CarSpec> tuned;                 // per garage slot, upgrades applied
+    std::vector<PRStunt> stunts;
+    Mesh stuntMesh;
+    int zoneActive = -1;
+    float zoneTime = 0, zoneDist = 0;
+    struct Popup { std::string title, name, value; int stars = 0; bool best = false; float t = 0; vec4 col; };
+    Popup popup;
+    // skill chain
+    float chainScore = 0, chainMult = 1, chainTimer = 0, chainFlash = 0;
+    std::vector<std::pair<std::string, int>> chainSkills;
+    float speedSkillAcc = 0, lastAirT = 0, nearMissCool = 0;
+    // rewind
+    struct Snapshot { std::vector<Racer> racers; float raceTime; float camYaw; };
+    std::vector<Snapshot> rewindBuf;
+    int rewindHead = 0, rewindCount = 0, rewindTick = 0;
+    bool rewinding = false;
+    // photo mode
+    float photoYaw = 0, photoPitch = 0.2f, photoDist = 6.f, photoFov = 0.9f;
+    bool photoHideUi = false;
+    State photoReturn = ST_FREEROAM;
+    // wheelspin
+    struct SpinPrize { int credits = 0; int car = -1; };
+    std::vector<SpinPrize> spinReel;
+    float spinT = -1, spinPos = 0;
+    int spinResult = -1;
+    // upgrades screen
+    int upSel = 0;
+
+    int xpToNext() const { return 1000 + (level - 1) * 400; }
+    void addXP(int amount);
+    CarSpec tunedSpec(const OwnedCar& oc) const;
+    void rebuildTuned();
+    int upgradeCost(const OwnedCar& oc, int part) const;
+    void buildStunts();
+    void updateStunts(float dt);
+    void showPopup(const std::string& title, const std::string& name, const std::string& value, int stars, bool best, vec4 col);
+    void chainAdd(const std::string& skill, int points);
+    void chainBank();
+    void chainBreak();
+    void recordRewind();
+    bool stepRewind();
+    bool rewindHeld();
+    void enterPhoto();
+    void updatePhoto(float dt);
+    void startWheelspin();
+    void updateWheelspin(float dt);
+    void drawPopup();
+    void drawChain();
+    void drawWheelspin();
+    void drawUpgrades();
+    void drawPhoto();
+    void drawStuntsOnMinimap(vec2 c, float Rr, std::function<vec2(vec3)> toScreen);
+    bool photoCapture = false;
+
+    Effects fx;
+    // GPS
+    Gps gps;
+    int gpsEvent = -1;          // user-selected waypoint event (-1 = auto: nearest unfinished event)
+    bool gpsHub = false;        // waypoint is the festival hub
+    int gpsShown = -1;          // event the route currently leads to (-2 = hub)
+    float gpsTimer = 0;
+    void updateGps(float dt);
     bool nearHub = false;
     Racer showCar;
     int dealerPaint = 0;
@@ -145,6 +242,8 @@ private:
     void render();
     void renderWorld(const Camera& c, bool showroom);
     void drawCar(Racer& r, Shader& s, bool glassPass = false);
+    void drawImported(Racer& r, bool glassPass, const Camera& c);
+    mat4 importedPartMatrix(Racer& r, int role) const;
     void drawHud();
     void drawSpeedo();
     void drawMinimap();

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(ridgeline VERSION 1.0.0 LANGUAGES CXX)
+project(ridgeline VERSION 3.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -21,6 +21,8 @@ add_executable(ridgeline
   src/textures.cpp
   src/world.cpp
   src/cars.cpp
+  src/carimport.cpp src/gps.cpp src/features.cpp src/effects.cpp
+  src/inflate.cpp
   src/vehicle.cpp
   src/race.cpp
   src/hud.cpp
@@ -39,3 +41,7 @@ include(GNUInstallDirs)
 install(TARGETS ridgeline RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES packaging/ridgeline.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(FILES packaging/ridgeline.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
+foreach(sz 16 24 32 48 64 128 256 512)
+  install(FILES packaging/icons/ridgeline-${sz}.png DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/${sz}x${sz}/apps RENAME ridgeline.png)
+endforeach()
+install(FILES packaging/icons/ridgeline-256.png DESTINATION ${CMAKE_INSTALL_DATADIR}/pixmaps RENAME ridgeline.png)

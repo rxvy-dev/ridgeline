@@ -32,6 +32,7 @@ struct Vehicle {
     bool reversing = false;
     float shiftTimer = 0;
     bool assists = true;  // traction control + stability assist
+    float tcsLight = 0, absLight = 0, scLight = 0;  // HUD indicator intensities
 
     // derived constants
     float finalDrive = 3.5f, dragK = 0.4f, rollRes = 200.f, inertia = 2500.f, aFront = 1.3f, bRear = 1.3f;

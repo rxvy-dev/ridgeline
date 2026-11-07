@@ -1,6 +1,8 @@
 #include "hud.h"
 #include "font_atlas.h"
 #include <cstdio>
+#include <cmath>
+#include <algorithm>
 
 void Hud::init(Shader* s, GLuint map) {
     sh = s;
@@ -50,6 +52,7 @@ void Hud::begin(int width, int height) {
     sh->set("uScreen", vec2(w, h));
     sh->set("uFont", 0);
     sh->set("uMap", 1);
+    sh->set("uImg", 2);
     sh->set("uClip", vec3(0, 0, 0));
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, mapTex);
@@ -158,6 +161,46 @@ float Hud::text(float x, float y, float px, const std::string& s, vec4 col, int 
 
 void Hud::mapQuad(vec2 p[4], vec2 uv[4], vec4 tint) {
     quad(p[0], p[1], p[2], p[3], tint, 2, uv[0], uv[1], uv[2], uv[3]);
+}
+
+void Hud::image(float x, float y, float iw, float ih, GLuint tex, vec4 tint, vec2 uv0, vec2 uv1) {
+    flush();
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glActiveTexture(GL_TEXTURE0);
+    quad({x, y}, {x + iw, y}, {x + iw, y + ih}, {x, y + ih}, tint, 3, {uv0.x, uv0.y}, {uv1.x, uv0.y}, {uv1.x, uv1.y}, {uv0.x, uv1.y});
+    flush();
+}
+
+void Hud::triangleC(vec2 a, vec2 b, vec2 c, vec4 ca, vec4 cb, vec4 cc) {
+    V va{a.x, a.y, 0, 0, c8(ca.x), c8(ca.y), c8(ca.z), c8(ca.w), 0};
+    V vb{b.x, b.y, 0, 0, c8(cb.x), c8(cb.y), c8(cb.z), c8(cb.w), 0};
+    V vc{c.x, c.y, 0, 0, c8(cc.x), c8(cc.y), c8(cc.z), c8(cc.w), 0};
+    verts.insert(verts.end(), {va, vb, vc});
+}
+
+void Hud::disc(vec2 c, float r, vec4 inner, vec4 outer, int seg) {
+    for (int i = 0; i < seg; i++) {
+        float a0 = i / float(seg) * 2 * PI, a1 = (i + 1) / float(seg) * 2 * PI;
+        triangleC(c, c + vec2(std::cos(a0), std::sin(a0)) * r, c + vec2(std::cos(a1), std::sin(a1)) * r, inner, outer, outer);
+    }
+}
+
+void Hud::roundRect(float x, float y, float rw, float rh, float r, vec4 col) {
+    r = std::min(r, std::min(rw, rh) * 0.5f);
+    rect(x + r, y, rw - 2 * r, rh, col);
+    rect(x, y + r, r, rh - 2 * r, col);
+    rect(x + rw - r, y + r, r, rh - 2 * r, col);
+    vec2 cs[4] = {{x + r, y + r}, {x + rw - r, y + r}, {x + rw - r, y + rh - r}, {x + r, y + rh - r}};
+    for (int k = 0; k < 4; k++) arc(cs[k], 0, r, PI + k * PI * 0.5f, PI + (k + 1) * PI * 0.5f, col, 6);
+}
+
+void Hud::rectH(float x, float y, float rw, float rh, vec4 l, vec4 r) {
+    V a{x, y, 0, 0, c8(l.x), c8(l.y), c8(l.z), c8(l.w), 0};
+    V b{x + rw, y, 0, 0, c8(r.x), c8(r.y), c8(r.z), c8(r.w), 0};
+    V c{x + rw, y + rh, 0, 0, b.r, b.g, b.b, b.a, 0};
+    V d{x, y + rh, 0, 0, a.r, a.g, a.b, a.a, 0};
+    verts.insert(verts.end(), {a, b, c, a, c, d});
 }
 
 std::string fmtThousands(long long v) {

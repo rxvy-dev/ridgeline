@@ -144,8 +144,11 @@ void Vehicle::update(float dt, const World& w, const Controls& in) {
             // and back off further when the tyres are already working hard sideways
             float latF = std::fabs(tyreCurve(alphaF)), latR = std::fabs(tyreCurve(alphaR));
             float capF = muF * FzF * (0.92f - 0.45f * latF), capR = muR * FzR * (0.92f - 0.45f * latR);
+            float pre = std::fabs(driveF) + std::fabs(driveR);
             driveF = clampf(driveF, -capF, capF);
             if (handbrake < 0.1f) driveR = clampf(driveR, -capR, capR);
+            if (pre > (std::fabs(driveF) + std::fabs(driveR)) * 1.05f && throttle > 0.2f) tcsLight = 1.f;
+            if (brake > 0.7f && v > 6.f) absLight = 1.f;
         }
         float dir = vF > 0.3f ? 1.f : (vF < -0.3f ? -1.f : 0.f);
         float brakeF = brake * m * G * 1.15f * 0.6f * dir;
@@ -189,8 +192,11 @@ void Vehicle::update(float dt, const World& w, const Controls& in) {
     if (assists && grounded && v > 8.f && handbrake < 0.1f) {
         float sa = std::atan2(vR, std::fabs(vF));
         float excess = std::fabs(sa) - 0.16f;
-        if (excess > 0) torque += signf(sa) * excess * inertia * 9.f;
+        if (excess > 0) { torque += signf(sa) * excess * inertia * 9.f; scLight = 1.f; }
     }
+    tcsLight = std::max(0.f, tcsLight - dt * 3.f);
+    absLight = std::max(0.f, absLight - dt * 3.f);
+    scLight = std::max(0.f, scLight - dt * 3.f);
     vec3 accel = fwd * (FxTot / m) + rgt * (FyTot / m);
     vel.x += accel.x * dt;
     vel.z += accel.z * dt;

@@ -9,6 +9,8 @@ struct Audio {
     std::atomic<int> cylinders{4};
     std::atomic<float> impactReq{0};
     std::atomic<float> beepFreq{0}, beepLen{0};
+    std::atomic<int> horn{0};
+    float hornEnv = 0, hornPh1 = 0, hornPh2 = 0, hornLp = 0;
     // synth state (audio thread only)
     double phase = 0, subPhase = 0;
     float lp = 0, lp2 = 0, noiseLp = 0, bp1 = 0, bp2 = 0, windLp = 0;

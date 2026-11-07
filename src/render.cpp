@@ -306,6 +306,7 @@ bool Renderer::init() {
     ok &= terrain.build("terrain", kLitVS, kTerrainFS, true);
     ok &= road.build("road", kLitVS, kRoadFS, true);
     ok &= object.build("object", kLitVS, kObjectFS, true);
+    ok &= car.build("car", kLitVS, kCarFS, true);
     ok &= tree.build("tree", kTreeVS, kTreeFS, true);
     ok &= grass.build("grass", kGrassVS, kGrassFS, true);
     ok &= water.build("water", kLitVS, kWaterFS, true);
@@ -364,6 +365,10 @@ void Renderer::destroyTargets() {
         if (bloomTex[i]) glDeleteTextures(1, &bloomTex[i]);
         bloomFbo[i] = bloomTex[i] = 0;
     }
+    if (reflFbo) glDeleteFramebuffers(1, &reflFbo);
+    if (reflTex) glDeleteTextures(1, &reflTex);
+    if (reflDepth) glDeleteRenderbuffers(1, &reflDepth);
+    reflFbo = reflTex = reflDepth = 0;
     sceneFbo = sceneTex = sceneDepth = msFbo = msColor = msDepth = 0;
 }
 
@@ -404,6 +409,16 @@ void Renderer::resize(int w, int h) {
         glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo[i]);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bloomTex[i], 0);
     }
+    rw = std::max(width / 2, 8);
+    rh = std::max(height / 2, 8);
+    reflTex = makeColorTex(rw, rh);
+    glGenRenderbuffers(1, &reflDepth);
+    glBindRenderbuffer(GL_RENDERBUFFER, reflDepth);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, 0, GL_DEPTH_COMPONENT24, rw, rh);
+    glGenFramebuffers(1, &reflFbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, reflFbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, reflTex, 0);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, reflDepth);
     if (msaa > 1 && usePost) {
         GLint maxS = 0;
         glGetIntegerv(GL_MAX_SAMPLES, &maxS);
@@ -462,6 +477,24 @@ void Renderer::setCommon(Shader& s, const Camera& cam) {
     s.set("tRoadDist", int(U_ROADDIST));
     s.set("tFlakes", int(U_FLAKES));
     s.set("uGlassPass", 0);
+    s.set("tBase", int(U_CARBASE));
+    s.set("tNormal", int(U_CARNORMAL));
+    s.set("tEmis", int(U_CAREMIS));
+    s.set("tRefl", int(U_REFL));
+    s.set("uClipY", clipY);
+}
+
+void Renderer::beginReflection() {
+    glBindFramebuffer(GL_FRAMEBUFFER, reflFbo);
+    glViewport(0, 0, rw, rh);
+    glClearColor(atmo.fogColor.x, atmo.fogColor.y, atmo.fogColor.z, 1);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    tex.bindAll();
+    endShadowPasses();
 }
 
 void Renderer::beginShadowPass(int c, vec3 focus, float extent, float depthRange) {

@@ -14,9 +14,9 @@ static void usage() {
         "  --fullscreen           start fullscreen\n"
         "  --help                 show this help\n\n"
         "Developer options:\n"
-        "  --scene NAME           jump to: hub|drive|race|dealer|garage|map|pause|settings\n"
+        "  --scene NAME           jump to: hub|drive|race|dealer|garage|map|pause|settings|\n                         wheelspin|upgrade|photo|keyart|trap|donut|spot\n"
         "  --event N              event index for --scene race\n"
-        "  --car N                give and use car N (0-9)\n"
+        "  --car N                give and use car N\n  --at X,Z,YAW           spawn point for --scene spot\n"
         "  --sim SECONDS          fast-forward the simulation before rendering\n"
         "  --shot FILE.bmp        render, save a screenshot and quit\n"
         "  --frames N             quit after N frames\n");
@@ -39,6 +39,7 @@ int main(int argc, char** argv) {
         else if (!std::strcmp(argv[i], "--frames")) o.frames = std::atoi(next());
         else if (!std::strcmp(argv[i], "--look")) o.look = float(std::atof(next()));
         else if (!std::strcmp(argv[i], "--cam")) o.cam = std::atoi(next());
+        else if (!std::strcmp(argv[i], "--at")) o.at = next();
     }
     if (o.width < 320) o.width = 1280;
     if (o.height < 240) o.height = 720;

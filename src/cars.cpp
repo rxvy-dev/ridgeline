@@ -1,8 +1,9 @@
 #include "cars.h"
 #include <algorithm>
+#include <cctype>
 
 // All manufacturers and models are invented for this game.
-const std::vector<CarSpec> kCars = {
+std::vector<CarSpec> kCars = {
     // make       model            cls price    kW    kg    top  drive grip  off   redl  body          color                    strp  spl   len   wid   hgt   wb    wheelR
     {"Kito",     "Pulsar 1.6",     'D', 0,       92,  1080, 192, FWD, 1.00f, 0.55f, 6800, BODY_HATCH,     {0.80f, 0.10f, 0.08f}, false, false, 3.95f, 1.74f, 1.45f, 2.50f, 0.31f},
     {"Corvo",    "Rallye 2.0",     'D', 18000,  138,  1230, 208, AWD, 1.02f, 0.85f, 7200, BODY_RALLY,     {0.92f, 0.92f, 0.90f}, true,  true,  4.05f, 1.78f, 1.46f, 2.55f, 0.32f},
@@ -15,6 +16,13 @@ const std::vector<CarSpec> kCars = {
     {"Strada",   "Rossa V12",      'S', 360000, 610,  1630, 335, RWD, 1.20f, 0.30f, 8500, BODY_GT,        {0.45f, 0.04f, 0.06f}, false, false, 4.70f, 1.98f, 1.27f, 2.72f, 0.35f},
     {"Tempest",  "Vortex",         'S', 1150000, 880, 1420, 395, AWD, 1.30f, 0.35f, 9000, BODY_HYPER,     {0.06f, 0.06f, 0.07f}, true,  true,  4.60f, 2.03f, 1.13f, 2.70f, 0.35f},
 };
+
+std::string carId(const CarSpec& s) {
+    if (!s.id.empty()) return s.id;
+    std::string r;
+    for (char c : s.make + "_" + s.model) r += (std::isalnum((unsigned char)c) ? char(std::tolower((unsigned char)c)) : '_');
+    return r;
+}
 
 const vec3 kPaints[] = {
     {0.80f, 0.10f, 0.08f}, {0.95f, 0.42f, 0.06f}, {0.95f, 0.72f, 0.10f}, {0.45f, 0.78f, 0.10f},

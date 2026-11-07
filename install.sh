@@ -69,7 +69,8 @@ if [ "$UNINSTALL" -eq 1 ]; then
         [ -n "$f" ] && { $INSTALL_AS rm -f "$f" && echo "  removed $f"; }
     done < "$MANIFEST"
     $INSTALL_AS rm -f "$MANIFEST"
-    $INSTALL_AS rmdir "$PREFIX/share/$APP" "$PREFIX/lib/$APP" 2>/dev/null || true
+    for d in "$PREFIX/share/$APP/cars"/*/; do [ -d "$d" ] && $INSTALL_AS rmdir "$d" 2>/dev/null; done
+    $INSTALL_AS rmdir "$PREFIX/share/$APP/cars" "$PREFIX/share/$APP" "$PREFIX/lib/$APP" 2>/dev/null || true
     have update-desktop-database && $INSTALL_AS update-desktop-database "$PREFIX/share/applications" 2>/dev/null || true
     ok "Uninstalled. Your save game is kept in ~/.local/share/rxvy/ridgeline/"
     exit 0
@@ -231,6 +232,21 @@ while IFS= read -r f || [ -n "$f" ]; do files+=("$f"); done < "$HERE/build/insta
 # point the desktop entry at the absolute binary path (works even if PREFIX/bin is not on PATH)
 DESK="$PREFIX/share/applications/ridgeline.desktop"
 $INSTALL_AS sed -i "s|^Exec=.*|Exec=$PREFIX/bin/$APP|" "$DESK"
+# absolute icon path too, so launchers show it even before the icon cache is refreshed
+$INSTALL_AS sed -i "s|^Icon=.*|Icon=$PREFIX/share/icons/hicolor/256x256/apps/$APP.png|" "$DESK"
+# local car packs (./cars/<name>/ with car.ini + model.rcar) - never committed, installed if present
+if [ -d "$HERE/cars" ]; then
+    for d in "$HERE"/cars/*/; do
+        [ -f "${d}car.ini" ] && [ -f "${d}model.rcar" ] || continue
+        name="$(basename "$d")"
+        $INSTALL_AS mkdir -p "$PREFIX/share/$APP/cars/$name"
+        for f in "${d}"*; do
+            $INSTALL_AS cp "$f" "$PREFIX/share/$APP/cars/$name/"
+            files+=("$PREFIX/share/$APP/cars/$name/$(basename "$f")")
+        done
+        ok "installed car pack: $name"
+    done
+fi
 if [ -n "$SDL_PREFIX" ]; then
     $INSTALL_AS mkdir -p "$PREFIX/lib/$APP"
     for so in "$SDL_PREFIX"/lib/libSDL3.so*; do
@@ -241,6 +257,8 @@ if [ -n "$SDL_PREFIX" ]; then
 fi
 printf '%s\n' "${files[@]}" | $INSTALL_AS tee "$MANIFEST" >/dev/null
 have update-desktop-database && $INSTALL_AS update-desktop-database "$PREFIX/share/applications" 2>/dev/null || true
+have gtk-update-icon-cache && $INSTALL_AS gtk-update-icon-cache -q -t "$PREFIX/share/icons/hicolor" 2>/dev/null || true
+have xdg-icon-resource && xdg-icon-resource forceupdate 2>/dev/null || true
 
 # sanity check: the binary resolves its libraries
 if have ldd && ldd "$PREFIX/bin/$APP" | grep -q "not found"; then

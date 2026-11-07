@@ -251,32 +251,47 @@ Img makeRock(Img& height) {
 }
 
 Img makeAsphalt(Img& height) {
-    const int S = 512;
+    // 1024px covers 4 m: dense aggregate in a dark binder, a few larger stones, sealed cracks
+    const int S = 1024;
     Img im(S, S);
     Rng r(11);
     for (int y = 0; y < S; y++)
         for (int x = 0; x < S; x++) {
             float u = x / float(S), v = y / float(S);
             float n = tfbm(u, v, 3, 4, 601);
-            float g = tfbm(u, v, 128, 2, 602);
-            float base = 0.20f + 0.05f * n + 0.06f * (g - 0.5f);
-            im.at(x, y) = vec4(base, base, base * 1.03f, 1);
-            height.at(x, y) = vec4(0, 0, 0, g);
+            float g = tfbm(u, v, 160, 2, 602);
+            float g2 = tfbm(u, v, 48, 3, 603);
+            float base = 0.17f + 0.045f * n + 0.05f * (g - 0.5f) + 0.03f * (g2 - 0.5f);
+            im.at(x, y) = vec4(base, base * 0.995f, base * 1.02f, 1);
+            height.at(x, y) = vec4(0, 0, 0, g * 0.4f + g2 * 0.3f);
         }
-    for (int i = 0; i < 26000; i++) {
-        int x = r.irange(0, S - 1), y = r.irange(0, S - 1);
-        float b = r.f() < 0.5f ? r.range(0.32f, 0.48f) : r.range(0.08f, 0.13f);
-        vec4& p = im.at(x, y);
-        p = vec4(b, b, b, 1);
-        height.at(x, y).w += b > 0.3f ? 0.4f : -0.2f;
+    // aggregate: tens of thousands of small stones with soft edges and a lit top
+    for (int i = 0; i < 52000; i++) {
+        float cx = r.f() * S, cy = r.f() * S;
+        float rad = r.f() < 0.9f ? r.range(0.8f, 2.0f) : r.range(2.2f, 4.2f);
+        float tone = r.f();
+        float g1 = r.range(0.30f, 0.46f), g2 = r.range(0.09f, 0.14f), g3 = r.range(0.8f, 1.15f);
+        vec3 col = tone < 0.55f ? vec3(g1, g1, g1) : tone < 0.85f ? vec3(g2, g2, g2) : vec3(0.42f, 0.36f, 0.30f) * g3;
+        int x0 = int(cx - rad - 1), x1 = int(cx + rad + 1), y0 = int(cy - rad - 1), y1 = int(cy + rad + 1);
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++) {
+                float d = std::sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy)) / rad;
+                if (d > 1.f) continue;
+                float a = smoothstepf(1.f, 0.6f, d);
+                float lit = 1.f + 0.25f * ((cy - y) / rad);  // light from the top
+                vec4& p = im.at(x, y);
+                vec3 c = col * lit;
+                p = vec4(lerpf(p.x, c.x, a), lerpf(p.y, c.y, a), lerpf(p.z, c.z, a), 1);
+                height.at(x, y).w += a * (0.35f + rad * 0.05f) * (1.f - d * d);
+            }
     }
     // tar-sealed cracks
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 14; i++) {
         float x = r.f() * S, y = r.f() * S, a = r.range(0, 6.28f);
-        for (int k = 0; k < 18; k++) {
-            float nx = x + std::cos(a) * 9, ny = y + std::sin(a) * 9;
-            stroke(im, x, y, nx, ny, 2.2f, 2.2f, vec3(0.08f, 0.08f, 0.085f), vec3(0.08f, 0.08f, 0.085f), 0.8f);
-            x = nx; y = ny; a += r.range(-0.6f, 0.6f);
+        for (int k = 0; k < 26; k++) {
+            float nx = x + std::cos(a) * 14, ny = y + std::sin(a) * 14;
+            stroke(im, x, y, nx, ny, 4.f, 3.f, vec3(0.055f, 0.055f, 0.06f), vec3(0.06f, 0.06f, 0.065f), 0.85f);
+            x = nx; y = ny; a += r.range(-0.55f, 0.55f);
         }
     }
     return im;
@@ -402,9 +417,9 @@ void Textures::generate() {
     Img rh(1024, 1024);
     rock = upload(makeRock(rh), true, false);
     rockN = upload(normalsFrom(rh, 6.f), true, false);
-    Img ah(512, 512);
+    Img ah(1024, 1024);
     asphalt = upload(makeAsphalt(ah), true, false);
-    asphaltN = upload(normalsFrom(ah, 2.5f), true, false);
+    asphaltN = upload(normalsFrom(ah, 3.5f), true, false);
     bark = upload(makeBark(), true, false);
     pine = upload(makePine(), false, true);
     leaves = upload(makeLeaves(), false, true);

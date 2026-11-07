@@ -1,8 +1,56 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-  <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1b1d24"/><stop offset="1" stop-color="#3a1f14"/></linearGradient></defs>
-  <rect width="256" height="256" rx="44" fill="url(#sky)"/>
-  <circle cx="176" cy="88" r="30" fill="#ff8a2a"/>
-  <path d="M0 176 L62 104 L104 146 L150 84 L256 190 L256 256 L0 256 Z" fill="#0d0e12"/>
-  <path d="M74 256 C104 214 150 196 210 186" stroke="#ff6b1f" stroke-width="16" fill="none" stroke-linecap="round"/>
-  <path d="M110 238 C130 220 152 210 180 204" stroke="#ffe2c4" stroke-width="4" stroke-dasharray="10 10" fill="none"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#14203f"/>
+      <stop offset="0.45" stop-color="#7a3b5a"/>
+      <stop offset="0.72" stop-color="#ff8a3d"/>
+      <stop offset="1" stop-color="#ffc277"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff4d6"/>
+      <stop offset="0.35" stop-color="#ffd27a"/>
+      <stop offset="1" stop-color="#ff8a3d" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ridgeFar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8a4a63"/>
+      <stop offset="1" stop-color="#5c2f4a"/>
+    </linearGradient>
+    <linearGradient id="ridgeMid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a2240"/>
+      <stop offset="1" stop-color="#2a1430"/>
+    </linearGradient>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b1626"/>
+      <stop offset="1" stop-color="#0f0a12"/>
+    </linearGradient>
+    <linearGradient id="road" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3b3540"/>
+      <stop offset="1" stop-color="#17141b"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.35"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="tile"><rect x="16" y="16" width="480" height="480" rx="96"/></clipPath>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect x="0" y="0" width="512" height="512" fill="url(#sky)"/>
+    <circle cx="300" cy="196" r="170" fill="url(#sun)"/>
+    <circle cx="300" cy="196" r="44" fill="#fff1cf"/>
+    <path d="M0 300 L70 236 L118 262 L186 196 L236 238 L292 186 L352 244 L410 206 L512 280 L512 512 L0 512 Z" fill="url(#ridgeFar)"/>
+    <path d="M0 336 L58 292 L120 318 L176 268 L240 316 L320 262 L396 318 L452 288 L512 322 L512 512 L0 512 Z" fill="url(#ridgeMid)"/>
+    <path d="M0 360 C120 330 380 330 512 362 L512 512 L0 512 Z" fill="url(#ground)"/>
+    <!-- winding road -->
+    <path d="M60 512 C150 450 330 440 300 392 C284 368 266 356 300 340 L312 340 C286 356 300 370 318 392 C356 448 230 470 220 512 Z" fill="url(#road)"/>
+    <path d="M140 512 C200 470 312 440 306 394 C302 372 290 358 306 342" stroke="#ff7a24" stroke-width="7" fill="none" stroke-linecap="round" stroke-dasharray="26 18"/>
+    <path d="M60 512 C150 450 330 440 300 392 C284 368 266 356 300 340" stroke="#f3e6d8" stroke-width="4" fill="none" opacity="0.85"/>
+    <path d="M220 512 C230 470 356 448 318 392 C300 370 286 356 312 340" stroke="#f3e6d8" stroke-width="4" fill="none" opacity="0.85"/>
+    <!-- pines -->
+    <g fill="#0b0810">
+      <path d="M40 372 l14 -58 l14 58 z"/><path d="M62 380 l11 -44 l11 44 z"/>
+      <path d="M430 376 l13 -56 l13 56 z"/><path d="M456 384 l10 -40 l10 40 z"/><path d="M408 384 l9 -34 l9 34 z"/>
+    </g>
+  </g>
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="url(#rim)"/>
+  <rect x="18" y="18" width="476" height="476" rx="94" fill="none" stroke="#ffffff" stroke-opacity="0.12" stroke-width="4"/>
 </svg>

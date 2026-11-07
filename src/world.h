@@ -24,8 +24,8 @@ struct World {
     static constexpr int N = 1201;          // heightmap vertices per side (2.5 m grid)
     static constexpr float CELL = 2 * HALF / (N - 1);
     float waterLevel = 6.f;
-    vec3 lakeCenter = vec3(380, 0, -300);
-    float lakeRadius = 230.f;
+    struct Lake { vec3 c; float r; float seed; };
+    std::vector<Lake> lakes = {{vec3(380, 0, -300), 250.f, 1.f}, {vec3(-640, 0, -960), 230.f, 2.3f}, {vec3(980, 0, -880), 190.f, 4.1f}, {vec3(520, 0, 430), 80.f, 5.7f}};
     vec3 hubPos;           // festival hub centre
     float hubYaw = 0.f;    // spawn heading at hub
     vec3 hubSpawn;

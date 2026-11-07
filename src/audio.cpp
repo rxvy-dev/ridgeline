@@ -91,7 +91,17 @@ void Audio::generate(float* out, int frames) {
             beepEnv -= dt / std::max(bl, 0.02f);
             if (beepEnv < 0) beepEnv = 0;
         }
-        float mix = (engine + squeal + wind + imp + bp) * vol;
+        // ---- horn: two detuned square waves through a soft low-pass
+        float hn = 0;
+        hornEnv += ((horn ? 1.f : 0.f) - hornEnv) * 0.004f;
+        if (hornEnv > 0.001f) {
+            hornPh1 += 392.f * dt; if (hornPh1 > 1) hornPh1 -= 1;
+            hornPh2 += 494.f * dt; if (hornPh2 > 1) hornPh2 -= 1;
+            float sq = (hornPh1 < 0.5f ? 1.f : -1.f) + (hornPh2 < 0.5f ? 1.f : -1.f);
+            hornLp += (sq - hornLp) * 0.18f;
+            hn = hornLp * 0.16f * hornEnv;
+        }
+        float mix = (engine + squeal + wind + imp + bp + hn) * vol;
         mix = std::tanh(mix);
         out[i * 2] = mix;
         out[i * 2 + 1] = mix;

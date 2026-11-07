@@ -26,13 +26,17 @@ float World::baseHeight(float x, float z) const {
     // keep lowlands dry (only the lake goes below water)
     float floorH = waterLevel + 3.f;
     if (h < floorH) h = floorH - (floorH - h) * 0.15f;
-    // lake bowl with a slightly irregular shoreline
-    float dx = x - lakeCenter.x, dz = z - lakeCenter.z;
-    float dl = std::sqrt(dx * dx + dz * dz);
-    float ang = std::atan2(dz, dx);
-    float rr = lakeRadius * (1.f + 0.18f * std::sin(ang * 3.f + 1.f) + 0.08f * std::sin(ang * 7.f));
-    float lk = 1.f - smoothstepf(rr * 0.55f, rr * 1.2f, dl);
-    h = lerpf(h, waterLevel - 12.f, lk);
+    // lake bowls with irregular shorelines
+    for (const Lake& L : lakes) {
+        float dx = x - L.c.x, dz = z - L.c.z;
+        float dl = std::sqrt(dx * dx + dz * dz);
+        if (dl > L.r * 1.6f) continue;
+        float ang = std::atan2(dz, dx);
+        float rr = L.r * (1.f + 0.18f * std::sin(ang * 3.f + L.seed) + 0.08f * std::sin(ang * 7.f + L.seed * 2.f) + 0.05f * std::sin(ang * 13.f + L.seed));
+        float lk = 1.f - smoothstepf(rr * 0.5f, rr * 1.15f, dl);
+        float depth = 6.f + L.r * 0.04f;
+        h = lerpf(h, waterLevel - depth, lk);
+    }
     return h;
 }
 
@@ -639,12 +643,12 @@ void World::buildGPU() {
                 vec3 n = normalize(cross(right, t3));
                 float v = row == m ? r.length : r.dist[i];
                 float sh = r.surface == SURF_DIRT ? 0.8f : 1.7f;
-                b.add(c - right * (hw + sh) + vec3(0, -0.02f, 0), n, vec4(0, v, 0, 12));
-                b.add(c - right * hw + vec3(0, 0.04f, 0), n, vec4(0, v, 0, 12));
-                b.add(c - right * hw + vec3(0, 0.04f, 0), n, vec4(0, v, 0, mat));
-                b.add(c + right * hw + vec3(0, 0.04f, 0), n, vec4(1, v, 0, mat));
-                b.add(c + right * hw + vec3(0, 0.04f, 0), n, vec4(0, v, 0, 12));
-                b.add(c + right * (hw + sh) + vec3(0, -0.02f, 0), n, vec4(0, v, 0, 12));
+                b.add(c - right * (hw + sh) + vec3(0, -0.02f, 0), n, vec4(1, v, r.width, 12));
+                b.add(c - right * hw + vec3(0, 0.04f, 0), n, vec4(0, v, r.width, 12));
+                b.add(c - right * hw + vec3(0, 0.04f, 0), n, vec4(0, v, r.width, mat));
+                b.add(c + right * hw + vec3(0, 0.04f, 0), n, vec4(1, v, r.width, mat));
+                b.add(c + right * hw + vec3(0, 0.04f, 0), n, vec4(0, v, r.width, 12));
+                b.add(c + right * (hw + sh) + vec3(0, -0.02f, 0), n, vec4(1, v, r.width, 12));
             }
             for (int i = 0; i + 1 < rows; i++) {
                 uint32_t a = base + i * 6, nb = base + (i + 1) * 6;
@@ -661,17 +665,20 @@ void World::buildGPU() {
     // ---- water
     {
         MeshBuilder b;
-        const int G = 24;
-        float ext = lakeRadius * 1.6f;
-        for (int z = 0; z <= G; z++)
-            for (int x = 0; x <= G; x++)
-                b.add(vec3(lakeCenter.x - ext + x * 2 * ext / G, waterLevel, lakeCenter.z - ext + z * 2 * ext / G), vec3(0, 1, 0), vec4(1, 1, 1, 0));
-        for (int z = 0; z < G; z++)
-            for (int x = 0; x < G; x++) {
-                uint32_t a = z * (G + 1) + x;
-                b.tri(a, a + G + 1, a + 1);
-                b.tri(a + 1, a + G + 1, a + G + 2);
-            }
+        const int G = 32;
+        for (const Lake& L : lakes) {
+            float ext = L.r * 1.3f;
+            uint32_t base = uint32_t(b.v.size());
+            for (int z = 0; z <= G; z++)
+                for (int x = 0; x <= G; x++)
+                    b.add(vec3(L.c.x - ext + x * 2 * ext / G, waterLevel, L.c.z - ext + z * 2 * ext / G), vec3(0, 1, 0), vec4(1, 1, 1, 0));
+            for (int z = 0; z < G; z++)
+                for (int x = 0; x < G; x++) {
+                    uint32_t a = base + z * (G + 1) + x;
+                    b.tri(a, a + G + 1, a + 1);
+                    b.tri(a + 1, a + G + 1, a + G + 2);
+                }
+        }
         b.build(waterMesh);
     }
 
@@ -682,10 +689,10 @@ void World::buildGPU() {
         vec3 fwd(std::sin(hubYaw), 0, std::cos(hubYaw)), right(-fwd.z, 0, fwd.x);
         // plaza
         const int S = 40;
-        uint32_t ctr = b.add(c + vec3(0, 0.06f, 0), vec3(0, 1, 0), vec4(0.36f, 0.35f, 0.34f, 0));
+        uint32_t ctr = b.add(c + vec3(0, 0.06f, 0), vec3(0, 1, 0), vec4(0.46f, 0.44f, 0.41f, 13));
         for (int i = 0; i <= S; i++) {
             float a = i / float(S) * 2 * PI;
-            b.add(c + vec3(std::cos(a) * 44.f, 0.06f, std::sin(a) * 44.f), vec3(0, 1, 0), vec4(0.33f, 0.32f, 0.31f, 0));
+            b.add(c + vec3(std::cos(a) * 44.f, 0.06f, std::sin(a) * 44.f), vec3(0, 1, 0), vec4(0.42f, 0.40f, 0.38f, 13));
         }
         for (int i = 0; i < S; i++) b.tri(ctr, ctr + 2 + i, ctr + 1 + i);
         // painted ring

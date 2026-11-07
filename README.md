@@ -1,31 +1,48 @@
 # Ridgeline
 
-**A free, open-source open-world festival racer for Linux.** Drive anywhere across a procedurally generated autumn valley, race AI drivers on highways, mountain passes, dirt trails and open fields, earn credits, and buy and paint new cars at the festival dealership.
+![Ridgeline](docs/keyart.jpg)
 
-Written in C++17 with **SDL3** and OpenGL 3.3. No engine and no downloaded assets: every car, texture, tree, road and mountain is generated in code when the game starts.
+**A free, open-source open-world festival racer for Linux.** Drive anywhere across a procedurally generated autumn valley, race AI drivers on highways, mountain passes, dirt trails and open fields, hit speed traps, chain skills, level up for wheelspins, and buy, upgrade, paint and sell cars at the festival.
+
+Written in C++17 with **SDL3** and OpenGL 3.3. No engine and no downloaded assets: every built-in car, texture, tree, road and mountain is generated in code when the game starts. You can also **import your own car models** (FBX or glTF) with the included converter.
 
 ![Racing on the Ridge Highway](docs/screenshots/race.jpg)
 
 | | |
 |---|---|
-| ![Sunset title screen](docs/screenshots/title.jpg) | ![Dirt trail](docs/screenshots/trail.jpg) |
-| ![Free-look camera](docs/screenshots/freelook.jpg) | ![Mountain pass](docs/screenshots/mountain.jpg) |
-| ![Dealership](docs/screenshots/dealer.jpg) | ![Festival menu](docs/screenshots/menu.jpg) |
+| ![Free roam HUD with GPS](docs/screenshots/hud.jpg) | ![Lake with reflections](docs/screenshots/lake.jpg) |
+| ![Festival menu](docs/screenshots/menu.jpg) | ![Autoshow](docs/screenshots/dealer.jpg) |
+| ![Speed trap](docs/screenshots/trap.jpg) | ![Upgrade shop](docs/screenshots/upgrade.jpg) |
+| ![Wheelspin](docs/screenshots/wheelspin.jpg) | ![Sunset title screen](docs/screenshots/title.jpg) |
 
 ## Features
 
-- **Open world**: a 3 × 3 km valley with rolling hills, rock cliffs, a lake with a causeway, snow-capped mountains, about 38,000 pines and autumn trees, and over 10 km of roads you can leave whenever you want.
+- **Open world**: a 3 × 3 km valley with rolling hills, rock cliffs, four lakes, snow-capped mountains, about 44,000 pines and autumn trees, and over 10 km of roads you can leave whenever you want.
 - **8 race events** against 5 AI drivers: circuits, point-to-point sprints, a mountain climb, a dirt-trail scramble and an off-road cross-country race through checkpoints.
 - **Smart bots**: they brake for corners based on the road's curvature, overtake by changing lanes, recover when stuck, and use light rubber-banding so races stay close. Your opponents always drive cars from your car's class.
-- **10 fictional cars** in 5 classes (D, C, B, A, S): hatchbacks, a rally car, a muscle car, an off-road SUV, sports coupés, mid-engine supercars, a V12 GT and a hypercar. Each has its own power, weight, gearing, grip, drivetrain (FWD/RWD/AWD) and off-road ability.
-- **Economy**: win credits from race prizes (top 3 pay out, everyone else gets a participation bonus) and from **drift chains** and **jumps** anywhere in the world.
-- **Dealership and garage**: buy cars, choose from 12 paint colours, toggle racing stripes and switch between the cars you own.
-- **Driving physics**: tyre slip and grip limits, weight transfer, a 6-speed automatic gearbox, handbrake drifts, jumps and landings, grip that changes between asphalt, dirt, grass and water, and collisions with trees, rocks and other cars. Traction control and a stability assist are on by default and can be turned off.
-- **Graphics**: golden-hour lighting with two shadow cascades, bloom, filmic colour grading, sky with lit clouds, distance and height fog, and speed-based motion blur. Terrain is textured with dry grass, dirt and layered rock cliffs, and about 165,000 swaying grass tufts reach out to ~550 m in four distance tiers, so grass doesn't pop in. Shadows use two 4096² cascades with soft filtering, and sun shafts break through the trees when you face the light. Pines are built from needle-branch cards, autumn trees from leaf clusters, and both have a distant level of detail. Roads are textured asphalt with double yellow centre lines and steel guardrails. Cars have smooth bodies with wheel-arch cut-outs, panel gaps, chrome trim, shaped lights, multi-spoke alloys with brake discs and calipers, and metallic clearcoat paint that reflects the sky and tree line. Every texture is generated procedurally at startup.
-- **Free-look camera**: orbit around your car with the mouse or right stick, zoom with the scroll wheel. It re-centres behind you automatically.
-- **Cockpit view**: a full interior with dashboard, lit gauges, a steering wheel that turns with your inputs, seats, a centre console and a rear-view mirror. You can look around with the mouse, and the glass is see-through, so interiors are visible from outside too.
-- **HUD**: rev-light speedometer, rotating minimap with route and opponents, live race standings, world map with fast travel.
-- **Procedural audio**: an engine synthesised from RPM, throttle and cylinder count, tyre squeal, wind, impact sounds and UI beeps.
+- **Horizon-style progression**:
+  - **Skill chains**: drifts, air, speed, big air and near misses build one chain with a rising multiplier. Bank it for credits and XP; crash and it's gone.
+  - **XP and levels**: every level earns a **Wheelspin** with credits or a new car.
+  - **Speed traps and speed zones** on every highway, with 1 to 3 stars and personal bests.
+  - **Upgrade shop**: three stages each of engine, weight reduction and tyres. Upgrades change power, weight, grip, the PI and even the car's class.
+  - **Autoshow**: browse cars as rendered cards, compare stats against your current car, pick a paint before buying.
+  - **Garage**: switch cars, repaint, add stripes, upgrade and **sell** cars for 60% of their price.
+- **Rewind**: hold `Backspace` (or `Y` on a pad) to roll back time, in free roam and in races.
+- **Photo mode**: freeze the moment, orbit the car, change the lens, hide the UI and save the shot.
+- **GPS**: a road-network route to the event you pick on the world map, or to the nearest unfinished event, with distance.
+- **HUD in the style of the 2012 original**: an analogue tachometer with redline and a rim needle, digital speed with dim leading zeros, gear and shift light, ABS/TCS/SC lamps, and a round rotating minimap with white roads, the purple GPS line, opponents, events and PR stunts.
+- **10 fictional built-in cars** in 5 classes (D, C, B, A, S), plus any cars you import.
+- **Driving physics**: a tyre model with slip angles and a friction circle, weight transfer, a 6-speed automatic gearbox, handbrake drifts, jumps and landings, grip that changes between asphalt, dirt, grass and water, and collisions with trees, rocks and other cars. Imported cars use exactly the same physics with their own wheel positions and tyre sizes. Traction control and a stability assist are on by default and can be turned off.
+- **Graphics**:
+  - **Lighting and post**: golden-hour lighting, two 4096² shadow cascades with soft filtering, HDR bloom, sun shafts, filmic grading and speed-based motion blur.
+  - **Water**: lakes with planar reflections, depth-based colour from turquoise shallows to deep water, see-through shallows, waves and shoreline foam.
+  - **Roads**: high-resolution procedural asphalt with aggregate, sealed cracks, repair patches, polished tyre lines, dusty edges and worn markings.
+  - **Effects**: tyre smoke, dust off-road, water spray and skid marks that stay on the road.
+  - **Vegetation**: about 165,000 swaying grass tufts in four distance tiers, so grass doesn't pop in. Pines and autumn trees have distant levels of detail.
+  - **Cars**: metallic clearcoat paint. Imported cars use their own textures, normal maps and emissive lights.
+- **Menus**: every festival tile shows a live render of the world, plus card carousels, stat comparison bars and a wheelspin reel.
+- **Cameras**: chase (far and near), cockpit, hood and bumper views, and a free-look orbit with the mouse or right stick.
+- **Procedural audio**: an engine synthesised from RPM, throttle and cylinder count, tyre squeal, wind, impacts, a two-tone horn and UI sounds.
 - **Keyboard and gamepad** (Xbox, PlayStation, Switch Pro and other SDL-supported controllers), with hot-plugging.
 - Saves progress automatically.
 
@@ -75,7 +92,10 @@ cmake --build build -j
 | Brake / reverse | `S` / `↓` | Left trigger |
 | Steer | `A` `D` / `←` `→` | Left stick |
 | Handbrake | `Space` | `A` / `✕` |
-| Start event / enter hub | `Enter` | `Y` / `△` |
+| Start event / enter hub | `Enter` | `Y` / `△` (near an event) |
+| Rewind (hold) | `Backspace` | `Y` / `△` |
+| Horn | `H` | Left stick click |
+| Photo mode | `P` | Right stick click |
 | Look around (orbit the camera) | move the mouse | Right stick |
 | Zoom camera | mouse wheel | |
 | Change camera (chase far, chase near, cockpit, hood, bumper) | `C` | `RB` / `R1` |
@@ -86,19 +106,26 @@ cmake --build build -j
 | Fullscreen | `F11` | |
 | Screenshot (saved next to your save file) | `F12` | |
 
-While driving the mouse is captured for free look. Press `Esc` to get the cursor back. Menus: arrow keys or D-pad to move, `Enter` or `A` to select, `Esc` or `B` to go back, `←` `→` to change values and paint colours, `X` to toggle stripes in the garage.
+While driving the mouse is captured for free look. Press `Esc` to get the cursor back.
+
+Menus: arrow keys or D-pad to move, `Enter` or `A` to select, `Esc` or `B` to go back.
+- **Autoshow and garage**: `←` `→` pick a car, `↑` `↓` change the paint.
+- **Garage**: `U` / `RB` opens upgrades, `X` toggles stripes, and `V` / `Y` sells the selected car (press twice to confirm).
+- **World map**: `X` sets a GPS route, and `Enter` fast-travels.
+- **Photo mode**: `WASD` orbits, `Q` `E` zoom, `Z` `X` change the lens, `Enter` takes a photo and `H` hides the UI.
 
 ## How to play
 
 - The title screen shows your best car parked at a lookout at sunset.
-- You start at the **Festival Hub** (pink beacon) with **CR 25,000** and a Kito Pulsar hatchback.
-- **Events** are the tall coloured light beams: orange for circuits, blue for sprints, green for cross-country. Drive into one, stop, and press `Enter` to race. You can also fast-travel to any event from the **World Map**.
-- Finish **1st, 2nd or 3rd** to win the event's prize. Your best result for each event is shown on the map.
-- **Drift** (handbrake into a corner and hold the slide) to build a chain. Keep sliding to raise the multiplier. Stop for a moment to bank it as credits. Crashing breaks the chain.
-- **Jumps**: stay in the air for more than half a second to earn credits.
-- Press `Esc` for the **Festival menu**: resume, world map, dealership, garage, **Next Race** (jumps to the first event you haven't won), settings, and save & exit.
-- Spend credits at the **Dealership** (Festival menu, or drive into the hub and press `Enter`). Faster cars put you up against faster opponents, because bots always come from your car's class.
-- Fell in the lake or stuck in the trees? Press `R`.
+- You start at the **Festival Hub** (pink beacon) with **CR 25,000**, a starter car and one welcome **Wheelspin**. The starter is the Kito Pulsar hatchback, or an imported car marked `starter=1` (see below).
+- **Events** are the tall coloured light beams: orange for circuits, blue for sprints, green for cross-country. Drive into one, stop, and press `Enter` to race. The purple GPS line leads to the nearest event you haven't won. Pick another target on the **World Map** with `X`, or fast-travel there with `Enter`.
+- Finish **1st, 2nd or 3rd** to win the event's prize. Every finish earns XP. Your best result for each event is shown on the map.
+- **Skills**: drift, jump, drive flat out above 180 km/h and slip past rivals to build a **skill chain**. Keep doing skills to raise the multiplier. Stop for a couple of seconds and it banks as credits and XP. A crash breaks the chain.
+- **Speed traps** (orange boards) record your speed as you pass. **Speed zones** (blue boards) measure your average speed between the two boards. Three stars pay the most, and beating your best gives bonus XP.
+- **Level up** to earn Wheelspins, then spin them from the Festival menu.
+- Press `Esc` for the **Festival menu**: resume, world map, wheelspin, autoshow, garage (paint, upgrade, sell), **Next Race**, settings, and save & exit.
+- Faster cars put you up against faster opponents, because bots always come from your car's class, and upgrades can bump your class up.
+- Made a mistake? Hold `Backspace` to rewind. Fell in the lake or stuck in the trees? Press `R`.
 
 ### Events
 
@@ -128,11 +155,32 @@ While driving the mouse is captured for free look. Press `Esc` to get the cursor
 | Strada Rossa V12 | S | 360,000 | RWD | V12 grand tourer |
 | Tempest Vortex | S | 1,150,000 | AWD | 880 kW hypercar |
 
-All makes and models are invented for this game.
+All built-in makes and models are invented for this game.
+
+## Adding your own cars
+
+Ridgeline can drive any car model you're allowed to use. The converter turns a binary **FBX** (7.x) or **glTF 2.0** (`.gltf` / `.glb`) model into the game's `.rcar` format. It needs only Python 3, with no extra packages.
+
+```bash
+python3 tools/import_car.py ~/Downloads/mycar/source/car.fbx cars/mycar \
+        --textures ~/Downloads/mycar/textures --length 4.4
+```
+
+- Wheels are found from part and material names (`tire`, `tyre`, `rim`, `wheel`, `disc`, `hub`, ...) and a geometry check, then split into the four corners. Brake calipers stay fixed. Your car gets the full tyre physics with its own wheel positions and tyre radius.
+- Body paint is detected automatically, so the paint shop and the autoshow colour picker work on imported cars.
+- `--forward` fixes models that face the wrong way (`+z`, `-z`, `+x`, `-x`).
+- `--length` rescales the car to a real length in metres.
+- `--max-tex` limits the texture size (default 1024).
+- `--drop 'regex'` removes parts you don't want, such as light bars or a driver.
+- Edit the generated `cars/mycar/car.ini` to set the name, class, price, power, weight, top speed, drivetrain, grip, cylinders, stock colour, credits, and `starter=1` if you want to start with it.
+
+Put the folder in `~/.local/share/rxvy/ridgeline/cars/` to use it right away. You can also keep packs in `cars/` next to `install.sh`, and `./install.sh` installs them along with the game. Imported cars appear in the autoshow and wheelspins, and you can paint, upgrade, sell and race them like any other car.
+
+**Licensing:** model files are never committed to this repository (`cars/`, `*.rcar`, `*.fbx` and `*.glb` are git-ignored). Only import models whose licence allows it, and keep their credit line in `car.ini`; it is shown in the autoshow.
 
 ## Settings
 
-Speed units (km/h or mph), motion blur, shadows, anti-aliasing (off, 2x, 4x, 8x MSAA), draw distance (Low, Medium, High, Ultra), fullscreen, V-Sync, volume, driving assists and grass (off, near only, full distance). New installs start on Ultra with 8x MSAA, which suits an RTX 30-series or newer. On weaker GPUs, set grass to "near only", draw distance to Medium and anti-aliasing to 4x.
+Speed units (km/h or mph), motion blur, shadows, anti-aliasing (off, 2x, 4x, 8x MSAA), draw distance (Low, Medium, High, Ultra), fullscreen, V-Sync, volume, driving assists and grass (off, near only, full distance). Lake reflections are on from Medium draw distance up. New installs start on Ultra with 8x MSAA, which suits an RTX 30-series or newer. On weaker GPUs, set grass to "near only", draw distance to Medium and anti-aliasing to 4x.
 
 ## Requirements
 
@@ -140,7 +188,7 @@ Speed units (km/h or mph), motion blur, shadows, anti-aliasing (off, 2x, 4x, 8x 
 - A GPU with **OpenGL 3.3**. A dedicated GPU is recommended for High draw distance. Integrated graphics run well with grass and shadows off.
 - About 500 MB of RAM
 
-Your save file and screenshots are in `~/.local/share/rxvy/ridgeline/`.
+Your save file, screenshots (`F12`), photo-mode shots and imported cars (`cars/`) are in `~/.local/share/rxvy/ridgeline/`.
 
 ## Troubleshooting
 
@@ -156,6 +204,11 @@ Your save file and screenshots are in `~/.local/share/rxvy/ridgeline/`.
 src/
   main.cpp       command line and entry point
   game.*         state machine, menus, races, camera, HUD, saving
+  features.cpp   skill chains, XP/levels, wheelspin, speed traps/zones, rewind, photo mode, upgrades
+  effects.*      tyre smoke, dust, spray and skid marks
+  gps.*          road graph and Dijkstra routing for the GPS
+  carimport.*    loader for imported .rcar car packs
+  inflate.*      small zlib decoder for car textures
   world.*        terrain, roads, forests, lake, festival hub, map texture
   cars.*         car database and procedural car and wheel meshes
   vehicle.*      car physics (tyres, gearbox, terrain, collisions)
@@ -167,18 +220,22 @@ src/
   audio.*        procedural engine and effects synth
   gl.*           tiny OpenGL 3.3 function loader
   font_atlas.h   embedded font (generated by tools/gen_font.py)
+tools/
+  import_car.py  FBX / glTF -> .rcar car converter (pure Python)
+  fbxparse.py    binary FBX reader used by the converter
+  gen_font.py    font atlas generator
 install.sh       cross-distro installer
-packaging/       .desktop entry and icon
+packaging/       .desktop entry, SVG icon and PNG icons (16-512 px)
 ```
 
 The world is generated from a fixed seed, so everyone drives the same valley. Developer flags (`ridgeline --help`) can jump straight into a scene, fast-forward the simulation and save screenshots. `--scene bench` runs every car around a route with the AI and prints lap statistics, which is useful for tuning physics.
 
 ## Contributing
 
-Pull requests are welcome: new cars (add an entry to `kCars` in `src/cars.cpp`), new events (`buildEvents` in `src/race.cpp`), new roads (`World::generate`), better physics, sound or visuals.
+Pull requests are welcome: new built-in cars (add an entry to `kCars` in `src/cars.cpp`), new events (`buildEvents` in `src/race.cpp`), new roads (`World::generate`), new PR stunts (`Game::buildStunts`), better physics, sound or visuals. Please don't submit third-party car models.
 
 ## License
 
 MIT, see [LICENSE](LICENSE). The embedded font is DejaVu Sans Bold (Bitstream Vera / DejaVu license).
 
-Ridgeline is an independent fan project inspired by open-world festival racing games. It is not affiliated with, endorsed by or connected to any commercial racing game, publisher or car manufacturer, and it contains no assets from any of them.
+Ridgeline is an independent fan project inspired by open-world festival racing games. It is not affiliated with, endorsed by or connected to any commercial racing game, publisher or car manufacturer, and it contains no assets from any of them. Car models you import yourself remain under their own licences and are not part of this project.

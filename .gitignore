@@ -5,3 +5,13 @@ build-configure.log
 *.o
 .vscode/
 .idea/
+
+# local car packs and source models - never commit third-party models
+cars/
+*.rcar
+*.fbx
+*.FBX
+*.glb
+*.gltf
+*.blend
+__pycache__/

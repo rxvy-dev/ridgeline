@@ -64,6 +64,7 @@ typedef ptrdiff_t GLintptr;
 #define GL_RED 0x1903
 #define GL_R8 0x8229
 #define GL_RGB 0x1907
+#define GL_RGB8 0x8051
 #define GL_RGBA 0x1908
 #define GL_RGBA8 0x8058
 #define GL_RGBA16F 0x881A
@@ -156,6 +157,7 @@ typedef ptrdiff_t GLintptr;
     X(void, glTexParameterf, (GLenum, GLenum, GLfloat)) \
     X(void, glTexParameteriv, (GLenum, GLenum, const GLint*)) \
     X(void, glGenerateMipmap, (GLenum)) \
+    X(void, glCopyTexImage2D, (GLenum, GLint, GLenum, GLint, GLint, GLsizei, GLsizei, GLint)) \
     X(void, glActiveTexture, (GLenum)) \
     X(void, glDeleteTextures, (GLsizei, const GLuint*)) \
     X(void, glGenFramebuffers, (GLsizei, GLuint*)) \
