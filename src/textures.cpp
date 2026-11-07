@@ -1,5 +1,6 @@
 // Procedural texture generation. Everything here is drawn with code at startup.
 #include "textures.h"
+#include "assets.h"
 #include "mathx.h"
 #include <SDL3/SDL.h>
 #include <vector>
@@ -384,42 +385,71 @@ Img makePine() {
 
 // Deciduous leaf cluster (greyscale-ish; tinted per tree in the shader).
 Img makeLeaves() {
+    // a leaf spray: twigs carrying individual pointed leaves with midribs, gaps between them
     const int S = 512;
     Img im(S, S);
     Rng r(17);
-    // a few twigs
-    for (int i = 0; i < 9; i++) {
+    struct Tw { float x0, y0, x1, y1; };
+    std::vector<Tw> tw;
+    for (int i = 0; i < 6; i++) {
         float a = r.range(0, 6.28f);
-        stroke(im, S * 0.5f, S * 0.5f, S * 0.5f + std::cos(a) * S * 0.38f, S * 0.5f + std::sin(a) * S * 0.38f, 4.f, 1.f, vec3(0.25f, 0.2f, 0.16f), vec3(0.3f, 0.24f, 0.18f), 1.f, false);
+        float x0 = S * 0.5f + r.range(-30.f, 30.f), y0 = S * 0.5f + r.range(-30.f, 30.f);
+        float len = r.range(0.28f, 0.44f) * S;
+        tw.push_back({x0, y0, x0 + std::cos(a) * len, y0 + std::sin(a) * len});
     }
-    for (int i = 0; i < 520; i++) {
-        float ang = r.range(0, 6.28f), rad = std::sqrt(r.f()) * S * 0.44f;
-        float x = S * 0.5f + std::cos(ang) * rad, y = S * 0.5f + std::sin(ang) * rad;
-        float g = r.range(0.62f, 1.0f);
-        vec3 c(g, g * r.range(0.9f, 1.02f), g * r.range(0.8f, 0.95f));
-        float len = r.range(11, 19);
-        ellipse(im, x, y, len, len * 0.55f, r.range(0, 6.28f), c, 1.f, false, 0.45f);
-    }
+    for (auto& t : tw) stroke(im, t.x0, t.y0, t.x1, t.y1, 3.2f, 1.2f, vec3(0.22f, 0.17f, 0.12f), vec3(0.27f, 0.21f, 0.15f), 1.f, false);
+    for (int pass = 0; pass < 2; pass++)
+        for (auto& t : tw) {
+            int n = 9;
+            float ta = std::atan2(t.y1 - t.y0, t.x1 - t.x0);
+            for (int k = 0; k < n; k++) {
+                float s2 = r.range(0.15f, 1.f);
+                float bx = lerpf(t.x0, t.x1, s2), by = lerpf(t.y0, t.y1, s2);
+                float side = (k % 2) ? 1.f : -1.f;
+                float a = ta + side * r.range(0.5f, 1.2f);
+                float len = r.range(30.f, 46.f) * (pass ? 0.85f : 1.f);
+                float stem = 6.f;
+                float cx = bx + std::cos(a) * (stem + len * 0.5f), cy = by + std::sin(a) * (stem + len * 0.5f);
+                float g = r.range(0.7f, 1.05f) * (pass ? 1.f : 0.78f);
+                vec3 c(g, g * r.range(0.86f, 1.0f), g * r.range(0.72f, 0.9f));
+                stroke(im, bx, by, bx + std::cos(a) * stem, by + std::sin(a) * stem, 1.4f, 1.2f, c * 0.5f, c * 0.5f, 1.f, false);
+                // leaf blade: a pointed oval built from a few overlapping ellipses
+                for (int e = 0; e < 4; e++) {
+                    float f = (e + 0.5f) / 4.f - 0.5f;
+                    float w = len * 0.22f * (1.f - std::fabs(f) * 1.4f);
+                    ellipse(im, cx + std::cos(a) * f * len * 0.8f, cy + std::sin(a) * f * len * 0.8f, len * 0.24f, w, a, c * (0.92f + 0.12f * e / 4.f), 1.f, false, 0.25f);
+                }
+                // midrib
+                stroke(im, cx - std::cos(a) * len * 0.42f, cy - std::sin(a) * len * 0.42f, cx + std::cos(a) * len * 0.42f, cy + std::sin(a) * len * 0.42f,
+                       1.1f, 0.4f, c * 0.62f, c * 0.75f, 0.8f, false);
+            }
+        }
     return im;
 }
 
 // Grass tuft card: blades rising from the bottom edge (v=1 bottom, v=0 top).
 Img makeBlades() {
-    const int W = 256, H = 256;
+    // many thin, tapering blades in mixed late-summer colours, darker at the roots
+    const int W = 512, H = 512;
     Img im(W, H);
     Rng r(19);
-    for (int i = 0; i < 70; i++) {
-        float x0 = r.range(10, W - 10.f), h = r.range(0.45f, 1.f) * (H - 6);
-        float lean = r.range(-0.5f, 0.5f);
-        float g = r.range(0.75f, 1.15f);
-        vec3 base = vec3(0.45f, 0.40f, 0.26f) * g, tip = vec3(0.92f, 0.82f, 0.55f) * g;
-        if (r.f() < 0.3f) { base = vec3(0.30f, 0.36f, 0.18f) * g; tip = vec3(0.62f, 0.66f, 0.32f) * g; }
+    for (int i = 0; i < 260; i++) {
+        float x0 = r.range(12, W - 12.f), h = std::pow(r.range(0.25f, 1.f), 0.7f) * (H - 8);
+        float lean = r.range(-0.55f, 0.55f), curl = r.range(-0.25f, 0.25f);
+        float g = r.range(0.78f, 1.12f);
+        float kind = r.f();
+        vec3 base, tip;
+        if (kind < 0.42f) { base = vec3(0.16f, 0.22f, 0.08f); tip = vec3(0.48f, 0.58f, 0.24f); }       // green
+        else if (kind < 0.78f) { base = vec3(0.26f, 0.25f, 0.11f); tip = vec3(0.74f, 0.66f, 0.36f); }  // straw
+        else { base = vec3(0.20f, 0.20f, 0.09f); tip = vec3(0.60f, 0.56f, 0.28f); }                     // dry olive
+        base = base * g; tip = tip * g;
+        float wdt = r.range(2.5f, 5.5f);
         float px = x0, py = H - 1.f;
-        const int SEG = 8;
+        const int SEG = 10;
         for (int k = 0; k < SEG; k++) {
             float t0 = k / float(SEG), t1 = (k + 1) / float(SEG);
-            float nx = x0 + lean * h * t1 * t1, ny = H - 1.f - h * t1;
-            stroke(im, px, py, nx, ny, 5.f * (1 - t0) + 0.8f, 5.f * (1 - t1) + 0.8f, lerp(base, tip, t0), lerp(base, tip, t1), 1.f, false);
+            float nx = x0 + lean * h * t1 * t1 + curl * h * t1 * t1 * t1, ny = H - 1.f - h * t1;
+            stroke(im, px, py, nx, ny, wdt * (1 - t0) + 0.6f, wdt * (1 - t1) + 0.6f, lerp(base, tip, std::pow(t0, 0.7f)), lerp(base, tip, std::pow(t1, 0.7f)), 1.f, false);
             px = nx; py = ny;
         }
     }
@@ -453,11 +483,30 @@ void Textures::generate() {
     blades = upload(makeBlades(), false, true);
     flakes = upload(makeFlakes(), true, false);
     SDL_Log("Textures generated in %llu ms", (unsigned long long)(SDL_GetTicks() - t0));
+    loadPhoto();
+}
+
+// photo textures from assets/textures replace the generated ones they match
+void Textures::loadPhoto() {
+    auto get = [](const char* name) { return loadTextureFile(findAsset(std::string("textures/") + name), 2048); };
+    if (GLuint t = get("grass_diff.jpg")) { grass = t; photo = true; }
+    if (GLuint t = get("grass_nor.jpg")) grassN = t;
+    if (GLuint t = get("forest_diff.jpg")) dirt = t;
+    if (GLuint t = get("forest_nor.jpg")) forestN = t;
+    if (GLuint t = get("cliff_diff.jpg")) rock = t;
+    if (GLuint t = get("cliff_nor.jpg")) rockN = t;
+    if (GLuint t = get("asphalt_diff.jpg")) asphalt = t;
+    if (GLuint t = get("asphalt_nor.jpg")) asphaltN = t;
+    sand = get("sand_diff.jpg");
+    leafGround = get("leaves_diff.jpg");
+    gravel = get("gravel_diff.jpg");
 }
 
 void Textures::bindAll() const {
     const std::pair<int, GLuint> b[] = {{U_GRASS, grass}, {U_DIRT, dirt}, {U_ROCK, rock}, {U_ROCKN, rockN}, {U_ASPHALT, asphalt},
-                                        {U_ASPHALTN, asphaltN}, {U_BARK, bark}, {U_PINE, pine}, {U_LEAVES, leaves}, {U_BLADES, blades}, {U_FLAKES, flakes}};
+                                        {U_ASPHALTN, asphaltN}, {U_BARK, bark}, {U_PINE, pine}, {U_LEAVES, leaves}, {U_BLADES, blades}, {U_FLAKES, flakes},
+                                        {U_SAND, sand ? sand : dirt}, {U_LEAFGROUND, leafGround ? leafGround : dirt},
+                                        {U_GRAVEL, gravel ? gravel : dirt}, {U_GRASSN, grassN ? grassN : rockN}, {U_FORESTN, forestN ? forestN : rockN}};
     for (auto& p : b) {
         glActiveTexture(GL_TEXTURE0 + p.first);
         glBindTexture(GL_TEXTURE_2D, p.second);

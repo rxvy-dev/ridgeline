@@ -1,0 +1,17 @@
+# folder type min_scale max_scale (written by tools/import_assets.py)
+rock_moss_set_01_a rock 0.85 1.20
+rock_moss_set_01_b rock 0.85 1.20
+rock_moss_set_01_c rock 0.85 1.20
+rock_moss_set_01_d rock 0.85 1.20
+rock_moss_set_01_e rock 0.85 1.20
+rock_moss_set_01_f rock 0.85 1.20
+rock_moss_set_02_a rock 0.85 1.20
+rock_moss_set_02_b rock 0.85 1.20
+rock_moss_set_02_c rock 0.85 1.20
+rock_moss_set_02_d rock 0.85 1.20
+rock_moss_set_02_e rock 0.85 1.20
+rock_moss_set_02_f rock 0.85 1.20
+rock_moss_set_02_g rock 0.85 1.20
+boulder_01 rock 0.85 1.20
+fern_02 plant 0.80 1.30
+shrub_01 plant 0.80 1.30

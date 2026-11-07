@@ -134,6 +134,9 @@ static void buildCaliper(MeshBuilder& b) {
 
 // ---------------------------------------------------------------- body
 void CarModel::build(const CarSpec& s) {
+    dims = vec3(s.length, s.width, s.height);
+    deckY = s.height * 0.72f;
+    deckZ = -s.length * 0.5f + 0.24f;
     Shape sh = shapeFor(s.body);
     const float L = s.length, W = s.width, H = s.height;
     float zf = L * 0.5f;

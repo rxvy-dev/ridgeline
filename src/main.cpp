@@ -49,6 +49,7 @@ int main(int argc, char** argv) {
         else if (!std::strcmp(argv[i], "--record-seconds")) o.recordSec = float(std::atof(next()));
         else if (!std::strcmp(argv[i], "--orbit")) o.orbit = float(std::atof(next()));
         else if (!std::strcmp(argv[i], "--no-hud")) o.noHud = true;
+        else if (!std::strcmp(argv[i], "--wet")) o.wet = true;
     }
     if (o.width < 320) o.width = 1280;
     if (o.height < 240) o.height = 720;

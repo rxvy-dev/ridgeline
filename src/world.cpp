@@ -14,18 +14,67 @@ static float forestAt(float x, float z) {
     return smoothstepf(-0.12f, 0.22f, f);
 }
 
+static float boxMask(float x, float z, const Region& r, float feather) {
+    float dx = std::max(r.x0 - x, x - r.x1), dz = std::max(r.z0 - z, z - r.z1);
+    float d = std::max(dx, dz);
+    return 1.f - smoothstepf(0.f, feather, d);
+}
+
+static float segDist(float x, float z, vec3 a, vec3 b) {
+    vec2 ab(b.x - a.x, b.z - a.z), ap(x - a.x, z - a.z);
+    float t = clampf(dot(ap, ab) / std::max(dot(ab, ab), 1e-6f), 0.f, 1.f);
+    return length(vec2(a.x + ab.x * t - x, a.z + ab.y * t - z));
+}
+
+// corridors where the highways leave the old valley: the ridge is cut down so the climb is drivable
+static const vec3 kCorridors[][2] = {
+    {vec3(860, 0, -60), vec3(1800, 0, -250)},     // east, to the city
+    {vec3(-880, 0, 60), vec3(-2200, 0, 450)},     // west, to the farms
+    {vec3(-260, 0, -880), vec3(-500, 0, -2000)},  // south, to the coast
+};
+
+bool World::urban(float x, float z, float pad) const {
+    auto in = [&](const Region& r) { return x > r.x0 - pad && x < r.x1 + pad && z > r.z0 - pad && z < r.z1 + pad; };
+    return in(kCity) || in(kDocks) || estatePaved(x, z, pad);
+}
+
 float World::baseHeight(float x, float z) const {
+    // ---- the original valley (inside), framed by a ridge that is tallest to the north
     float h = 42.f + fbm(x / 1100.f + 3.1f, z / 1100.f - 1.7f, 4, 11) * 85.f;
     h += fbm(x / 280.f, z / 280.f, 4, 23) * 24.f;
     h += fbm(x / 70.f, z / 70.f, 3, 37) * 2.5f;
     float edge = std::max(std::fabs(x), std::fabs(z));
     float ridge = 1.f - std::fabs(fbm(x / 420.f, z / 420.f, 4, 51));
     ridge *= ridge;
-    h += smoothstepf(1000.f, 1430.f, edge) * (170.f + ridge * 170.f);
-    h += smoothstepf(650.f, 1250.f, z) * (60.f + ridge * 120.f);
-    // keep lowlands dry (only the lake goes below water)
+    float rimK = 0.35f + 0.65f * smoothstepf(400.f, 1400.f, z);
+    float hIn = h + smoothstepf(1000.f, 1430.f, edge) * (170.f + ridge * 170.f) * rimK * (1.f - smoothstepf(1500.f, 1900.f, edge));
+    hIn += smoothstepf(650.f, 1250.f, z) * (60.f + ridge * 120.f);
+    // ---- the wider island: rolling farmland, big northern mountains
+    float hOut = 30.f + fbm(x / 900.f, z / 900.f, 4, 61) * 55.f + fbm(x / 250.f, z / 250.f, 3, 63) * 14.f + fbm(x / 70.f, z / 70.f, 3, 37) * 2.5f;
+    float ridge2 = 1.f - std::fabs(fbm(x / 600.f, z / 600.f, 4, 71));
+    ridge2 *= ridge2;
+    float north = smoothstepf(1450.f, 2500.f, z);
+    hOut += north * (230.f + ridge2 * 380.f);
+    float inner = 1.f - smoothstepf(1450.f, 1900.f, edge);
+    h = lerpf(hOut, hIn, inner);
+    // ---- valleys through the ridge for the highways
+    for (auto& c : kCorridors) {
+        float d = segDist(x, z, c[0], c[1]);
+        float k = (1.f - smoothstepf(90.f, 330.f, d)) * (1.f - north);
+        h = lerpf(h, std::min(h, 34.f + fbm(x / 300.f, z / 300.f, 2, 81) * 18.f), k);
+    }
+    // keep lowlands dry (only the lakes and the sea go below water)
     float floorH = waterLevel + 3.f;
     if (h < floorH) h = floorH - (floorH - h) * 0.15f;
+    // ---- the city sits on a flat plateau, the docks on a quay just above the sea
+    h = lerpf(h, 16.f, boxMask(x, z, kCity, 160.f));
+    h = lerpf(h, waterLevel + 2.6f, boxMask(x, z, kDocks, 140.f));
+    // ---- sea along the south and east coasts (a hard quay wall at the docks)
+    bool quay = x > kDocks.x0 && x < kDocks.x1;
+    float seaS = quay ? smoothstepf(kDocks.z0 - 2.f, kDocks.z0 - 22.f, z) : smoothstepf(-2330.f, -2620.f, z);
+    float seaE = smoothstepf(2830.f, 2960.f, x);
+    float sea = std::max(seaS, seaE);
+    h = lerpf(h, waterLevel - 16.f, sea);
     // lake bowls with irregular shorelines
     for (const Lake& L : lakes) {
         float dx = x - L.c.x, dz = z - L.c.z;
@@ -108,6 +157,38 @@ bool World::nearestRoad(vec3 p, int& road, int& sample, float maxDist) const {
 bool World::collideTrees(vec3& p, float r, vec3& normal) const {
     int cx = int((p.x + HALF) / TGRID), cz = int((p.z + HALF) / TGRID);
     bool hit = false;
+    // buildings, containers, crane legs: circle against axis-aligned boxes
+    if (!boxGrid.empty()) {
+        std::vector<int> done;
+        for (int z = cz - 2; z <= cz + 2; z++)
+            for (int x = cx - 2; x <= cx + 2; x++) {
+                if (x < 0 || z < 0 || x >= tgN || z >= tgN) continue;
+                for (int bi : boxGrid[z * tgN + x]) {
+                    if (std::find(done.begin(), done.end(), bi) != done.end()) continue;
+                    done.push_back(bi);
+                    const Box& b = boxes[bi];
+                    if (p.y > b.top + 0.4f) continue;
+                    float qx = clampf(p.x, b.x0, b.x1), qz = clampf(p.z, b.z0, b.z1);
+                    float dx = p.x - qx, dz = p.z - qz;
+                    float d2 = dx * dx + dz * dz;
+                    if (d2 >= r * r) continue;
+                    vec3 n;
+                    if (d2 > 1e-8f) {
+                        float d = std::sqrt(d2);
+                        n = vec3(dx / d, 0, dz / d);
+                        p += n * (r - d);
+                    } else {
+                        // centre inside: leave by the nearest face
+                        float l = p.x - b.x0, rr = b.x1 - p.x, f = p.z - b.z0, k = b.z1 - p.z;
+                        float m = std::min(std::min(l, rr), std::min(f, k));
+                        n = m == l ? vec3(-1, 0, 0) : m == rr ? vec3(1, 0, 0) : m == f ? vec3(0, 0, -1) : vec3(0, 0, 1);
+                        p += n * (m + r);
+                    }
+                    normal = n;
+                    hit = true;
+                }
+            }
+    }
     for (int z = cz - 1; z <= cz + 1; z++)
         for (int x = cx - 1; x <= cx + 1; x++) {
             if (x < 0 || z < 0 || x >= tgN || z >= tgN) continue;
@@ -277,9 +358,10 @@ void World::scatter(uint32_t seed) {
         }
         return best;
     };
-    const vec3 autumn[] = {{0.98f, 0.50f, 0.12f}, {0.97f, 0.72f, 0.18f}, {0.82f, 0.24f, 0.08f},
-                           {0.70f, 0.66f, 0.20f}, {0.38f, 0.50f, 0.18f}, {0.93f, 0.40f, 0.10f}};
-    const float autumnW[] = {0.26f, 0.22f, 0.14f, 0.14f, 0.12f, 0.12f};
+    // a natural early-autumn mix: mostly gold and olive, some rust, a few still green, rare deep red
+    const vec3 autumn[] = {{0.86f, 0.52f, 0.17f}, {0.90f, 0.70f, 0.24f}, {0.68f, 0.30f, 0.12f},
+                           {0.62f, 0.62f, 0.26f}, {0.36f, 0.48f, 0.20f}, {0.80f, 0.42f, 0.15f}};
+    const float autumnW[] = {0.20f, 0.24f, 0.10f, 0.18f, 0.18f, 0.10f};
     const float step = 6.0f;
     for (float gz = -HALF + 10; gz < HALF - 10; gz += step)
         for (float gx = -HALF + 10; gx < HALF - 10; gx += step) {
@@ -290,6 +372,7 @@ void World::scatter(uint32_t seed) {
             if (h < waterLevel + 1.2f) continue;
             float rd = roadDistAt(x, z);
             if (rd < 5.5f) continue;
+            if (urban(x, z, 30.f) || nearEstate(x, z, 42.f)) continue;
             float hubD = std::hypot(x - hubPos.x, z - hubPos.z);
             if (hubD < 95.f) continue;
             if (ccDist(x, z) < 20.f) continue;
@@ -331,7 +414,7 @@ void World::scatter(uint32_t seed) {
                 float pick = rng.f(), acc = 0;
                 vec3 tint = autumn[0];
                 for (int k = 0; k < 6; k++) { acc += autumnW[k]; if (pick <= acc) { tint = autumn[k]; break; } }
-                tint = tint * rng.range(0.95f, 1.2f);
+                tint = lerp(tint, autumn[rng.irange(0, 5)], rng.range(0.f, 0.35f)) * rng.range(0.9f, 1.12f);  // blend neighbours
                 leafInst.push_back({vec3(x, h - 0.3f, z), sc, tint, rng.range(0, 6.28f)});
                 addTrunk(x, z, 0.32f * sc);
             }
@@ -359,7 +442,7 @@ void World::scatter(uint32_t seed) {
                 bool outside = (turn > 0.18f && side < 0) || (turn < -0.18f && side > 0);
                 need[i] = drop > 2.0f || outside;
                 vec3 rp = r.pts[i] + right * (side * (hw + 1.5f));
-                if (std::hypot(rp.x - hubPos.x, rp.z - hubPos.z) < 80.f) need[i] = 0;
+                if (std::hypot(rp.x - hubPos.x, rp.z - hubPos.z) < 80.f || nearEstate(rp.x, rp.z, 45.f)) need[i] = 0;
                 // keep junctions open
                 int cx = int((rp.x + HALF) / RGRID), cz = int((rp.z + HALF) / RGRID);
                 for (int gz = cz - 1; gz <= cz + 1 && need[i]; gz++)
@@ -411,7 +494,7 @@ void World::scatter(uint32_t seed) {
             vec3 t = r.tan[i], right(-t.z, 0, t.x);
             for (int side = -1; side <= 1; side += 2) {
                 vec3 p = r.pts[i] + right * (side * (hw + 1.4f));
-                if (std::hypot(p.x - hubPos.x, p.z - hubPos.z) < 70.f) continue;
+                if (std::hypot(p.x - hubPos.x, p.z - hubPos.z) < 70.f || nearEstate(p.x, p.z, 40.f)) continue;
                 float gh = heightAt(p.x, p.z);
                 mat4 xf = basis(right, vec3(0, 1, 0), t, vec3(p.x, gh - 0.1f, p.z));
                 props.box(vec3(0, 0.6f, 0), vec3(0.06f, 0.6f, 0.06f), white, &xf);
@@ -475,6 +558,46 @@ void World::generate(uint32_t seed) {
     addRoad("Pass Road", pass, false, 11.f, SURF_ASPHALT);
     addRoad("Timberline Trail", trail, true, 8.5f, SURF_DIRT);
 
+    // ---- the wider island
+    // Coast Highway: east through the city, down to the docks, along the south coast, up the west
+    std::vector<vec3> coast = {vec3(880, 0, -40), vec3(1250, 0, -170), vec3(1600, 0, -250), vec3(2000, 0, -250),
+                               vec3(2400, 0, -250), vec3(2700, 0, -250), vec3(2810, 0, -470), vec3(2810, 0, -1100),
+                               vec3(2620, 0, -1600), vec3(2300, 0, -1890), vec3(1700, 0, -1900), vec3(1000, 0, -1890),
+                               vec3(300, 0, -1880), vec3(-500, 0, -2000), vec3(-1300, 0, -1850), vec3(-2050, 0, -1500),
+                               vec3(-2480, 0, -800), vec3(-2480, 0, -50), vec3(-2150, 0, 450), vec3(-1500, 0, 380),
+                               vec3(-1000, 0, 120), vec3(-890, 0, 40)};
+    addRoad("Coast Highway", coast, false, 14.f, SURF_ASPHALT);
+    // city grid (the Coast Highway is the main avenue at z = -250)
+    {
+        const float xs[] = {1800, 1950, 2100, 2250, 2400, 2550, 2700};
+        const float zs[] = {-850, -700, -550, -400, -100, 50, 200};
+        static const char* ns[] = {"1st Avenue", "2nd Avenue", "3rd Avenue", "Neon Avenue", "5th Avenue", "6th Avenue", "Harbour Avenue"};
+        static const char* es[] = {"Kanda Street", "Ginza Street", "Shiba Street", "Ueno Street", "Akiba Street", "Roppongi Street", "Shibuya Street"};
+        for (int i = 0; i < 7; i++) addRoad(ns[i], {vec3(xs[i], 0, -880), vec3(xs[i], 0, -500), vec3(xs[i], 0, -60), vec3(xs[i], 0, 320)}, false, 12.f, SURF_ASPHALT);
+        for (int i = 0; i < 7; i++) addRoad(es[i], {vec3(1770, 0, zs[i]), vec3(2100, 0, zs[i]), vec3(2400, 0, zs[i]), vec3(2730, 0, zs[i])}, false, 12.f, SURF_ASPHALT);
+    }
+    // docks: the quay road and spurs up to the Coast Highway
+    addRoad("Quay Road", {vec3(260, 0, -2330), vec3(800, 0, -2330), vec3(1400, 0, -2330), vec3(2000, 0, -2330), vec3(2240, 0, -2330)}, false, 13.f, SURF_ASPHALT);
+    for (float x : {450.f, 1150.f, 1750.f, 2200.f})
+        addRoad("Dock Lane", {vec3(x, 0, -1905), vec3(x, 0, -2100), vec3(x, 0, -2320)}, false, 11.f, SURF_ASPHALT);
+    // Akagi Touge: hairpins from the Summit Loop up into the northern mountains
+    {
+        vec3 top = summit[3];
+        std::vector<vec3> tg = {top, top + vec3(60, 0, 160), vec3(430, 0, 1390), vec3(120, 0, 1530), vec3(440, 0, 1670),
+                                vec3(130, 0, 1810), vec3(430, 0, 1950), vec3(150, 0, 2090), vec3(390, 0, 2230), vec3(260, 0, 2380)};
+        addRoad("Akagi Touge", tg, false, 9.5f, SURF_ASPHALT);
+    }
+    // farm lanes in the west
+    {
+        std::vector<vec3> farm;
+        vec3 fc(-2050, 0, -350);
+        for (int i = 0; i < 12; i++) {
+            float a = i / 12.f * 2 * PI;
+            farm.push_back(fc + vec3(std::cos(a) * 330.f * (1.f + rng.range(-0.15f, 0.15f)), 0, std::sin(a) * 520.f * (1.f + rng.range(-0.15f, 0.15f))));
+        }
+        addRoad("Harvest Lanes", farm, true, 8.f, SURF_DIRT);
+    }
+
     // cross-country checkpoints through the north-west meadows
     crossCountry = {vec3(-140, 0, 290), vec3(-300, 0, 360), vec3(-470, 0, 300), vec3(-610, 0, 400),
                     vec3(-540, 0, 540), vec3(-360, 0, 520), vec3(-210, 0, 600), vec3(-80, 0, 520)};
@@ -498,6 +621,8 @@ void World::generate(uint32_t seed) {
         hubYaw = std::atan2(toRoad.x, toRoad.z);
     }
 
+    placeEstates();
+
     // ---- terrain heights
     for (int iz = 0; iz < N; iz++)
         for (int ix = 0; ix < N; ix++) {
@@ -505,11 +630,16 @@ void World::generate(uint32_t seed) {
             float h = baseHeight(x, z);
             float dh = std::hypot(x - hubPos.x, z - hubPos.z);
             h = lerpf(h, hubPos.y - 0.03f, 1.f - smoothstepf(48.f, 85.f, dh));
+            for (const Estate& e : estates) {
+                float de = std::hypot(x - e.pos.x, z - e.pos.z);
+                if (de < 70.f) h = lerpf(h, e.pos.y - 0.04f, 1.f - smoothstepf(30.f, 62.f, de));
+            }
             height[iz * N + ix] = h;
         }
     carveTerrain();
     for (auto& c : crossCountry) c.y = heightAt(c.x, c.z);
     hubSpawn.y = heightAt(hubSpawn.x, hubSpawn.z);
+    buildUrban(seed);  // also builds the estates (shares the mesh and collision grid)
     scatter(seed);
 }
 
@@ -555,35 +685,72 @@ static void buildPine(MeshBuilder& b, bool lod) {
 }
 
 // Broadleaf: trunk, a few limbs and a crown made of leaf-cluster cards. Nominal height ~11 m.
+// Broadleaf tree: a real branching skeleton (trunk, leader, limbs, side branches) with leaf
+// sprays hung on the outer branches, so the crown is open and you see wood and sky through it.
 static void buildLeafy(MeshBuilder& b, bool lod) {
     Rng r(lod ? 9 : 7);
-    b.tube(vec3(0, -0.6f, 0), vec3(0.15f, 5.6f, 0.1f), 0.34f, 0.17f, lod ? 5 : 9, vec4(0, 0, 0.9f, 2));
-    int limbs = lod ? 3 : 6;
+    const vec4 bark(0, 0, 0.9f, 2);
+    int sides = lod ? 5 : 8;
+    // trunk with a slight lean, then a leader that tapers into the crown
+    vec3 t0(0, -0.6f, 0), t1(0.18f, 4.2f, 0.08f), t2(0.05f, 8.6f, -0.1f), t3(0.12f, 11.2f, 0.05f);
+    b.tube(t0, t1, 0.36f, 0.25f, sides + 2, bark);
+    b.tube(t1, t2, 0.25f, 0.13f, sides, bark);
+    if (!lod) b.tube(t2, t3, 0.13f, 0.04f, 5, bark);
+    struct Tip { vec3 p, dir; float w; };
+    std::vector<Tip> tips;
+    vec3 crown(0.1f, 7.6f, 0.f);
+    int limbs = lod ? 5 : 8;
     for (int i = 0; i < limbs; i++) {
-        float a = i * 2 * PI / limbs + r.range(-0.3f, 0.3f);
-        vec3 from(0.1f, r.range(3.2f, 5.0f), 0.05f);
-        vec3 to = from + vec3(std::cos(a) * 2.6f, r.range(1.6f, 2.6f), std::sin(a) * 2.6f);
-        b.tube(from, to, 0.13f, 0.04f, 5, vec4(0, 0, 0.85f, 2));
+        float f = (i + r.range(0.f, 0.6f)) / limbs;
+        float hgt = lerpf(3.6f, 8.8f, f);
+        vec3 base = hgt < 4.2f ? lerp(t0, t1, (hgt + 0.6f) / 4.8f) : lerp(t1, t2, (hgt - 4.2f) / 4.4f);
+        float a = i * 2.39996f + r.range(-0.4f, 0.4f);           // golden-angle spiral
+        float out = lerpf(4.2f, 2.4f, f) * r.range(0.85f, 1.15f); // lower limbs reach further
+        float rise = lerpf(1.5f, 2.6f, f) * r.range(0.8f, 1.2f);
+        vec3 d(std::cos(a), 0, std::sin(a));
+        vec3 mid = base + d * (out * 0.5f) + vec3(0, rise * 0.62f, 0);
+        vec3 end = base + d * out + vec3(0, rise, 0) + vec3(r.range(-0.4f, 0.4f), r.range(-0.3f, 0.3f), r.range(-0.4f, 0.4f));
+        float rad0 = lerpf(0.15f, 0.08f, f);
+        b.tube(base, mid, rad0, rad0 * 0.62f, sides - 1, bark);
+        b.tube(mid, end, rad0 * 0.62f, 0.025f, sides - 2, bark);
+        // side branches
+        int nb = lod ? 2 : 4;
+        for (int k = 0; k < nb; k++) {
+            float s2 = r.range(0.35f, 0.95f);
+            vec3 p = s2 < 0.5f ? lerp(base, mid, s2 * 2.f) : lerp(mid, end, (s2 - 0.5f) * 2.f);
+            vec3 side = normalize(cross(d, vec3(0, 1, 0))) * (k % 2 ? 1.f : -1.f);
+            vec3 bd = normalize(d * 0.6f + side * r.range(0.5f, 0.9f) + vec3(0, r.range(0.2f, 0.7f), 0));
+            float bl = r.range(1.1f, 2.0f) * (1.2f - f * 0.4f);
+            vec3 q = p + bd * bl;
+            if (!lod) b.tube(p, q, rad0 * 0.32f, 0.012f, 4, bark);
+            tips.push_back({q, bd, 1.f});
+            tips.push_back({lerp(p, q, 0.55f), bd, 0.8f});
+        }
+        tips.push_back({end, normalize(d + vec3(0, 0.5f, 0)), 1.2f});
+        tips.push_back({mid + vec3(0, 0.3f, 0), normalize(d + vec3(0, 0.8f, 0)), 0.9f});
     }
-    vec3 c(0, 6.8f, 0), rad(3.9f, 3.1f, 3.9f);
-    int cards = lod ? 28 : 95;
-    for (int i = 0; i < cards; i++) {
-        vec3 d;
-        do { d = vec3(r.range(-1, 1), r.range(-1, 1), r.range(-1, 1)); } while (dot(d, d) > 1.f || dot(d, d) < 0.01f);
-        d = normalize(d);
-        float rr = std::pow(r.f(), 0.35f);
-        vec3 p = c + d * rad * rr;
-        float sz = (lod ? 3.6f : 2.5f) * r.range(0.8f, 1.2f);
-        vec3 nn = normalize(d + vec3(r.range(-0.8f, 0.8f), r.range(-0.4f, 0.8f), r.range(-0.8f, 0.8f)));
-        vec3 t1 = normalize(cross(nn, std::fabs(nn.y) < 0.9f ? vec3(0, 1, 0) : vec3(1, 0, 0)));
-        vec3 t2 = cross(nn, t1);
-        float rot = r.range(0, 6.28f);
-        vec3 u = t1 * std::cos(rot) + t2 * std::sin(rot), v = cross(nn, u);
-        vec3 ln = normalize(d * 0.85f + vec3(0, 0.35f, 0));
-        float sh = 0.5f + 0.5f * rr + 0.12f * d.y;
-        float h = sz * 0.5f;
-        b.quad4(p - u * h - v * h, p + u * h - v * h, p + u * h + v * h, p - u * h + v * h, ln,
-                vec4(0, 0, sh, 1), vec4(1, 0, sh, 1), vec4(1, 1, sh, 1), vec4(0, 1, sh, 1));
+    tips.push_back({t3, vec3(0, 1, 0), 1.3f});
+    tips.push_back({lerp(t2, t3, 0.5f), normalize(vec3(0.3f, 1, 0.2f)), 1.f});
+    // leaf sprays: crossed cards around each tip, facing outwards, darker deep inside the crown
+    for (const Tip& tp : tips) {
+        int n = lod ? 2 : 5;
+        for (int j = 0; j < n; j++) {
+            vec3 off(r.range(-0.9f, 0.9f), r.range(-0.6f, 0.7f), r.range(-0.9f, 0.9f));
+            vec3 p = tp.p + off * tp.w;
+            float sz = (lod ? 2.9f : 1.75f) * r.range(0.8f, 1.2f) * tp.w;
+            vec3 outv = normalize(p - crown + vec3(0, 0.6f, 0));
+            vec3 nn = normalize(outv * 0.7f + tp.dir * 0.3f + vec3(r.range(-0.5f, 0.5f), r.range(-0.2f, 0.6f), r.range(-0.5f, 0.5f)));
+            vec3 t1v = normalize(cross(nn, std::fabs(nn.y) < 0.9f ? vec3(0, 1, 0) : vec3(1, 0, 0)));
+            vec3 t2v = cross(nn, t1v);
+            float rot = r.range(0, 6.28f);
+            vec3 u = t1v * std::cos(rot) + t2v * std::sin(rot), v = cross(nn, u);
+            float depth = clampf(length(p - crown) / 5.f, 0.f, 1.f);
+            float sh = 0.42f + 0.58f * depth + 0.1f * outv.y;
+            float h = sz * 0.5f;
+            vec3 ln = normalize(outv * 0.8f + vec3(0, 0.4f, 0));
+            b.quad4(p - u * h - v * h, p + u * h - v * h, p + u * h + v * h, p - u * h + v * h, ln,
+                    vec4(0, 0, sh, 1), vec4(1, 0, sh, 1), vec4(1, 1, sh, 1), vec4(0, 1, sh, 1));
+        }
     }
 }
 
@@ -611,6 +778,7 @@ void World::buildGPU() {
                     vec4 col(0.30f, 0.25f, 0.15f, f * 0.45f);
                     // dusty verge beside roads
                     if (rd < 4.f) col = vec4(0.52f, 0.46f, 0.33f, 0.55f * (1.f - smoothstepf(1.f, 4.f, rd)));
+                    if (urban(wx, wz, 2.f)) col = vec4(0.50f, 0.49f, 0.47f, 2.f);  // paving (terrain shader)
                     v.push_back({vec3(wx, height[iz * N + ix], wz), nrm[iz * N + ix], col});
                 }
             for (int z = 0; z < CS; z++)
@@ -679,8 +847,24 @@ void World::buildGPU() {
                     b.tri(a + 1, a + G + 1, a + G + 2);
                 }
         }
+        // the sea: south and east coasts
+        auto sea = [&](float x0, float z0, float x1, float z1, int gx, int gz) {
+            uint32_t base = uint32_t(b.v.size());
+            for (int z = 0; z <= gz; z++)
+                for (int x = 0; x <= gx; x++)
+                    b.add(vec3(lerpf(x0, x1, x / float(gx)), waterLevel, lerpf(z0, z1, z / float(gz))), vec3(0, 1, 0), vec4(1, 1, 1, 0));
+            for (int z = 0; z < gz; z++)
+                for (int x = 0; x < gx; x++) {
+                    uint32_t a = base + z * (gx + 1) + x;
+                    b.tri(a, a + gx + 1, a + 1);
+                    b.tri(a + 1, a + gx + 1, a + gx + 2);
+                }
+        };
+        sea(-HALF - 400, -HALF - 400, HALF + 400, -2280.f, 96, 24);
+        sea(2760.f, -2280.f, HALF + 400, HALF + 400, 12, 96);
         b.build(waterMesh);
     }
+    city.build(cityMesh);
 
     // ---- festival hub
     {

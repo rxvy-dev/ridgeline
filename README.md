@@ -17,8 +17,16 @@ Written in C++17 with **SDL3** and OpenGL 3.3. No engine and no downloaded asset
 
 ## Features
 
-- **Open world**: a 3 × 3 km valley with rolling hills, rock cliffs, four lakes, snow-capped mountains, about 44,000 pines and autumn trees, and over 10 km of roads you can leave whenever you want.
-- **8 race events** against 5 AI drivers: circuits, point-to-point sprints, a mountain climb, a dirt-trail scramble and an off-road cross-country race through checkpoints.
+- **Open world**: a 6 × 6 km island with about 46 km of roads you can leave whenever you want:
+  - the original valley with rolling hills, rock cliffs, four lakes and snow-capped mountains,
+  - **Neon Bay City**: a street grid with glass towers, neon signs and street lamps,
+  - **Harbour Docks**: container stacks, gantry cranes, warehouses and a container ship,
+  - the **Coast Highway** around the island, the **Akagi Touge** hairpins up into the northern mountains, and dirt lanes through the western farms,
+  - about 260,000 pines and autumn trees, plus scanned rocks, ferns and shrubs.
+- **14 race events** with AI drivers: circuits, point-to-point sprints, city and dock circuits, a coast-to-coast run, a touge, a dirt-trail scramble and an off-road cross-country race through checkpoints.
+- **EventLab**: build your own race on any road. Pick the start, length or laps, direction, number of rivals, their class and the weather, test drive it and save it to **My Events** (it shows up on the map). Every event has a short **share code** (like `RL1-02000303-07040001-63`): copy it, post it anywhere, and a friend pastes it in with **Import Event**. No server needed, the code is the whole event.
+- **Houses**: five homes to buy around the island (Lakeside Cabin, Harvest Farmhouse, Harbour Loft, Summit Lodge, Clifftop Villa). Owning one unlocks fast travel to it, gives a Wheelspin, and its garage opens your car collection.
+- **Customization**: eight liveries (twin stripes, contrast roof, two-tone, shoulder stripes, race number roundels, speed slashes, carbon bonnet, split fade) in any colour, your own race number, window tint, aero kits (ducktail, GT wing, GT wing + splitter) and lowered or slammed ride height. Cockpit steering wheels turn up to 180, 360, 540 or 900 degrees lock to lock (setting), on cars whose model has a separate wheel.
 - **Smart bots**: they brake for corners based on the road's curvature, overtake by changing lanes, recover when stuck, and use light rubber-banding so races stay close. Your opponents always drive cars from your car's class.
 - **Horizon-style progression**:
   - **Skill chains**: drifts, air, speed, big air and near misses build one chain with a rising multiplier. Bank it for credits and XP; crash and it's gone.
@@ -37,13 +45,14 @@ Written in C++17 with **SDL3** and OpenGL 3.3. No engine and no downloaded asset
 - **Secret car**: there is a hidden code box somewhere in the Autoshow...
 - **Driving physics**: a tyre model with slip angles and a friction circle, weight transfer, a 6-speed automatic gearbox, handbrake drifts, jumps and landings, grip that changes between asphalt, dirt, grass and water, and collisions with trees, rocks and other cars. Imported cars use exactly the same physics with their own wheel positions and tyre sizes. Traction control and a stability assist are on by default and can be turned off.
 - **Graphics**:
-  - **Lighting and post**: golden-hour lighting, two 4096² shadow cascades with soft filtering, HDR bloom, sun shafts, filmic grading and speed-based motion blur.
+  - **Photo-scanned materials**: CC0 ground, rock, sand and asphalt textures with normal maps, an HDRI sky that also lights the scene (spherical-harmonics ambient), and optional wet roads with puddles and reflections.
+  - **Lighting and post**: golden-hour lighting, SSAO, sharpening, two 4096² shadow cascades with soft filtering, HDR bloom, sun shafts, filmic grading and speed-based motion blur.
   - **Water**: lakes with planar reflections, depth-based colour from turquoise shallows to deep water, see-through shallows, waves and shoreline foam.
   - **Roads**: high-resolution procedural asphalt with aggregate, sealed cracks, repair patches, polished tyre lines, dusty edges and worn markings.
   - **Effects**: tyre smoke, dust off-road, water spray and skid marks that stay on the road.
   - **Vegetation**: about 165,000 swaying grass tufts in four distance tiers, so grass doesn't pop in. Pines and autumn trees have distant levels of detail.
   - **Cars**: metallic clearcoat paint. Imported cars use their own textures, normal maps and emissive lights.
-- **Menus**: every festival tile shows a live render of the world, plus card carousels, stat comparison bars and a wheelspin reel.
+- **Menus**: a tabbed festival hub (Festival, Cars, Houses, EventLab, Options; `Q`/`E` or LB/RB) where every tile shows a live render of the world, plus card carousels, stat comparison bars and a wheelspin reel.
 - **Cameras**: chase (far and near), cockpit, hood and bumper views, and a free-look orbit with the mouse or right stick.
 - **Procedural audio**: an engine synthesised from RPM, throttle and cylinder count, tyre squeal, wind, impacts, a two-tone horn and UI sounds.
 - **Keyboard and gamepad** (Xbox, PlayStation, Switch Pro and other SDL-supported controllers), with hot-plugging.
@@ -252,6 +261,7 @@ Pull requests are welcome: new built-in cars (add an entry to `kCars` in `src/ca
 - **Daewoo Nexia** (`cars/daewoo_nexia/`): based on ["Small price car"](https://sketchfab.com/3d-models/small-price-car-67c84e4d30ae42fda22c0a0c7526df26) by [Oliv1e](https://sketchfab.com/Oliv1e), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Converted to `.rcar`, rescaled, wheels split. That folder is CC BY 4.0.
 - **GMC Motorhome** (`cars/gmc_motorhome/`): based on ["FREE GMC Motorhome reimagined low poly"](https://sketchfab.com/3d-models/free-gmc-motorhome-reimagined-low-poly-6hiH0iyDqXqtdD9wbqSbyLLhKmz) by [Karol Miklas](https://sketchfab.com/karolmiklas), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Converted to `.rcar`, rescaled, wheels split. That folder is CC BY 4.0.
 - **Secret cat** (`cars/oiia_cat/`): based on ["Oiiaioooooiai Cat"](https://sketchfab.com/3d-models/oiiaioooooiai-cat-30d27bf7fb224849b76e208a6eccdb36) by [Zhuier](https://sketchfab.com/Zhuier), licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Converted to `.rcar` and given invisible contact points. That folder is CC BY 4.0. The meme song isn't included, since it isn't ours to share. Drop an `oiia.mp3` (or `.wav`) into that folder and the cat plays it while it spins.
+- **Textures, sky and scanned props** (`assets/`): from [Poly Haven](https://polyhaven.com), **CC0** (public domain). The full list is in [`assets/CREDITS.md`](assets/CREDITS.md). Shared prop textures are stored once in `assets/props/_tex/` by `tools/dedupe_props.py`.
 - **UI font**: [Barlow](https://github.com/jpt/barlow) by Jeremy Tribby, SIL Open Font License 1.1 (`assets/fonts/OFL.txt`), baked into `src/font_atlas.h` by `tools/gen_font.py`.
 - **DeLorean DMC-12 Time Machine** (`cars/delorean/`): based on ["1985 DeLorean DMC-12 Time Machine (BTTF)"](https://sketchfab.com/3d-models/1985-delorean-dmc-12-time-machine-bttf-6fdfe2e2adba4886b48cc523871e88be) by [VTX](https://sketchfab.com/VTX_car), licensed under [CC BY-NC-SA 4.0](http://creativecommons.org/licenses/by-nc-sa/4.0/). It was converted to `.rcar`, rescaled and given split wheels. That folder is CC BY-NC-SA 4.0, not MIT, and is for non-commercial use only. The credit is also shown in the in-game autoshow.
 - **Font**: DejaVu Sans Bold.

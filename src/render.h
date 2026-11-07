@@ -108,6 +108,13 @@ struct Atmosphere {
 struct Renderer {
     Shader terrain, road, object, car, tree, grass, water, unlit, depth, depthTree, sky, post, hud, bright, blur, ssao;
     Textures tex;
+    GLuint skyTex = 0;   // HDRI sky (assets/sky/sky.hdr), 0 = procedural
+    bool useSky = false; // only in the normal daytime atmosphere
+    vec3 skySH[9];
+    float motionBlur = 0;  // camera motion blur strength (0 = off)
+    bool wet = false;      // wet roads
+    mat4 prevViewProj;
+    bool havePrev = false;
     int width = 1280, height = 720;
     int msaa = 4;
     bool usePost = true;
@@ -143,5 +150,5 @@ struct Renderer {
     void endShadowPasses();
     void beginScene();
     void drawSky(const Camera& cam);
-    void endScene(float blur, float flash, const Camera* cam = nullptr);
+    void endScene(float blur, float flash, const Camera* cam = nullptr, bool mainView = false);
 };

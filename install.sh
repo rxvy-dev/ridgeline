@@ -70,6 +70,7 @@ if [ "$UNINSTALL" -eq 1 ]; then
     done < "$MANIFEST"
     $INSTALL_AS rm -f "$MANIFEST"
     for d in "$PREFIX/share/$APP/cars"/*/; do [ -d "$d" ] && $INSTALL_AS rmdir "$d" 2>/dev/null; done
+    [ -d "$PREFIX/share/$APP/assets" ] && find "$PREFIX/share/$APP/assets" -depth -type d -exec $INSTALL_AS rmdir {} \; 2>/dev/null
     $INSTALL_AS rmdir "$PREFIX/share/$APP/cars" "$PREFIX/share/$APP" "$PREFIX/lib/$APP" 2>/dev/null || true
     have update-desktop-database && $INSTALL_AS update-desktop-database "$PREFIX/share/applications" 2>/dev/null || true
     ok "Uninstalled. Your save game is kept in ~/.local/share/rxvy/ridgeline/"
@@ -246,6 +247,16 @@ if [ -d "$HERE/cars" ]; then
         done
         ok "installed car pack: $name"
     done
+fi
+# game assets: textures, sky, scanned props (CC0, see assets/CREDITS.md)
+if [ -d "$HERE/assets" ]; then
+    while IFS= read -r f; do
+        rel="${f#$HERE/}"
+        $INSTALL_AS mkdir -p "$PREFIX/share/$APP/$(dirname "$rel")"
+        $INSTALL_AS cp "$f" "$PREFIX/share/$APP/$rel"
+        files+=("$PREFIX/share/$APP/$rel")
+    done < <(find "$HERE/assets" -type f)
+    ok "installed assets"
 fi
 if [ -n "$SDL_PREFIX" ]; then
     $INSTALL_AS mkdir -p "$PREFIX/lib/$APP"

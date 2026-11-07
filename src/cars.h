@@ -60,5 +60,7 @@ struct CarModel {
     struct ImportedModel* imp = nullptr;  // set for imported cars
     vec3 wheelPos[4];   // FL, FR, RL, RR in car space (+z forward, +x left)
     float wheelR, wheelW;
+    vec3 dims;                         // length, width, height
+    float deckY = 0.9f, deckZ = -2.f;  // rear deck where a wing mounts
     void build(const CarSpec& s);
 };

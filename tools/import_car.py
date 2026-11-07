@@ -467,11 +467,14 @@ def main():
     ap.add_argument("--name", default="")
     ap.add_argument("--max-tex", type=int, default=1024)
     ap.add_argument("--drop", default="", help="regex of part names to drop (e.g. lights bars)")
+    ap.add_argument("--only", default="", help="regex: keep only parts whose name matches (split a set into props)")
     ap.add_argument("--paint", default="", help="regex of material names that are body paint (overrides detection)")
     ap.add_argument("--no-glass", default="", help="regex of material names that are NOT glass (e.g. wiper)")
     ap.add_argument("--tires", default="", help="regex of part/material names that are tyres (used to find the wheels)")
     ap.add_argument("--fixed", default="", help="regex of part/material names that follow the wheel but don't spin (calipers)")
     ap.add_argument("--no-wheels", action="store_true", help="model has no wheels: add invisible contact points")
+    ap.add_argument("--steering", default=r"steer(ing)?[ _-]?(wheel|whl)|^steer\b|lenkrad|volant",
+                    help="regex of part names that make up the steering wheel (animated in the cockpit)")
     ap.add_argument("--spin", default="", help="regex of extra part/material names that rotate with the wheels (rim metals etc.)")
     a = ap.parse_args()
     if Image is None:
@@ -484,6 +487,9 @@ def main():
     if a.drop:
         dr = re.compile(a.drop, re.I)
         parts = [p for p in parts if not dr.search(p.name) and not (p.mat >= 0 and dr.search(materials[p.mat].name))]
+    if a.only:
+        on = re.compile(a.only, re.I)
+        parts = [p for p in parts if on.search(p.name)]
     print("parts:", len(parts), "materials:", len(materials))
 
     # ---- orientation: rotate about Y so the requested axis becomes +Z
@@ -643,8 +649,10 @@ def main():
                 lp, ln = unsteer(k, p.pos[used] - wheels[k][0], p.nrm[used])
                 out_parts.append((role_base + k, p.mat, lp, ln, p.uv[used], remap[t].reshape(-1)))
 
+    steer_re = re.compile(a.steering, re.I) if a.steering else None
     for p in body_parts:
-        out_parts.append((0, p.mat, p.pos, p.nrm, p.uv, p.idx))
+        role = 9 if steer_re and steer_re.search(p.name) else 0
+        out_parts.append((role, p.mat, p.pos, p.nrm, p.uv, p.idx))
     for p in spin_parts:
         emit_split(p, 1, out_parts)
     for p in fixed_parts:

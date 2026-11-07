@@ -13,7 +13,7 @@ struct ImpMaterial {
     uint32_t flags = 0;
 };
 struct ImpPart {
-    int role = 0;  // 0 body, 1-4 wheel FL FR RL RR, 5-8 caliper FL FR RL RR
+    int role = 0;  // 0 body, 1-4 wheel FL FR RL RR, 5-8 caliper FL FR RL RR, 9 steering wheel
     int mat = -1;
     Mesh mesh;
 };
@@ -26,6 +26,8 @@ struct ImportedModel {
     vec3 wc[4];
     float wr[4], ww[4];
     vec3 eye, hood, bumper;
+    float deckY = 0.9f, deckZ = -2.f;  // rear deck (spoiler mount)
+    vec3 steerC; bool hasSteer = false;  // role 9 steering wheel pivot
     bool paintable = false;
     bool load(const std::string& dir, std::string& err);
 };

@@ -1,4 +1,5 @@
 build/
+build*/
 .deps/
 build-configure.log
 *.bmp
@@ -25,6 +26,7 @@ cars/*
 !cars/daewoo_nexia/model.rcar
 !cars/skyline_r34/model.rcar
 !cars/oiia_cat/model.rcar
+!assets/props/*/model.rcar
 # meme audio for the secret car: not ours to redistribute, stays local
 cars/oiia_cat/*.wav
 cars/oiia_cat/*.mp3

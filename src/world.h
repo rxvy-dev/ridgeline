@@ -18,10 +18,27 @@ struct Road {
 };
 
 struct TreeTrunk { float x, z, r; };
+struct Box { float x0, z0, x1, z1, top; };  // axis-aligned solid (buildings, containers)
+
+// regions outside the original valley
+struct Region { const char* name; float x0, z0, x1, z1; };
+static const Region kCity = {"Neon Bay City", 1720.f, -950.f, 2760.f, 380.f};
+static const Region kDocks = {"Harbour Docks", 150.f, -2420.f, 2300.f, -1950.f};
+
+// a house the player can buy: levelled plot beside a road, with a garage
+struct Estate {
+    std::string name, blurb;
+    vec3 pos;           // plot centre (ground level)
+    float yaw = 0;      // front faces the road
+    float roadGap = 30; // plot centre to road centre
+    int price = 0, style = 0;
+    vec3 spawn;         // in front of the garage door
+    float spawnYaw = 0;
+};
 
 struct World {
-    static constexpr float HALF = 1500.f;   // world spans [-HALF, HALF] on x and z
-    static constexpr int N = 1201;          // heightmap vertices per side (2.5 m grid)
+    static constexpr float HALF = 3000.f;   // world spans [-HALF, HALF] on x and z (6 x 6 km)
+    static constexpr int N = 2401;          // heightmap vertices per side (2.5 m grid)
     static constexpr float CELL = 2 * HALF / (N - 1);
     float waterLevel = 6.f;
     struct Lake { vec3 c; float r; float seed; };
@@ -44,7 +61,17 @@ struct World {
     // GPU resources
     struct Chunk { Mesh mesh; vec3 center; };
     std::vector<Chunk> chunks;
-    Mesh roadMesh, waterMesh, hubMesh, propsMesh;
+    Mesh roadMesh, waterMesh, hubMesh, propsMesh, cityMesh, cityGlass;
+    std::vector<Box> boxes;                       // solid buildings / containers
+    std::vector<std::vector<int>> boxGrid;        // TGRID cells -> box indices
+    MeshBuilder city, cityGl;                     // buildings, docks, street furniture
+    bool urban(float x, float z, float pad = 0.f) const;
+    std::vector<Estate> estates;
+    void placeEstates();
+    void buildEstates();
+    bool estatePaved(float x, float z, float pad) const;
+    bool nearEstate(float x, float z, float r) const;
+    const char* estateBlurb(int i) const;
     Mesh pineMesh, pineLod, leafMesh, leafLod, rockMesh, grassMesh;
     InstanceField pines, leafy, rocks;
     GLuint mapTex = 0, heightTex = 0, roadTex = 0;
@@ -78,6 +105,8 @@ private:
     void carveTerrain();
     void scatter(uint32_t seed);
     void buildMapTexture();
+    void buildUrban(uint32_t seed);
+public:
     std::vector<Instance> pineInst, leafInst, rockInst;
     MeshBuilder props;  // marker posts + guardrails
 };

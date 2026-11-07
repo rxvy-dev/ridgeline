@@ -496,6 +496,22 @@ void Renderer::setCommon(Shader& s, const Camera& cam) {
     s.set("tEmis", int(U_CAREMIS));
     s.set("tRefl", int(U_REFL));
     s.set("uClipY", clipY);
+    s.set("tSand", int(U_SAND));
+    s.set("tLeafGround", int(U_LEAFGROUND));
+    s.set("tGravel", int(U_GRAVEL));
+    s.set("tGrassN", int(U_GRASSN));
+    s.set("tForestN", int(U_FORESTN));
+    s.set("uPhoto", tex.photo ? 1 : 0);
+    s.set("tSky", int(U_SKY));
+    s.set("uHdri", (useSky && skyTex) ? 1 : 0);
+    s.set("uWet", wet ? 1.f : 0.f);
+    if (useSky && skyTex) {
+        static const char* names[9] = {"uSH[0]", "uSH[1]", "uSH[2]", "uSH[3]", "uSH[4]", "uSH[5]", "uSH[6]", "uSH[7]", "uSH[8]"};
+        for (int k = 0; k < 9; k++) s.set(names[k], skySH[k]);
+    }
+    glActiveTexture(GL_TEXTURE0 + U_SKY);
+    glBindTexture(GL_TEXTURE_2D, skyTex ? skyTex : tex.flakes);
+    glActiveTexture(GL_TEXTURE0);
 }
 
 void Renderer::beginReflection() {
@@ -572,13 +588,13 @@ void Renderer::drawSky(const Camera& cam) {
     glEnable(GL_DEPTH_TEST);
 }
 
-void Renderer::endScene(float blurAmt, float flash, const Camera* cam) {
+void Renderer::endScene(float blurAmt, float flash, const Camera* cam, bool mainView) {
     if (!usePost) return;
     bool ao = cam && useAO;
     if (msFbo) {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, msFbo);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, sceneFbo);
-        glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT | (ao ? GL_DEPTH_BUFFER_BIT : 0), GL_NEAREST);
+        glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT | (cam ? GL_DEPTH_BUFFER_BIT : 0), GL_NEAREST);
     }
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
@@ -628,6 +644,21 @@ void Renderer::endScene(float blurAmt, float flash, const Camera* cam) {
     post.set("uSunUV", sunUV);
     post.set("uSunAmt", sunAmt);
     post.set("uAO", int(U_AO));
+    // camera motion blur: reproject each pixel's depth with last frame's camera
+    float mb = (cam && mainView && havePrev) ? motionBlur : 0.f;
+    post.set("uMB", mb);
+    if (cam) {
+        post.set("uDepthP", int(U_DEPTH));
+        post.set("uInvVP", inverse(cam->viewProj));
+        post.set("uPrevVP", prevViewProj);
+        post.set("uCamPosP", cam->pos);
+        glActiveTexture(GL_TEXTURE0 + U_DEPTH);
+        glBindTexture(GL_TEXTURE_2D, sceneDepth);
+        if (mainView) {
+            prevViewProj = cam->viewProj;
+            havePrev = true;
+        }
+    }
     post.set("uTexelS", vec2(1.f / width, 1.f / height));
     post.set("uGrainT", std::fmod(time, 10.f));
     post.set("uAOAmt", ao ? 0.85f : 0.f);

@@ -32,15 +32,41 @@ struct EventDef {
     int prize[3] = {0, 0, 0};
     vec3 markerPos;
     float startYaw = 0;
+    // EventLab rules (built-in events use the defaults)
+    int opponents = 5;
+    char clsLimit = 0;    // 0 = match the player's class
+    bool wet = false;
+    int custom = -1;      // index into the player's saved custom events
     float totalLength() const { return route.closed ? route.length * laps : route.length; }
 };
 
 std::vector<EventDef> buildEvents(const World& w);
 
+// EventLab: player-made events on any road, shareable as a short text code.
+struct CustomEvent {
+    std::string name;
+    int road = 0;        // index into World::roads
+    int start = 0;       // start point, percent along the road
+    int length = 3;      // sprint length in km (open roads)
+    int laps = 2;        // circuit laps (closed roads)
+    int opponents = 5;   // 0..7
+    int cls = 0;         // 0 any (match player), 1..5 = D C B A S
+    bool reverse = false;
+    bool wet = false;
+};
+bool makeCustomEvent(const World& w, const CustomEvent& c, EventDef& out);
+std::string encodeEvent(const CustomEvent& c);
+bool decodeEvent(const std::string& code, CustomEvent& c);
+std::string autoEventName(const World& w, const CustomEvent& c);
+
 struct Racer {
     Vehicle car;
     CarModel* model = nullptr;
     vec3 paint, stripe;
+    // cosmetics
+    int livery = 0, aero = 0, number = 7;
+    vec3 livCol = vec3(1, 1, 1);
+    float tint = 0, ride = 0;
     std::string name;
     bool isPlayer = false;
     int idx = 0;              // last projected route index

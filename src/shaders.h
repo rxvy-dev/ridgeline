@@ -18,6 +18,21 @@ uniform mat4 uShadowMat0;
 uniform mat4 uShadowMat1;
 uniform vec2 uShadowTexel;
 uniform int uShadows;
+uniform sampler2D tSky;   // equirectangular HDRI sky (assets/sky/sky.hdr)
+uniform int uHdri;
+uniform int uPhoto;       // photo ground textures installed
+uniform vec3 uSH[9];      // sky light from the HDRI
+uniform float uWet;       // 1 = wet roads after rain
+vec3 shEval(vec3 d){
+    return max(uSH[0] * 0.282095 + uSH[1] * 0.488603 * d.y + uSH[2] * 0.488603 * d.z + uSH[3] * 0.488603 * d.x
+         + uSH[4] * 1.092548 * d.x * d.y + uSH[5] * 1.092548 * d.y * d.z + uSH[6] * 0.315392 * (3.0 * d.z * d.z - 1.0)
+         + uSH[7] * 1.092548 * d.x * d.z + uSH[8] * 0.546274 * (d.x * d.x - d.y * d.y), vec3(0.0));
+}
+vec3 hdri(vec3 d, float lod){
+    float u = atan(d.x, -d.z) * 0.15915494 + 0.5;
+    float v = acos(clamp(d.y, -1.0, 1.0)) * 0.31830989;
+    return textureLod(tSky, vec2(u, v), lod).rgb;
+}
 
 float hash12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 float vnoise(vec2 p){
@@ -59,6 +74,7 @@ float shadowFactor(vec3 wp, vec3 n){
     return s1;
 }
 vec3 skyColor(vec3 d){
+    if (uHdri == 1 && d.y > -0.02) return hdri(vec3(d.x, max(d.y, 0.002), d.z), 0.0);
     float t = clamp(d.y, 0.0, 1.0);
     vec3 c = mix(uSkyHorizon, uSkyTop, pow(t, 0.45));
     if (d.y < 0.0) c = mix(uSkyHorizon, uGroundAmb * 1.1, clamp(-d.y * 4.0, 0.0, 1.0));
@@ -70,7 +86,7 @@ vec3 skyColor(vec3 d){
 // environment used for reflections (sky above, tree line at the horizon, ground below)
 vec3 envColor(vec3 R){
     if (R.y > 0.0) {
-        vec3 s = skyColor(R);
+        vec3 s = uHdri == 1 ? hdri(R, 1.5) : skyColor(R);
         float az = atan(R.x, R.z);
         float line = 0.035 + 0.05 * vnoise(vec2(az * 9.0, 1.0)) + 0.03 * vnoise(vec2(az * 31.0, 3.0));
         float band = 1.0 - smoothstep(line - 0.01, line + 0.01, R.y);
@@ -86,13 +102,96 @@ vec3 applyFog(vec3 col, vec3 wp){
     float hf = exp(-max(wp.y - 15.0, 0.0) * 0.005);
     float f = 1.0 - exp(-dist * uFogDensity * (0.5 + 0.9 * hf));
     float s = pow(max(dot(dir, uSunDir), 0.0), 5.0);
-    vec3 fc = mix(uFogColor, uSunColor * vec3(0.85, 0.7, 0.5) + vec3(0.1), s * 0.55);
+    vec3 fogBase = uFogColor;
+    if (uHdri == 1) {
+        // distance haze takes the colour of the sky behind it (bluer up high, warmer near the sun)
+        vec3 hz = hdri(normalize(vec3(dir.x, max(dir.y, 0.03) + 0.05, dir.z)), 6.0);
+        fogBase = mix(uFogColor, hz * vec3(0.92, 0.96, 1.04), 0.75);
+    }
+    vec3 fc = mix(fogBase, uSunColor * vec3(0.85, 0.7, 0.5) + vec3(0.1), s * (uHdri == 1 ? 0.3 : 0.55));
     return mix(col, fc, clamp(f, 0.0, 1.0));
 }
-vec3 ambient(vec3 n){ return mix(uGroundAmb, uSkyAmb, n.y * 0.5 + 0.5); }
+vec3 ambient(vec3 n){ return uHdri == 1 ? shEval(n) : mix(uGroundAmb, uSkyAmb, n.y * 0.5 + 0.5); }
 vec3 lighting(vec3 albedo, vec3 n, float shadow){
     float ndl = max(dot(n, uSunDir), 0.0);
     return albedo * (ambient(n) + uSunColor * ndl * shadow);
+}
+
+// ---- car liveries, drawn procedurally in body space (x left, y up from the ground, z forward)
+uniform int uLivery;       // 0 none
+uniform vec3 uLivCol;      // livery colour
+uniform vec3 uCarDims;     // length, width, height
+uniform int uLivNum;       // race number
+uniform float uWinTint;    // window tint 0..1
+float lband(float v, float a, float b) {
+    float w = fwidth(v) * 0.75 + 1e-4;
+    return smoothstep(a - w, a + w, v) * (1.0 - smoothstep(b - w, b + w, v));
+}
+float lstep(float a, float v) { float w = fwidth(v) * 0.75 + 1e-4; return smoothstep(a - w, a + w, v); }
+// seven-segment digit, p in [0,1]x[0,1.8]
+float seg7(vec2 p, int d) {
+    if (d < 0) return 0.0;
+    const int bits[10] = int[10](0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F);
+    int b = bits[d];
+    float t = 0.2, m = 0.0;
+    // a top, b upper right, c lower right, d bottom, e lower left, f upper left, g middle
+    if ((b & 1) != 0)  m = max(m, lband(p.x, 0.0, 1.0) * lband(p.y, 1.8 - t, 1.8));
+    if ((b & 2) != 0)  m = max(m, lband(p.x, 1.0 - t, 1.0) * lband(p.y, 0.9, 1.8));
+    if ((b & 4) != 0)  m = max(m, lband(p.x, 1.0 - t, 1.0) * lband(p.y, 0.0, 0.9));
+    if ((b & 8) != 0)  m = max(m, lband(p.x, 0.0, 1.0) * lband(p.y, 0.0, t));
+    if ((b & 16) != 0) m = max(m, lband(p.x, 0.0, t) * lband(p.y, 0.0, 0.9));
+    if ((b & 32) != 0) m = max(m, lband(p.x, 0.0, t) * lband(p.y, 0.9, 1.8));
+    if ((b & 64) != 0) m = max(m, lband(p.x, 0.0, 1.0) * lband(p.y, 0.9 - t * 0.5, 0.9 + t * 0.5));
+    return m;
+}
+vec3 carbonWeave(vec3 o) {
+    vec2 q = (o.xz + vec2(o.y * 0.3)) * 38.0;
+    float tw = step(0.5, fract((floor(q.x) + floor(q.y)) * 0.5));
+    float fib = mix(fract(q.x), fract(q.y), tw);
+    return vec3(0.022, 0.023, 0.026) * (0.75 + 0.6 * smoothstep(0.1, 0.5, fib) * (1.0 - smoothstep(0.5, 0.9, fib)));
+}
+vec3 applyLivery(vec3 a, vec3 o, float k) {
+    if (uLivery == 0) return a;
+    float L = uCarDims.x, W = uCarDims.y, H = uCarDims.z;
+    float ax = abs(o.x) / (W * 0.5), zy = o.z / (L * 0.5), hy = o.y / H;
+    vec3 lc = uLivCol;
+    float m = 0.0;
+    if (uLivery == 1) {            // twin racing stripes over the top
+        m = lband(abs(o.x), 0.055, 0.215) * lstep(0.32, hy);
+    } else if (uLivery == 2) {     // contrast roof
+        m = lstep(0.83, hy) * lstep(-0.75, zy) * (1.0 - lstep(0.75, zy));
+    } else if (uLivery == 3) {     // two-tone lower body with a pinstripe
+        m = 1.0 - lstep(0.36, hy);
+        float pin = lband(hy, 0.385, 0.40);
+        a = mix(a, vec3(0.9), pin);
+    } else if (uLivery == 4) {     // raked shoulder stripes
+        float c = 0.55 + 0.05 * zy;
+        m = (lband(hy, c - 0.04, c + 0.035) + lband(hy, c - 0.085, c - 0.065)) * lstep(0.62, ax) * lband(zy, -0.97, 0.97);
+    } else if (uLivery == 5) {     // race number roundel on the doors + a hood band
+        vec2 p = vec2(-(o.z - L * 0.03) * sign(o.x), o.y - H * 0.47);
+        float r = length(p);
+        float side = lstep(0.6, ax);
+        float disc = (1.0 - lstep(0.29, r)) * side;
+        float ring = lband(r, 0.29, 0.335) * side;
+        int n = clamp(uLivNum, 0, 99);
+        int d0 = n / 10, d1 = n - d0 * 10;
+        if (d0 == 0) d0 = -1;
+        float s = 0.19 / 1.8;
+        vec2 q = p / s + vec2(0.0, 0.9);
+        float dig = d0 < 0 ? seg7(q + vec2(0.5, 0.0), d1) : max(seg7(q + vec2(1.15, 0.0), d0), seg7(q - vec2(0.15, 0.0), d1));
+        a = mix(a, vec3(0.92), disc);
+        a = mix(a, vec3(0.02), dig * disc);
+        m = ring + lband(abs(o.x), 0.0, 0.14) * lstep(0.5, hy) * lstep(0.35, zy);
+    } else if (uLivery == 6) {     // speed slashes down the flanks
+        float f = fract((o.z * 1.1 + o.y * 0.9) * 1.25);
+        m = lband(f, 0.0, 0.32) * lstep(0.58, ax) * lband(zy, -0.92, 0.05) * lband(hy, 0.2, 0.62);
+    } else if (uLivery == 7) {     // carbon bonnet
+        float hood = lstep(0.40, zy) * lstep(0.45, hy) * (1.0 - lstep(0.8, ax));
+        return mix(a, carbonWeave(o), hood);
+    } else if (uLivery == 8) {     // diagonal split fade
+        m = lstep(0.0, -zy * 0.9 + (hy - 0.5) * 0.7 - 0.05);
+    }
+    return mix(a, lc * k, clamp(m, 0.0, 1.0));
 }
 )";
 
@@ -118,6 +217,7 @@ static const char* kTerrainFS = R"(
 in vec3 vPos; in vec3 vNrm; in vec4 vCol; in vec3 vObj;
 uniform float uWater;
 uniform sampler2D tGrass, tDirt, tRock, tRockN;
+uniform sampler2D tSand, tLeafGround, tGrassN, tForestN;
 out vec4 FragColor;
 vec3 tri(sampler2D t, vec3 p, vec3 w, float s){
     return texture(t, p.zy * s).rgb * w.x + texture(t, p.xz * s).rgb * w.y + texture(t, p.xy * s).rgb * w.z;
@@ -131,19 +231,46 @@ void main(){
     float macro2 = vnoise(p.xz * 0.021);
     float macro3 = vnoise(p.xz * 0.11);
 
-    vec3 g1 = texture(tGrass, p.xz / 6.5).rgb;
-    vec3 g2 = texture(tGrass, p.xz / 37.0 + 0.37).rgb;
-    vec3 grass = mix(g1, g2, 0.35 + 0.25 * smoothstep(60.0, 250.0, dist));
-    grass *= mix(vec3(0.86, 0.95, 0.72), vec3(1.10, 0.98, 0.80), smoothstep(0.25, 0.75, macro));
-    grass *= 0.82 + 0.3 * macro2;
-
-    vec3 dirt = texture(tDirt, p.xz / 5.0).rgb * (0.9 + 0.2 * macro3);
+    vec3 grass, dirt;
+    vec3 detailN = vec3(0.0);
+    if (uPhoto == 1) {
+        // photo-scanned ground: two scales and a rotation hide the tiling
+        mat2 rot = mat2(0.8, -0.6, 0.6, 0.8);
+        vec3 g1 = texture(tGrass, p.xz / 7.0).rgb;
+        vec3 g2 = texture(tGrass, rot * p.xz / 31.0 + 0.37).rgb;
+        grass = mix(g1, g2, 0.3 + 0.35 * smoothstep(40.0, 220.0, dist));
+        grass *= mix(vec3(0.95, 1.02, 0.88), vec3(1.08, 1.0, 0.86), smoothstep(0.25, 0.75, macro));
+        grass *= (0.88 + 0.22 * macro2) * vec3(0.84, 0.88, 0.80);
+        vec3 fg = texture(tDirt, p.xz / 4.0).rgb;
+        vec3 lv = texture(tLeafGround, rot * p.xz / 3.5).rgb;
+        dirt = mix(fg, lv, smoothstep(0.35, 0.65, vnoise(p.xz * 0.045))) * (0.92 + 0.16 * macro3);
+        vec3 gn = texture(tGrassN, p.xz / 7.0).xyz * 2.0 - 1.0;
+        detailN = vec3(gn.x, 0.0, -gn.y) * (1.0 - smoothstep(30.0, 120.0, dist)) * 0.6;
+    } else {
+        vec3 g1 = texture(tGrass, p.xz / 6.5).rgb;
+        vec3 g2 = texture(tGrass, p.xz / 37.0 + 0.37).rgb;
+        grass = mix(g1, g2, 0.35 + 0.25 * smoothstep(60.0, 250.0, dist));
+        grass *= mix(vec3(0.86, 0.95, 0.72), vec3(1.10, 0.98, 0.80), smoothstep(0.25, 0.75, macro));
+        grass *= 0.82 + 0.3 * macro2;
+        dirt = texture(tDirt, p.xz / 5.0).rgb * (0.9 + 0.2 * macro3);
+    }
     float dirtW = smoothstep(0.6, 0.8, fbm2(p.xz * 0.025) + macro3 * 0.15);
     vec3 c = mix(grass, dirt, dirtW * 0.75);
+    if (vCol.a > 1.5) {
+        // town ground: concrete slabs, kerbs and stains
+        vec2 q = p.xz / 3.0;
+        vec2 f = fract(q), id = floor(q);
+        float joint = 1.0 - smoothstep(0.0, 0.03, min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)));
+        float tone = 0.88 + 0.2 * fract(sin(dot(id, vec2(12.9898, 78.233))) * 43758.5453);
+        vec3 con = vec3(0.36, 0.355, 0.345) * tone * (1.0 - joint * 0.35) * (0.85 + 0.25 * vnoise(p.xz * 0.6));
+        if (uPhoto == 1) con = mix(con, texture(tDirt, p.xz / 6.0).rgb * 0.0 + con, 1.0);
+        c = mix(con, con * 0.7, smoothstep(0.65, 0.85, fbm2(p.xz * 0.08)) * 0.6);
+    } else
     c = mix(c, vCol.rgb * (0.8 + 0.4 * macro3) * (texture(tDirt, p.xz / 3.0).rgb * 1.6), vCol.a);
 
+    n = normalize(n + detailN * (1.0 - slope));
     vec3 w = pow(abs(n), vec3(5.0)); w /= (w.x + w.y + w.z);
-    const float rs = 1.0 / 11.0;
+    float rs = uPhoto == 1 ? 1.0 / 7.0 : 1.0 / 11.0;
     vec3 rock = tri(tRock, p, w, rs) * vec3(1.0, 0.97, 0.92);
     vec3 nx = texture(tRockN, p.zy * rs).xyz * 2.0 - 1.0;
     vec3 ny = texture(tRockN, p.xz * rs).xyz * 2.0 - 1.0;
@@ -155,7 +282,8 @@ void main(){
 
     float sn = smoothstep(285.0, 330.0, p.y + macro * 50.0) * (1.0 - r * 0.6);
     c = mix(c, vec3(0.92, 0.94, 0.98), sn);
-    c = mix(c, vec3(0.70, 0.64, 0.48) * (0.85 + 0.3 * macro3), 1.0 - smoothstep(uWater + 0.4, uWater + 2.4, p.y + macro3));
+    vec3 shore = uPhoto == 1 ? texture(tSand, p.xz / 4.0).rgb * vec3(0.72, 0.68, 0.62) : vec3(0.70, 0.64, 0.48) * (0.85 + 0.3 * macro3);
+    c = mix(c, shore, 1.0 - smoothstep(uWater + 0.4, uWater + 2.4, p.y + macro3));
 
     float sh = shadowFactor(p, normalize(vNrm));
     vec3 col = lighting(c, n, sh);
@@ -165,7 +293,9 @@ void main(){
 
 static const char* kRoadFS = R"(
 in vec3 vPos; in vec3 vNrm; in vec4 vCol; in vec3 vObj;
-uniform sampler2D tAsphalt, tAsphaltN, tDirt, tGrass;
+uniform sampler2D tAsphalt, tAsphaltN, tDirt, tGrass, tGravel, tRefl, tLeafGround;
+uniform mat4 uReflVP;
+uniform int uHasRefl;
 out vec4 FragColor;
 void main(){
     vec3 n = normalize(vNrm);
@@ -173,13 +303,13 @@ void main(){
     vec3 p = vPos;
     float x = (u - 0.5) * width;
     vec2 uv = vec2(x, v) / 3.5;
-    vec3 c; float spec = 0.0, gloss = 30.0;
+    vec3 c; float spec = 0.0, gloss = 30.0, leafM = 0.0;
     vec3 nn = n;
     if (mat == 10) {
         vec2 auv = vec2(x, v) / 4.0;
-        c = texture(tAsphalt, auv).rgb * vec3(1.06, 1.02, 0.97);
+        c = texture(tAsphalt, auv).rgb * (uPhoto == 1 ? vec3(0.50, 0.50, 0.52) : vec3(1.06, 1.02, 0.97));
         // break up tiling with a second, rotated lookup and large-scale tone variation
-        c = mix(c, texture(tAsphalt, vec2(auv.y, -auv.x) * 0.61 + 0.3).rgb, 0.3);
+        c = mix(c, texture(tAsphalt, vec2(auv.y, -auv.x) * 0.61 + 0.3).rgb * (uPhoto == 1 ? 0.5 : 1.0), 0.3);
         float macro = fbm2(vec2(x, v) * 0.045);
         c *= 0.86 + 0.28 * macro;
         vec3 tn = texture(tAsphaltN, auv).xyz * 2.0 - 1.0;
@@ -208,24 +338,64 @@ void main(){
         float white = step(hw - 0.66, abs(x)) * step(abs(x), hw - 0.48);
         float paint = max(yellow, white) * breakup;
         c = mix(c, yellow > 0.5 ? vec3(0.92, 0.66, 0.12) : vec3(0.90, 0.89, 0.85), paint * 0.92);
-        spec = 0.1 + tracks * 0.25 + paint * 0.15; gloss = 26.0 + tracks * 30.0;
+        bool town = (p.x > 1700.0 && p.x < 2780.0 && p.z > -970.0 && p.z < 400.0) || (p.x > 130.0 && p.x < 2320.0 && p.z > -2440.0 && p.z < -1930.0);
+        if (uPhoto == 1 && !town) {
+            // autumn: fallen leaves drift against the edges and scatter thinly across the lanes
+            vec3 lv = texture(tLeafGround, p.xz / 3.0).rgb;
+            float lum = dot(lv, vec3(0.33));
+            float drift = smoothstep(hw - 1.9, hw - 0.3, abs(x)) * smoothstep(0.35, 0.65, fbm2(p.xz * 0.12));
+            float scatter = smoothstep(0.78, 0.9, vnoise(p.xz * 1.7) * 0.6 + fbm2(p.xz * 0.2) * 0.5) * (1.0 - tracks);
+            leafM = clamp(drift * smoothstep(0.18, 0.32, lum) + scatter * 0.6, 0.0, 1.0);
+            c = mix(c, lv * vec3(1.15, 0.95, 0.75), leafM * 0.85);
+        }
+        spec = (0.1 + tracks * 0.25 + paint * 0.15) * (1.0 - leafM * 0.7); gloss = 26.0 + tracks * 30.0;
     } else if (mat == 11) {
-        c = texture(tDirt, uv * 1.2).rgb * 1.08;
+        c = uPhoto == 1 ? texture(tGravel, uv * 1.2).rgb : texture(tDirt, uv * 1.2).rgb * 1.08;
         float rut = exp(-pow((abs(x) - width * 0.2) * 1.4, 2.0));
         c *= 1.0 - rut * 0.18;
         vec3 g = texture(tGrass, p.xz / 6.5).rgb;
         float edge = smoothstep(width * 0.32, width * 0.5, abs(x)) + smoothstep(0.65, 0.8, vnoise(vec2(x * 3.0, v * 0.5))) * step(abs(x), 0.6);
         c = mix(c, g, clamp(edge, 0.0, 1.0) * 0.85);
     } else {
-        vec3 gravel = texture(tDirt, p.xz / 2.5).rgb * vec3(1.05, 1.02, 0.98);
+        vec3 gravel = uPhoto == 1 ? texture(tGravel, p.xz / 2.5).rgb : texture(tDirt, p.xz / 2.5).rgb * vec3(1.05, 1.02, 0.98);
         vec3 g = texture(tGrass, p.xz / 6.5).rgb;
         c = mix(gravel, g, smoothstep(0.35, 1.0, u + (vnoise(p.xz * 0.7) - 0.5) * 0.5));
     }
     float sh = shadowFactor(p, n);
-    vec3 col = lighting(c, nn, sh);
     vec3 V = normalize(uCamPos - p);
+    float puddle = 0.0;
+    if (uWet > 0.5) {
+        // after rain: darker, saturated surface; puddles in the dips, the wheel tracks and the edges
+        float pn = fbm2(p.xz * 0.11) * 0.75 + vnoise(p.xz * 0.9) * 0.25;
+        float lane = abs(abs(x) - width * 0.25);
+        float rut = mat == 10 ? exp(-pow((lane - 0.85) * 2.0, 2.0)) * 0.22 : 0.15;
+        puddle = smoothstep(0.64, 0.72, pn + rut + smoothstep(width * 0.38, width * 0.5, abs(x)) * 0.12);
+        c *= mix(0.55, 0.35, puddle);
+        nn = normalize(mix(nn, n, 0.6 + 0.4 * puddle));
+        spec = mix(0.6, 1.0, puddle); gloss = mix(120.0, 900.0, puddle);
+    }
+    vec3 col = lighting(c, nn, sh);
     vec3 H = normalize(V + uSunDir);
     col += uSunColor * pow(max(dot(nn, H), 0.0), gloss) * spec * sh;
+    if (uWet > 0.5) {
+        // wet sheen and mirror-like puddles reflecting the sky
+        float ndv = max(dot(nn, V), 0.0);
+        float F = 0.02 + 0.98 * pow(1.0 - ndv, 5.0);
+        vec3 R = reflect(-V, nn);
+        vec3 env = envColor(R);
+        // the roadside forest blocks the low sky: darken reflections near the horizon
+        vec3 treeLine = vec3(0.05, 0.06, 0.04) * (ambient(vec3(0.0, 1.0, 0.0)) + uSunColor * 0.2);
+        env = mix(treeLine, env * 0.8, smoothstep(0.08, 0.42, R.y));
+        if (uHasRefl == 1) {
+            // planar reflection of the real scene (trees, cars) rippled slightly by the surface
+            vec4 cp = uReflVP * vec4(p, 1.0);
+            vec2 ruv = cp.xy / cp.w * 0.5 + 0.5 + (nn.xz - n.xz) * 0.06;
+            float edge = smoothstep(0.0, 0.05, ruv.x) * smoothstep(1.0, 0.95, ruv.x) * smoothstep(1.0, 0.95, ruv.y) * smoothstep(0.0, 0.05, ruv.y);
+            vec3 pr = texture(tRefl, clamp(ruv, 0.002, 0.998)).rgb;
+            env = mix(env, pr * 0.85, edge * (0.45 + 0.55 * puddle));
+        }
+        col = mix(col, env, clamp(F * (0.3 + 0.7 * puddle) + puddle * 0.2, 0.0, 0.85));
+    }
     FragColor = vec4(applyFog(col, p), 1.0);
 }
 )";
@@ -238,6 +408,7 @@ uniform vec3 uStripe;
 uniform float uBrake;
 uniform float uHeadlights;
 uniform int uGlassPass;
+uniform int uBody;
 uniform sampler2D tFlakes;
 out vec4 FragColor;
 void main(){
@@ -256,6 +427,9 @@ void main(){
         vec3 spec = uSunColor * pow(max(dot(n, H), 0.0), 900.0) * 4.0 * sh;
         float baseA = gl_FrontFacing ? 0.42 : 0.12;
         vec3 tint = vec3(0.025, 0.03, 0.035) * (ambient(n) + uSunColor * 0.3);
+        float film = uBody == 1 ? uWinTint : 0.0;
+        baseA = mix(baseA, gl_FrontFacing ? 0.94 : 0.6, film);
+        tint *= 1.0 - 0.9 * film;
         float a = 1.0 - (1.0 - baseA) * (1.0 - F);
         vec3 c = (tint * baseA * (1.0 - F) + env * F + spec) / max(a, 0.01);
         FragColor = vec4(applyFog(c, vPos), clamp(a, 0.0, 1.0));
@@ -277,10 +451,12 @@ void main(){
         return;
     }
     vec3 albedo = vCol.rgb;
+    vec3 col0 = vec3(0.0);  // self-lit (windows)
     float spec = 0.06, gloss = 18.0, refl = 0.0, coat = 0.0, sharp = 0.0;
     float fill = mat == 0 ? 0.35 : 0.0;
     if (mat == 1 || mat == 5) {
         albedo = (mat == 1 ? uPaint : uStripe) * vCol.rgb;
+        if (uBody == 1) albedo = applyLivery(albedo, vObj, dot(vCol.rgb, vec3(0.333)));
         float fl = texture(tFlakes, vObj.xz * 2.7 + vObj.y * 1.3).r;
         albedo *= 0.94 + 0.12 * fl;
         spec = 0.35; gloss = 40.0; coat = 1.0; sharp = 1.0;
@@ -290,6 +466,7 @@ void main(){
     else if (mat == 7) { albedo = vec3(0.50, 0.51, 0.50); refl = 0.18; spec = 0.4; gloss = 35.0; }
     else if (mat == 8) { albedo = vec3(0.045, 0.045, 0.05) * vCol.rgb; spec = 0.08; gloss = 12.0; }
     else if (mat == 9) { albedo = vec3(0.035, 0.036, 0.04); spec = 0.25; gloss = 30.0; refl = 0.04; }
+    else if (mat == 18) { albedo = carbonWeave(vObj); spec = 0.45; gloss = 60.0; coat = 1.0; sharp = 1.0; }
     else if (mat == 10) { albedo = vec3(0.30, 0.31, 0.33) * (1.0 + uHeadlights); coat = 1.0; sharp = 1.0; refl = 0.35; }
     else if (mat == 11) { albedo = vec3(0.65, 0.07, 0.05); spec = 0.5; gloss = 50.0; }
     else if (mat == 12) { albedo = vec3(0.86, 0.86, 0.82); spec = 0.2; }
@@ -303,6 +480,41 @@ void main(){
         float tone = 0.86 + 0.26 * fract(sin(dot(id, vec2(12.9898, 78.233))) * 43758.5453);
         albedo = vCol.rgb * tone * (1.0 - joint * 0.55) * (0.88 + 0.24 * vnoise(vPos.xz * 0.35));
         spec = 0.08; gloss = 22.0;
+    } else if (mat == 15) {
+        // neon signs and street lamps: emissive, a touch of flicker on some
+        float fl = 0.85 + 0.15 * step(0.08, fract(sin(dot(floor(vPos.xz * 0.2), vec2(7.1, 3.3))) * 91.7 + uTime * 0.7));
+        vec3 e = vCol.rgb * 3.2 * fl;
+        FragColor = vec4(applyFog(e + albedo * ambient(n) * 0.2, vPos), 1.0);
+        return;
+    } else if (mat == 14 || mat == 17) {
+        // building facades: floors every 3.6 m, window bays every 2.8 m (towers: a glass curtain wall)
+        bool tower = mat == 17;
+        float u = abs(n.x) > abs(n.z) ? vPos.z : vPos.x;
+        float fy = vPos.y / 3.6, fx = u / (tower ? 1.6 : 2.8);
+        vec2 cell = vec2(fract(fx), fract(fy)), id = vec2(floor(fx), floor(fy));
+        float rnd = fract(sin(dot(id, vec2(12.9898, 78.233)) + floor(vPos.y / 40.0)) * 43758.5453);
+        bool roof = n.y > 0.6;
+        float win = roof ? 0.0 : (tower ? step(0.06, cell.x) * step(cell.x, 0.94) * step(0.08, cell.y)
+                                        : step(0.18, cell.x) * step(cell.x, 0.82) * step(0.22, cell.y) * step(cell.y, 0.78));
+        if (roof) { albedo = vec3(0.32, 0.32, 0.31); }
+        else {
+            vec3 frame = tower ? vCol.rgb * 0.35 + 0.08 : vCol.rgb * (0.85 + 0.2 * vnoise(vPos.xy * 0.3 + vPos.zy * 0.3));
+            vec3 glassC = tower ? vCol.rgb * 0.45 : vec3(0.08, 0.10, 0.12);
+            albedo = mix(frame, glassC, win);
+            // a few lit windows, warm and cool
+            float lit = step(0.86, rnd) * win;
+            vec3 interior = mix(vec3(1.0, 0.82, 0.55), vec3(0.75, 0.88, 1.0), step(0.5, fract(rnd * 7.3)));
+            col0 = interior * lit * 0.12;
+            refl = win * (tower ? 0.55 : 0.32); spec = 0.2 + win * 0.6; gloss = 60.0 + win * 300.0;
+        }
+    } else if (mat == 16) {
+        // corrugated steel (containers, sheds): vertical ribs, paint wear, darker towards the bottom
+        float u = abs(n.x) > abs(n.z) ? vPos.z : vPos.x;
+        float rib = n.y > 0.6 ? 0.0 : smoothstep(0.3, 0.5, abs(fract(u / 0.28) - 0.5));
+        float wear = vnoise(vPos.xz * 1.7 + vPos.y * 2.0);
+        albedo = vCol.rgb * (0.82 + 0.18 * rib) * (0.85 + 0.25 * wear);
+        albedo = mix(albedo, vec3(0.30, 0.22, 0.16), smoothstep(0.78, 0.95, vnoise(vPos.xz * 3.1 + vPos.y * 4.0)) * 0.35);
+        spec = 0.25; gloss = 30.0;
     }
     vec3 col = lighting(albedo, n, sh) + albedo * uSunColor * fill * (1.0 - sh) * 0.5;
     vec3 H = normalize(V + uSunDir);
@@ -319,8 +531,10 @@ void main(){
         col += uSunColor * pow(ndh, 700.0) * 3.5 * sharp * sh;
     } else if (refl > 0.0) {
         vec3 env = envColor(R);
-        col = mix(col, env * (mat == 4 ? vec3(1.0) : albedo * 2.0), refl);
+        float F = mat >= 14 ? (0.25 + 0.75 * pow(1.0 - ndv, 4.0)) : 1.0;
+        col = mix(col, env * (mat == 4 || mat >= 14 ? vec3(1.0) : albedo * 2.0), refl * F);
     }
+    col += col0;
     FragColor = vec4(applyFog(col, vPos), 1.0);
 }
 )";
@@ -333,6 +547,7 @@ uniform vec4 uColor;
 uniform int uFlags, uHasBase, uHasNormal, uHasEmis, uGlassPass;
 uniform vec3 uEmis, uPaint;
 uniform float uBrake;
+uniform int uBody;
 out vec4 FragColor;
 void main(){
     vec2 uv = vCol.xy;
@@ -366,6 +581,10 @@ void main(){
         float baseA = gl_FrontFacing ? clamp(base.a * 0.55, 0.25, 0.7) : 0.12;
         if ((uFlags & 4) != 0) baseA = clamp(base.a, 0.2, 0.9);
         vec3 tint = base.rgb * 0.15 * (ambient(n) + uSunColor * 0.3);
+        // window film: cabin glass only (lamp lenses sit low or at the very ends)
+        float film = (uBody == 1 && (uFlags & 4) == 0 && vObj.y > uCarDims.z * 0.5 && abs(vObj.z) < uCarDims.x * 0.43) ? uWinTint : 0.0;
+        baseA = mix(baseA, gl_FrontFacing ? 0.94 : 0.6, film);
+        tint *= 1.0 - 0.9 * film;
         float a = 1.0 - (1.0 - baseA) * (1.0 - F);
         vec3 c = (tint * baseA * (1.0 - F) + env * F + spec) / max(a, 0.01);
         FragColor = vec4(applyFog(c, vPos), clamp(a, 0.0, 1.0));
@@ -384,6 +603,7 @@ void main(){
             albedo = mix(base.rgb, uPaint * clamp(mx / 0.8, 0.35, 1.25), mask);
         } else
         albedo = uPaint * clamp(mix(1.0, l / 0.72, 0.65), 0.2, 1.3);
+        if (uBody == 1) albedo = applyLivery(albedo, vObj, clamp(mix(1.0, l / 0.72, 0.65), 0.2, 1.3));
         float fl = texture(tFlakes, vObj.xz * 3.1 + vObj.y * 1.7).r;
         albedo *= 0.94 + 0.12 * fl;
         coat = 1.0; spec = 0.4;
@@ -537,6 +757,7 @@ void main(){
     vec3 ground = texture(tGrass, vPos.xz / 37.0 + 0.37).rgb;
     ground *= mix(vec3(0.86, 0.95, 0.72), vec3(1.10, 0.98, 0.80), smoothstep(0.25, 0.75, fbm2(vPos.xz * 0.0035)));
     vec3 albedo = mix(ground * 0.85, t.rgb * ground * 1.7, 0.7) * (0.55 + 0.45 * (1.0 - vUV.y));
+    if (uPhoto == 1) albedo = t.rgb * mix(vec3(0.95), ground * 1.6, 0.35) * (0.45 + 0.55 * (1.0 - vUV.y));  // blade colour, rooted in the ground tone
     vec3 n = normalize(vGround + vec3(0.0, 0.6, 0.0));
     float sh = shadowFactor(vPos, vGround);
     vec3 V = normalize(uCamPos - vPos);
@@ -600,7 +821,7 @@ void main(){
     vec4 b = uInvViewProj * vec4(vUV * 2.0 - 1.0, 1.0, 1.0);
     vec3 d = normalize(b.xyz / b.w - a.xyz / a.w);
     vec3 c = skyColor(d);
-    if (d.y > 0.0) {
+    if (d.y > 0.0 && uHdri == 0) {
         vec2 uv = d.xz / (d.y + 0.12) * 0.9 + vec2(uTime * 0.004, uTime * 0.0015);
         float n = fbm2(uv * 1.3);
         float n2 = fbm2(uv * 4.1 + 4.0);
@@ -790,6 +1011,10 @@ uniform float uAOAmt;
 uniform vec2 uAOTexel;
 uniform vec2 uTexelS;
 uniform float uGrainT;
+uniform float uMB;
+uniform sampler2D uDepthP;
+uniform mat4 uInvVP, uPrevVP;
+uniform vec3 uCamPosP;
 out vec4 FragColor;
 vec3 aces(vec3 x){ return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
 void main(){
@@ -803,6 +1028,27 @@ void main(){
         vec3 amp = sqrt(clamp(min(mn, 2.0 - mx) / max(mx, 1e-4), 0.0, 1.0));
         vec3 wgt = -amp * 0.16;
         c = clamp((c + (n + s2 + e + w) * wgt) / (1.0 + 4.0 * wgt), 0.0, 64.0);
+    }
+    if (uMB > 0.001) {
+        // per-pixel camera motion blur from depth reprojection (the car you drive stays sharp)
+        float d = texture(uDepthP, uv).r;
+        vec4 wp = uInvVP * vec4(uv * 2.0 - 1.0, min(d, 0.99999) * 2.0 - 1.0, 1.0);
+        wp /= wp.w;
+        vec4 pp = uPrevVP * vec4(wp.xyz, 1.0);
+        vec2 puv = pp.xy / pp.w * 0.5 + 0.5;
+        vec2 vel = (uv - puv) * uMB;
+        float dist = length(wp.xyz - uCamPosP);
+        vel *= smoothstep(7.0, 16.0, dist);
+        float l = length(vel);
+        if (l > 0.06) vel *= 0.06 / l;
+        if (l > 0.0015) {
+            vec3 acc = c;
+            for (int i = 1; i <= 8; i++) {
+                float t = float(i) / 8.0 - 0.5;
+                acc += texture(uScene, uv + vel * t).rgb;
+            }
+            c = acc / 9.0;
+        }
     }
     if (uBlur > 0.001) {
         vec2 dir = uv - vec2(0.5, 0.45);

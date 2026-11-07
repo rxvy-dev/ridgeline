@@ -1,3 +1,6 @@
+#include <cstdio>
+#include <cctype>
+#include <cstring>
 #include "race.h"
 #include <algorithm>
 
@@ -205,6 +208,106 @@ std::vector<EventDef> buildEvents(const World& w) {
         e.prize[0] = 11000; e.prize[1] = 6500; e.prize[2] = 3500;
         finish(e);
     }
+    // ---------------- the wider island
+    auto road = [&](const char* n) -> const Road* {
+        for (auto& r : w.roads) if (r.name == n) return &r;
+        return nullptr;
+    };
+    // a route through corner points, corners rounded, heights from the (carved) ground
+    auto through = [&](std::vector<vec3> c, bool closed, float width) {
+        Route rt;
+        int n = int(c.size());
+        std::vector<vec3> cut;
+        for (int i = 0; i < n; i++) {
+            vec3 p = c[i], a0 = c[(i - 1 + n) % n], b0 = c[(i + 1) % n];
+            if (!closed && (i == 0 || i == n - 1)) { cut.push_back(p); continue; }
+            cut.push_back(p + normalize(a0 - p) * 20.f);
+            cut.push_back(p + normalize(b0 - p) * 20.f);
+        }
+        int m = int(cut.size());
+        int segs = closed ? m : m - 1;
+        for (int sgi = 0; sgi < segs; sgi++) {
+            vec3 a = cut[sgi], b = cut[(sgi + 1) % m];
+            int steps = std::max(2, int(length(b - a) / 4.f));
+            for (int k = 0; k < steps; k++) {
+                vec3 p = lerp(a, b, k / float(steps));
+                p.y = w.heightAt(p.x, p.z);
+                rt.pts.push_back(p);
+            }
+        }
+        if (!closed) { vec3 p = cut.back(); p.y = w.heightAt(p.x, p.z); rt.pts.push_back(p); }
+        // smooth the corners a little
+        for (int it = 0; it < 6; it++) {
+            std::vector<vec3> o = rt.pts;
+            int q = int(o.size());
+            for (int i = 0; i < q; i++) {
+                if (!closed && (i == 0 || i == q - 1)) continue;
+                vec3 a2 = rt.pts[(i - 1 + q) % q], b2 = rt.pts[(i + 1) % q];
+                o[i] = (a2 + rt.pts[i] * 2.f + b2) * 0.25f;
+                o[i].y = w.heightAt(o[i].x, o[i].z);
+            }
+            rt.pts = o;
+        }
+        rt.closed = closed;
+        rt.width = width;
+        rt.finalize();
+        return rt;
+    };
+    {
+        EventDef e;
+        e.name = "Neon City Circuit";
+        e.blurb = "Two laps through the downtown grid, under the towers.";
+        e.type = EV_CIRCUIT; e.laps = 2;
+        e.route = through({vec3(1800, 0, -850), vec3(2400, 0, -850), vec3(2400, 0, -400), vec3(2700, 0, -400), vec3(2700, 0, 200),
+                           vec3(2100, 0, 200), vec3(2100, 0, -100), vec3(1800, 0, -100)}, true, 12.f);
+        e.prize[0] = 18000; e.prize[1] = 10000; e.prize[2] = 6000;
+        finish(e);
+    }
+    if (const Road* c = road("Coast Highway")) {
+        EventDef e;
+        e.name = "Harbour Run";
+        e.blurb = "Out of the city and down the coast to the docks.";
+        e.type = EV_SPRINT;
+        e.route = routeFromRoad(*c, nearestIndex(*c, vec3(2400, 0, -250)), nearestIndex(*c, vec3(400, 0, -1880)), false);
+        e.prize[0] = 15000; e.prize[1] = 8500; e.prize[2] = 5000;
+        finish(e);
+    }
+    if (const Road* c = road("Coast Highway")) {
+        EventDef e;
+        e.name = "Coast to Coast";
+        e.blurb = "The whole Coast Highway: city, docks, farmland, home.";
+        e.type = EV_SPRINT;
+        e.route = routeFromRoad(*c, 0, int(c->pts.size()) - 1, false);
+        e.prize[0] = 30000; e.prize[1] = 17000; e.prize[2] = 9000;
+        finish(e);
+    }
+    {
+        EventDef e;
+        e.name = "Docks Circuit";
+        e.blurb = "Two laps between the container stacks and the cranes.";
+        e.type = EV_CIRCUIT; e.laps = 2;
+        e.route = through({vec3(450, 0, -1905), vec3(450, 0, -2330), vec3(1750, 0, -2330), vec3(1750, 0, -1900)}, true, 12.f);
+        e.prize[0] = 14000; e.prize[1] = 8000; e.prize[2] = 4500;
+        finish(e);
+    }
+    if (const Road* t = road("Akagi Touge")) {
+        EventDef e;
+        e.name = "Akagi Touge";
+        e.blurb = "Hairpin after hairpin up into the northern peaks.";
+        e.type = EV_SPRINT;
+        e.route = routeFromRoad(*t, 0, int(t->pts.size()) - 1, false);
+        e.prize[0] = 16000; e.prize[1] = 9000; e.prize[2] = 5000;
+        finish(e);
+    }
+    if (const Road* f = road("Harvest Lanes")) {
+        EventDef e;
+        e.name = "Harvest Scramble";
+        e.blurb = "Two dusty laps around the western farms.";
+        e.type = EV_CIRCUIT; e.laps = 2;
+        e.route = routeFromRoad(*f, 0, 0, true);
+        e.prize[0] = 12000; e.prize[1] = 7000; e.prize[2] = 4000;
+        finish(e);
+    }
     // a reverse-direction circuit for variety
     {
         EventDef e;
@@ -217,6 +320,100 @@ std::vector<EventDef> buildEvents(const World& w) {
         finish(e);
     }
     return ev;
+}
+
+// ---------------------------------------------------------------- EventLab
+std::string autoEventName(const World& w, const CustomEvent& c) {
+    if (c.road < 0 || c.road >= int(w.roads.size())) return "Custom Event";
+    const Road& r = w.roads[c.road];
+    std::string n = r.name;
+    if (r.closed) n += c.laps > 1 ? " " + std::to_string(c.laps) + "-Lap Circuit" : " Circuit";
+    else n += " " + std::to_string(c.length) + " km Sprint";
+    if (c.reverse) n += " (Rev)";
+    return n;
+}
+
+bool makeCustomEvent(const World& w, const CustomEvent& c, EventDef& e) {
+    if (c.road < 0 || c.road >= int(w.roads.size())) return false;
+    const Road& r = w.roads[c.road];
+    int m = int(r.pts.size());
+    if (m < 16) return false;
+    int s = std::clamp(c.start, 0, 99) * m / 100;
+    e = EventDef();
+    e.name = c.name.empty() ? autoEventName(w, c) : c.name;
+    if (r.closed) {
+        e.type = EV_CIRCUIT;
+        e.laps = std::clamp(c.laps, 1, 10);
+        e.route = routeFromRoad(r, s, 0, true);
+        if (c.reverse) e.route = reversed(e.route);
+    } else {
+        e.type = EV_SPRINT;
+        e.laps = 1;
+        // walk the requested distance from the start, in the chosen direction
+        float want = std::max(1, c.length) * 1000.f;
+        int dir = c.reverse ? -1 : 1;
+        int i = s;
+        float got = 0;
+        while (got < want) {
+            int j = i + dir;
+            if (j < 0 || j >= m) break;
+            got += std::hypot(r.pts[j].x - r.pts[i].x, r.pts[j].z - r.pts[i].z);
+            i = j;
+        }
+        if (got < 400.f) return false;
+        e.route = c.reverse ? reversed(routeFromRoad(r, i, s, false)) : routeFromRoad(r, s, i, false);
+    }
+    e.opponents = std::clamp(c.opponents, 0, 7);
+    e.clsLimit = c.cls >= 1 && c.cls <= 5 ? "DCBAS"[c.cls - 1] : 0;
+    e.wet = c.wet;
+    float km = e.totalLength() / 1000.f;
+    int p = int(std::clamp(km * 1600.f * (0.6f + 0.06f * e.opponents), 2000.f, 40000.f)) / 100 * 100;
+    e.prize[0] = p; e.prize[1] = p * 55 / 100; e.prize[2] = p * 3 / 10;
+    char buf[160];
+    std::snprintf(buf, sizeof(buf), "EventLab: %s, %d rival%s%s%s.", r.surface == SURF_ASPHALT ? "tarmac" : "dirt", e.opponents,
+                  e.opponents == 1 ? "" : "s", e.clsLimit ? (std::string(", class ") + e.clsLimit).c_str() : "", e.wet ? ", wet roads" : "");
+    e.blurb = buf;
+    e.markerPos = e.route.pts[0];
+    e.startYaw = std::atan2(e.route.tan[0].x, e.route.tan[0].z);
+    return true;
+}
+
+// Share code: RL1-<fields in base 36>-<checksum>. Short enough to read out or paste in chat.
+static const char* kB36 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+std::string encodeEvent(const CustomEvent& c) {
+    int f[9] = {c.road, c.start, c.length, c.laps, c.opponents, c.cls, c.reverse ? 1 : 0, c.wet ? 1 : 0, 0};
+    std::string body;
+    for (int i = 0; i < 8; i++) {
+        int v = std::clamp(f[i], 0, 36 * 36 - 1);
+        body += kB36[v / 36];
+        body += kB36[v % 36];
+    }
+    unsigned ck = 7;
+    for (char ch : body) ck = (ck * 31 + unsigned(ch)) % 1296;
+    std::string code = "RL1-" + body.substr(0, 8) + "-" + body.substr(8) + "-" + kB36[ck / 36] + kB36[ck % 36];
+    return code;
+}
+
+bool decodeEvent(const std::string& in, CustomEvent& c) {
+    std::string s;
+    for (char ch : in) if (std::isalnum((unsigned char)ch)) s += char(std::toupper((unsigned char)ch));
+    if (s.size() != 3 + 16 + 2 || s.compare(0, 3, "RL1") != 0) return false;
+    std::string body = s.substr(3, 16);
+    unsigned ck = 7;
+    for (char ch : body) ck = (ck * 31 + unsigned(ch)) % 1296;
+    auto val = [](char ch) { const char* p = std::strchr(kB36, ch); return p ? int(p - kB36) : -1; };
+    int got = val(s[19]) * 36 + val(s[20]);
+    if (got != int(ck)) return false;
+    int f[8];
+    for (int i = 0; i < 8; i++) {
+        int a = val(body[i * 2]), b = val(body[i * 2 + 1]);
+        if (a < 0 || b < 0) return false;
+        f[i] = a * 36 + b;
+    }
+    c = CustomEvent();
+    c.road = f[0]; c.start = std::clamp(f[1], 0, 99); c.length = std::clamp(f[2], 1, 40); c.laps = std::clamp(f[3], 1, 10);
+    c.opponents = std::clamp(f[4], 0, 7); c.cls = std::clamp(f[5], 0, 5); c.reverse = f[6] != 0; c.wet = f[7] != 0;
+    return true;
 }
 
 // ---------------------------------------------------------------- progress

@@ -71,12 +71,27 @@ bool ImportedModel::load(const std::string& d, std::string& err) {
     uint32_t nt = r.get<uint32_t>();
     struct TexJob { int w, h; const uint8_t* src; uint32_t len; std::vector<uint8_t> px; bool ok; };
     std::vector<TexJob> jobs(nt);
+    std::vector<std::vector<uint8_t>> shared;  // textures stored once in a sibling _tex folder
+    shared.reserve(nt);
     for (auto& j : jobs) {
         j.w = r.get<uint16_t>();
         j.h = r.get<uint16_t>();
         j.len = r.get<uint32_t>();
         j.src = r.take(j.len);
         if (!r.ok) { err = "truncated textures"; return false; }
+        if (j.w == 0 && j.h == 0) {
+            // reference: file name of a shared texture (u16 w, u16 h, u32 len, zlib data)
+            std::string name(reinterpret_cast<const char*>(j.src), j.len);
+            std::ifstream tf(d + "/../_tex/" + name, std::ios::binary);
+            shared.emplace_back(std::istreambuf_iterator<char>(tf), std::istreambuf_iterator<char>());
+            const std::vector<uint8_t>& b = shared.back();
+            j.len = 0; j.src = nullptr;
+            if (b.size() < 8) continue;
+            std::memcpy(&j.w, &b[0], 2); std::memcpy(&j.h, &b[2], 2);
+            uint32_t n; std::memcpy(&n, &b[4], 4);
+            if (8 + size_t(n) > b.size()) { j.w = j.h = 0; continue; }
+            j.len = n; j.src = b.data() + 8;
+        }
     }
     {
         unsigned nth = std::max(1u, std::min(16u, std::thread::hardware_concurrency()));
@@ -89,7 +104,7 @@ bool ImportedModel::load(const std::string& d, std::string& err) {
                     size_t i;
                     { std::lock_guard<std::mutex> lk(m); i = next++; }
                     if (i >= jobs.size()) return;
-                    jobs[i].ok = zlibInflate(jobs[i].src, jobs[i].len, jobs[i].px, size_t(jobs[i].w) * jobs[i].h * 4);
+                    jobs[i].ok = jobs[i].src && jobs[i].w > 0 && zlibInflate(jobs[i].src, jobs[i].len, jobs[i].px, size_t(jobs[i].w) * jobs[i].h * 4);
                 }
             });
         for (auto& t : pool) t.join();
@@ -127,7 +142,8 @@ bool ImportedModel::load(const std::string& d, std::string& err) {
     // parts
     uint32_t np = r.get<uint32_t>();
     float frontZ = std::max(wc[0].z, wc[1].z), rearZ = std::min(wc[2].z, wc[3].z);
-    float hoodY = 0.f;
+    float hoodY = 0.f, deck = 0.f;
+    vec3 smin(1e9f, 1e9f, 1e9f), smax(-1e9f, -1e9f, -1e9f);
     for (uint32_t i = 0; i < np && r.ok; i++) {
         ImpPart part;
         part.role = int(r.get<uint32_t>());
@@ -137,10 +153,13 @@ bool ImportedModel::load(const std::string& d, std::string& err) {
         const uint32_t* id = reinterpret_cast<const uint32_t*>(r.take(size_t(ni) * 4));
         if (!r.ok) break;
         std::vector<Vertex> v(nv);
+        bool glassMat = part.mat >= 0 && part.mat < int(mats.size()) && (mats[part.mat].flags & (IF_GLASS | IF_BLEND));
         for (uint32_t k = 0; k < nv; k++) {
             const float* q = vd + k * 8;
             v[k] = {vec3(q[0], q[1], q[2]), vec3(q[3], q[4], q[5]), vec4(q[6], q[7], 0, 0)};
             if (part.role == 0 && std::fabs(q[0]) < 0.3f && q[2] < frontZ - 0.15f && q[2] > frontZ - 0.75f) hoodY = std::max(hoodY, q[1]);
+            if (part.role == 0 && !glassMat && std::fabs(q[0]) < W * 0.3f && q[2] < -L * 0.5f + 0.42f && q[2] > -L * 0.5f + 0.1f) deck = std::max(deck, q[1]);
+            if (part.role == 9) for (int a = 0; a < 3; a++) { (&smin.x)[a] = std::min((&smin.x)[a], q[a]); (&smax.x)[a] = std::max((&smax.x)[a], q[a]); }
         }
         std::vector<uint32_t> idx(id, id + ni);
         part.mesh.upload(v, idx);
@@ -156,6 +175,9 @@ bool ImportedModel::load(const std::string& d, std::string& err) {
     eye = vec3(W * 0.19f, H * 0.80f, wbMid - 0.08f * (frontZ - rearZ));
     hood = vec3(0, (hoodY > 0.3f ? hoodY : H * 0.7f) + 0.14f, frontZ - 0.35f);
     bumper = vec3(0, std::max(0.45f, wr[0] * 1.4f), L * 0.5f + 0.12f);
+    deckY = deck > 0.3f ? std::min(deck, H * 0.76f) : H * 0.72f;  // ignore a stock wing
+    deckZ = -L * 0.5f + 0.24f;
+    if (smax.x > smin.x) { hasSteer = true; steerC = (smin + smax) * 0.5f; }
     return true;
 }
 

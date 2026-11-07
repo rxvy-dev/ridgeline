@@ -8,12 +8,23 @@
 #include <SDL3/SDL.h>
 #include <string>
 #include <functional>
+#include <map>
 #include <vector>
 
-enum State { ST_TITLE, ST_FREEROAM, ST_PAUSE, ST_MAP, ST_DEALER, ST_GARAGE, ST_SETTINGS, ST_RACE_INTRO, ST_RACE, ST_RESULTS, ST_PHOTO, ST_WHEELSPIN, ST_UPGRADE, ST_SWITCH };
+enum State { ST_TITLE, ST_FREEROAM, ST_PAUSE, ST_MAP, ST_DEALER, ST_GARAGE, ST_SETTINGS, ST_RACE_INTRO, ST_RACE, ST_RESULTS, ST_PHOTO, ST_WHEELSPIN, ST_UPGRADE, ST_SWITCH, ST_CUSTOM, ST_EVENTLAB, ST_MYEVENTS };
 enum Action { A_NONE, A_UP, A_DOWN, A_LEFT, A_RIGHT, A_CONFIRM, A_BACK, A_PAUSE, A_CAMERA, A_RESET, A_MAP, A_INTERACT, A_TOGGLE, A_SELL, A_PHOTO, A_UPGRADE, A_HIDE, A_SWITCH };
 
-struct OwnedCar { int spec; int paint; bool stripes; int up[3] = {0, 0, 0}; };  // upgrades: engine, weight, tyres
+struct OwnedCar {
+    int spec; int paint; bool stripes;
+    int up[3] = {0, 0, 0};  // upgrades: engine, weight, tyres
+    // cosmetics
+    int livery = 0, livCol = 0, tint = 0, aero = 0, ride = 0, number = 0;
+};
+constexpr int kLiveryCount = 9, kTintCount = 4, kAeroCount = 4, kRideCount = 3;
+extern const char* kLiveryNames[];
+extern const char* kTintNames[];
+extern const char* kAeroNames[];
+extern const char* kRideNames[];
 
 struct PRStunt {
     int type = 0;            // 0 speed trap, 1 speed zone
@@ -34,6 +45,8 @@ struct Settings {
     bool vsync = true;
     bool assists = true;
     int grass = 2;  // 0 off, 1 low, 2 high
+    bool wet = false;  // after-rain roads with puddles
+    int steerLock = 2;  // cockpit wheel rotation lock to lock: 0 180, 1 360, 2 540, 3 900 degrees
 };
 
 struct Toast { std::string text; vec4 col; float t; };
@@ -55,6 +68,7 @@ struct Options {
     float orbit = 0.f;     // photo mode: auto-orbit speed (rad/s)
     bool noHints = false;
     bool noHud = false;
+    bool wet = false;      // --wet: wet roads
 };
 
 class Game {
@@ -178,6 +192,25 @@ private:
     int spinResult = -1;
     // upgrades screen
     int upSel = 0;
+    int custSel = 0;
+    int menuTab = 0;                  // pause hub tab
+    std::vector<GLuint> houseThumb;   // menu shots of each house
+    // EventLab
+    std::vector<CustomEvent> customEvents;
+    int builtinEvents = 0;
+    CustomEvent labEv;
+    int labSel = 0;
+    EventDef labPreview;
+    bool labOk = false;
+    void rebuildCustomEvents();
+    void openEventLab();
+    bool importEventCode();
+    void labInput(Action a);
+    void drawEventLab();
+    void myEventsInput(Action a);
+    void drawMyEvents();
+    void drawRouteMap(float x, float y, float S, const Route* rt, vec4 col);
+    std::map<int, Mesh> aeroCache;   // spec*8 + kit -> wing / splitter mesh
 
     int xpToNext() const { return 1000 + (level - 1) * 400; }
     void addXP(int amount);
@@ -207,6 +240,14 @@ private:
     void drawChain();
     void drawWheelspin();
     void drawUpgrades();
+    // customization (custom.cpp)
+    void applyCosmetics(Racer& r, const OwnedCar& oc) const;
+    void setCosmeticUniforms(Shader& s, const Racer& r, bool body) const;
+    const Mesh* aeroMesh(const Racer& r);
+    mat4 bodyFrame(const Racer& r) const;
+    mat4 steeringFrame(const Racer& r, vec3 c) const;
+    void customInput(Action a);
+    void drawCustomize();
     void drawPhoto();
     void drawStuntsOnMinimap(vec2 c, float Rr, std::function<vec2(vec3)> toScreen);
     bool photoCapture = false;
@@ -223,6 +264,15 @@ private:
     vec4 cheatRect;
     State switchFrom = ST_FREEROAM;
     int devRoad = -1;
+    // scanned props (props.cpp)
+    struct PropType { ImportedModel* model = nullptr; bool plant = false; float smin = 1, smax = 1; };
+    struct PropInst { mat4 M; vec3 pos; int type; float radius; };
+    std::vector<PropType> propTypes;
+    std::vector<PropInst> propInst;
+    bool rocksAsProps = false;
+    void loadProps();
+    void placeProps();
+    void drawProps(const Camera& c, vec3 eye, float rockRange, float plantRange, bool depthOnly);
     float menuOpenT = 0, hintT = 0;
     // camera dynamics and transitions
     vec3 prevCarVel;
@@ -263,6 +313,17 @@ private:
     float gpsTimer = 0;
     void updateGps(float dt);
     bool nearHub = false;
+    // houses
+    std::vector<int> ownedEstates;    // indices into world.estates
+    int nearHome = -1;                // estate the player is parked at
+    int garageHome = -1;              // garage opened from this estate (-1 = festival hub)
+    int gpsEstate = -1;
+    bool ownsEstate(int i) const { return std::find(ownedEstates.begin(), ownedEstates.end(), i) != ownedEstates.end(); }
+    void updateHomes();
+    bool homeInteract();
+    void buyEstate(int i);
+    void drawHomePrompt();
+    void drawEstateMarkers();
     Racer showCar;
     int dealerPaint = 0;
 
