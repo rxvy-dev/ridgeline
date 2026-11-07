@@ -507,26 +507,54 @@ def main():
 
     # tyre bounds per corner -> wheel centre / radius / width
     tire_src = [p for p in spin_parts if TIRE.search(part_names(p)) and not re.search("steering", part_names(p), re.I)] or spin_parts
-    wb = [[np.full(3, 1e9), np.full(3, -1e9)] for _ in range(4)]
+    corner_pts = [[] for _ in range(4)]
     for p in tire_src:
         tri = p.idx.reshape(-1, 3)
         cent = p.pos[tri].mean(1)
         cor = corner_of(cent)
         for k in range(4):
-            sel = tri[cor == k].reshape(-1)
+            sel = np.unique(tri[cor == k].reshape(-1))
             if len(sel):
-                wb[k][0] = np.minimum(wb[k][0], p.pos[sel].min(0))
-                wb[k][1] = np.maximum(wb[k][1], p.pos[sel].max(0))
+                corner_pts[k].append(p.pos[sel])
     wheels = []
+    steer = [0.0] * 4
     for k in range(4):
-        lo_, hi_ = wb[k]
-        if lo_[0] > 1e8:
+        if not corner_pts[k]:
             sys.exit("could not find wheel %d - try --forward" % k)
-        cen = (lo_ + hi_) / 2
-        rad = (hi_[1] - lo_[1]) / 2
-        wid = hi_[0] - lo_[0]
+        P = np.concatenate(corner_pts[k])
+        cen = (P.min(0) + P.max(0)) / 2
+        # wheels modelled pre-steered: the rolling direction is the long axis in the ground plane
+        d = P[:, [0, 2]] - cen[[0, 2]]
+        w, v = np.linalg.eigh(np.cov(d.T))
+        roll = v[:, 1]
+        ang = math.atan2(roll[0], roll[1])
+        if ang > math.pi / 2: ang -= math.pi
+        if ang < -math.pi / 2: ang += math.pi
+        if abs(ang) < math.radians(2.5) or w[1] < w[0] * 1.3:
+            ang = 0.0
+        steer[k] = ang
+        c, s_ = math.cos(-ang), math.sin(-ang)
+        loc = P - cen
+        xr = loc[:, 0] * c + loc[:, 2] * s_
+        rad = (P[:, 1].max() - P[:, 1].min()) / 2
+        wid = xr.max() - xr.min()
+        cen[0] += (xr.max() + xr.min()) / 2 * c  # re-centre across the tyre after un-steering
         wheels.append((cen, rad, wid))
-        print("wheel %d: centre %s radius %.3f width %.3f" % (k, np.round(cen, 3), rad, wid))
+        print("wheel %d: centre %s radius %.3f width %.3f%s" % (k, np.round(cen, 3), rad, wid,
+              ("  (straightened %.1f deg of modelled steering)" % math.degrees(ang)) if ang else ""))
+
+    def unsteer(k, pos, nrm):
+        ang = steer[k]
+        if not ang:
+            return pos, nrm
+        c, s_ = math.cos(-ang), math.sin(-ang)
+        def rot(a):
+            a = a.copy()
+            x, z = a[:, 0].copy(), a[:, 2].copy()
+            a[:, 0] = x * c + z * s_
+            a[:, 2] = -x * s_ + z * c
+            return a
+        return rot(pos), rot(nrm)
 
     def emit_split(p, role_base, body_out):
         """Triangles inside a wheel cylinder go to that wheel; the rest stays on the body."""
@@ -535,8 +563,9 @@ def main():
         assign = np.full(len(tri), -1)
         for k in range(4):
             cen, rad, wid = wheels[k]
-            d = np.hypot(cent[:, 1] - cen[1], cent[:, 2] - cen[2])
-            inside = (d < rad * 1.06) & (np.abs(cent[:, 0] - cen[0]) < wid * 0.75 + 0.05)
+            loc, _ = unsteer(k, cent - cen, cent - cen)
+            d = np.hypot(loc[:, 1], loc[:, 2])
+            inside = (d < rad * 1.06) & (np.abs(loc[:, 0]) < wid * 0.75 + 0.05)
             assign[(assign < 0) & inside] = k
         for k in range(-1, 4):
             t = tri[assign == k]
@@ -548,7 +577,8 @@ def main():
             if k < 0:
                 body_out.append((0, p.mat, p.pos[used], p.nrm[used], p.uv[used], remap[t].reshape(-1)))
             else:
-                out_parts.append((role_base + k, p.mat, p.pos[used] - wheels[k][0], p.nrm[used], p.uv[used], remap[t].reshape(-1)))
+                lp, ln = unsteer(k, p.pos[used] - wheels[k][0], p.nrm[used])
+                out_parts.append((role_base + k, p.mat, lp, ln, p.uv[used], remap[t].reshape(-1)))
 
     for p in body_parts:
         out_parts.append((0, p.mat, p.pos, p.nrm, p.uv, p.idx))

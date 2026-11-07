@@ -1,0 +1,14 @@
+BMW M3 (E30)
+
+This work is based on "[FREE] BMW M3 E30"
+(https://sketchfab.com/3d-models/free-bmw-m3-e30-ac3c7013434e403e8faff87948caf422)
+by Martin Trafas (https://sketchfab.com/Bexxie), licensed under CC-BY-4.0
+(http://creativecommons.org/licenses/by/4.0/).
+
+Changes: converted to Ridgeline's .rcar format with tools/import_car.py
+(rescaled to 4.36 m, the modelled front-wheel steering straightened, wheels
+split for animation, textures limited to 1024 px).
+
+This folder (model.rcar, car.ini) is licensed under CC BY 4.0 - not under the
+MIT licence that covers the rest of Ridgeline. BMW is a trademark of BMW AG;
+this fan project is not affiliated with them.
