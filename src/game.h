@@ -230,7 +230,8 @@ private:
     float fwTimer = 0;
     bool catDirty = true;
     int festDay = -1, festDone = 0, festPick[3] = {0, 1, 2}, streak = 0, lastDay = -1;
-    float festProg[3] = {0, 0, 0}, festShow = 0, festKmAcc = 0, ferrisAng = 0;
+    float festProg[3] = {0, 0, 0}, festShow = 0, festKmAcc = 0, ferrisAng = 0, boatT = 0;
+    Mesh riverboatMesh, swanMesh;  // boats that move: one along the canal, swans round the lake torii
     double kmDriven = 0;
     vec3 ferrisPos, ferrisAxis = vec3(1, 0, 0);
     const char* festText(int k) const;

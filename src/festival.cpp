@@ -359,6 +359,8 @@ void Game::buildFestival() {
         g.box(vec3(0, -0.6f, 0), vec3(0.08f, 0.6f, 0.08f), rim);
         g.box(vec3(0, -2.0f, 1.31f), vec3(1.2f, 0.6f, 0.02f), vec4(1.f, 0.85f, 0.6f, 20));
         g.build(gondolaMesh);
+        { MeshBuilder rb; buildRiverboat(rb, true); rb.build(riverboatMesh); }
+        { MeshBuilder sb; buildSwanBoat(sb); sb.build(swanMesh); }
     }
 }
 
@@ -391,6 +393,7 @@ void Game::rebuildCatMesh() {
 void Game::updateFestival(float dt) {
     festShow = std::max(0.f, festShow - dt);
     ferrisAng += dt * 0.12f;
+    boatT += dt;
     // fireworks over the festival from dusk till dawn
     if (R.night > 0.2f && length(cam.pos - world.festCenter) < 3500.f) {
         fwTimer -= dt;
@@ -462,6 +465,45 @@ void Game::drawFestivalWorld(const Camera& cam_) {
         R.object.set("uModel", basis(ferrisAxis, vec3(0, 1, 0), fw, p));
         gondolaMesh.draw();
     }
+    // the riverboat is poled up the canal and back again (too long to turn between the walls)
+    const auto& path = world.canalPath;
+    if (path.size() > 3) {
+        std::vector<float> acc(path.size(), 0.f);
+        for (size_t k = 1; k < path.size(); k++) acc[k] = acc[k - 1] + length(vec3(path[k].x - path[k - 1].x, 0, path[k].z - path[k - 1].z));
+        const float L = acc.back(), v = 1.3f, turn = 8.f, margin = 9.f;
+        float run = (L - 2 * margin) / v, cyc = 2 * (run + turn);
+        float tc = std::fmod(boatT, cyc);
+        float sPos, yawAdd = 0;  // yawAdd: kept for a boat that could turn
+        if (tc < run) sPos = margin + tc * v;
+        else if (tc < run + turn) sPos = L - margin;                     // a pause at the top, then poled back
+        else if (tc < 2 * run + turn) sPos = L - margin - (tc - run - turn) * v;
+        else sPos = margin;
+        size_t k = 1;
+        while (k + 1 < path.size() && acc[k] < sPos) k++;
+        float u = clampf((sPos - acc[k - 1]) / std::max(acc[k] - acc[k - 1], 1e-3f), 0.f, 1.f);
+        vec3 p = lerp(path[k - 1], path[k], u), d = path[k] - path[k - 1];
+        d.y = 0;
+        d = normalize(d);
+        vec3 side(-d.z, 0, d.x);
+        p = p - side * 1.9f;  // keep to the far side from the moored boats
+        float yaw = std::atan2(d.x, d.z) + yawAdd;
+        vec3 f(std::sin(yaw), 0, std::cos(yaw)), r(f.z, 0, -f.x);
+        p.y = path[k].y - 0.15f + std::sin(boatT * 1.3f) * 0.03f;
+        R.object.set("uModel", basis(r, vec3(0, 1, 0), f, p));
+        riverboatMesh.draw();
+    }
+    // swan boats paddling round the torii out in the lake
+    if (world.lakeTorii.y > -1e8f)
+        for (int k = 0; k < 4; k++) {
+            float rad = 18.f + k * 7.f, spd = (0.9f + 0.15f * k) / rad * (k % 2 ? -1.f : 1.f);
+            float a = boatT * spd + k * 1.7f;
+            vec3 p = world.lakeTorii + vec3(std::cos(a) * rad, 0, std::sin(a) * rad);
+            p.y = world.waterLevel - 0.12f + std::sin(boatT * 1.7f + k) * 0.04f;
+            vec3 f = normalize(vec3(-std::sin(a), 0, std::cos(a)) * (spd > 0 ? 1.f : -1.f)), r(f.z, 0, -f.x);
+            mat4 m = basis(r, vec3(0, 1, 0), f, p) * rotateZ(std::sin(boatT * 1.1f + k) * 0.03f);
+            R.object.set("uModel", m);
+            swanMesh.draw();
+        }
     R.object.set("uModel", mat4());
 }
 

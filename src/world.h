@@ -127,10 +127,16 @@ public:
     std::vector<TreeTrunk> pendingTrunks;
     std::vector<vec3> sakuraSpots;
     std::vector<vec3> waterQuads;  // extra water surfaces (canals): 4 corners per quad
-    std::vector<vec3> canalPts;    // canal centre line (keeps grass off the canal bed)
+    std::vector<vec3> canalPts;
+    std::vector<vec3> canalPath;   // canal centre at water height (the boat runs along it)
+    vec3 lakeTorii{0, -1e9f, 0};   // torii standing in the lake (swan boats paddle round it)    // canal centre line (keeps grass off the canal bed)
     std::vector<vec3> clearings;  // (x, radius, z): no wild trees (temple grounds, castle park)
     // paved strips outside the city (shopping streets): segment a-b, half width w
     struct Strip { vec3 a, b; float w; };
     std::vector<Strip> pavedStrips;
     bool stripPaved(float x, float z, float pad) const;
 };
+
+// boats (local space: x across, y up from the waterline, bow at +z)
+void buildRiverboat(MeshBuilder& b, bool boatman);
+void buildSwanBoat(MeshBuilder& b);

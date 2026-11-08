@@ -1348,6 +1348,12 @@ void World::buildShrines() {
         float h = heightAt(q.x, q.z);
         if (h < waterLevel + 0.8f || roadDistAt(q.x, q.z) < 4.5f || inBox(q.x, q.z, 2.5f) || paddyAt(q.x, q.z) > 0.05f) return;
         if (normalAt(q.x, q.z).y < 0.85f) return;
+        if (lakeTorii.y > -1e8f) {  // keep the view from the shore to the lake torii open
+            vec3 tw = normalize(vec3(lakeTorii.x - lakes.back().c.x, 0, lakeTorii.z - lakes.back().c.z));
+            vec2 ab(tw.x * 110.f, tw.z * 110.f), ap(q.x - lakeTorii.x, q.z - lakeTorii.z);
+            float u = clampf(dot(ap, ab) / dot(ab, ab), 0.f, 1.f);
+            if (length(vec2(lakeTorii.x + ab.x * u - q.x, lakeTorii.z + ab.y * u - q.z)) < 16.f) return;
+        }
         vec3 tint = sr.f() < 0.25f ? vec3(1.f, sr.range(0.84f, 0.9f), sr.range(0.84f, 0.9f))          // somei-yoshino, nearly white
                                    : vec3(1.f, sr.range(0.58f, 0.68f), sr.range(0.66f, 0.76f));       // deeper pink
         leafInst.push_back({vec3(q.x, h - 0.3f, q.z), sc, tint * sr.range(1.02f, 1.14f), sr.range(0, 6.28f)});
@@ -2687,6 +2693,8 @@ void World::buildJapan() {
             canalPts.push_back(a);
         }
         canalPts.push_back(cl[m - 1]);
+        canalPath.clear();
+        for (int j = 0; j < m; j++) canalPath.push_back(vec3(cl[j].x, water[j], cl[j].z));
         // end walls
         for (int j : {0, m - 1}) {
             vec3 a = cl[j], d = vec3(nrm[j].z, 0, -nrm[j].x);
@@ -2726,29 +2734,7 @@ void World::buildJapan() {
             vec3 q(a.x, water[j] - 0.15f, a.z);
             q = q + nrm[j] * 0.8f;
             mat4 bx = basis(nrm[j], up, d, q);
-            vec4 hull(0.36f, 0.25f, 0.16f, 0), deck(0.5f, 0.38f, 0.26f, 0), roofC(0.34f, 0.27f, 0.2f, 0), slat(0.22f, 0.17f, 0.12f, 0);
-            b.box(vec3(0, 0.15f, 0), vec3(1.0f, 0.38f, 4.3f), hull, &bx);
-            b.box(vec3(0, 0.55f, 0), vec3(0.95f, 0.04f, 4.2f), deck, &bx);
-            // pointed bow
-            vec3 b0 = bx.transformPoint(vec3(-1.0f, 0.53f, 4.3f)), b1 = bx.transformPoint(vec3(1.0f, 0.53f, 4.3f)), bt = bx.transformPoint(vec3(0, 0.62f, 5.6f));
-            vec3 b2 = bx.transformPoint(vec3(-1.0f, -0.23f, 4.3f)), b3 = bx.transformPoint(vec3(1.0f, -0.23f, 4.3f)), bb = bx.transformPoint(vec3(0, -0.1f, 5.4f));
-            tri(b0, b1, bt, up, deck);
-            quad(b0, bt, bb, b2, -nrm[j] + d, hull);
-            quad(b1, b3, bb, bt, nrm[j] + d, hull);
-            // low cabin roof on posts with slats, an opening at the stern
-            for (float zz : {-2.6f, 0.f, 2.6f})
-                for (int k = -1; k <= 1; k += 2) b.box(vec3(k * 0.85f, 1.25f, zz), vec3(0.05f, 0.68f, 0.05f), slat, &bx);
-            mat4 r1 = bx * translate(vec3(-0.5f, 2.02f, 0)) * rotateZ(0.32f), r2 = bx * translate(vec3(0.5f, 2.02f, 0)) * rotateZ(-0.32f);
-            b.box(vec3(0, 0, 0), vec3(0.62f, 0.04f, 3.0f), roofC, &r1);
-            b.box(vec3(0, 0, 0), vec3(0.62f, 0.04f, 3.0f), roofC, &r2);
-            for (int k = -5; k <= 5; k++) {
-                b.box(vec3(0, 0.05f, k * 0.55f), vec3(0.62f, 0.03f, 0.04f), slat, &r1);
-                b.box(vec3(0, 0.05f, k * 0.55f), vec3(0.62f, 0.03f, 0.04f), slat, &r2);
-            }
-            b.box(vec3(0, 2.25f, 0), vec3(0.08f, 0.06f, 3.05f), slat, &bx);  // ridge
-            for (int k = -1; k <= 1; k += 2) b.box(vec3(k * 0.95f, 0.9f, 0), vec3(0.03f, 0.3f, 2.7f), vec4(0.85f, 0.82f, 0.74f, 0), &bx);  // shoji screens
-            b.box(vec3(0, 1.05f, -3.6f), vec3(0.1f, 0.5f, 0.1f), slat, &bx);  // boatman's pole stand
-            b.tube(bx.transformPoint(vec3(0.3f, 0.6f, -3.8f)), bx.transformPoint(vec3(0.6f, 4.2f, -4.6f)), 0.035f, 0.035f, 4, vec4(0.55f, 0.45f, 0.3f, 0));
+            { MeshBuilder rb; buildRiverboat(rb, false); b.append(rb, bx); }
             person(bx.transformPoint(vec3(0, 0.58f, -3.9f)) + up * 0.0f, std::atan2(d.x, d.z), 2, false);
         }
         SDL_Log("Japan: canal, %d sections, middle (%.0f, %.0f) side %.0f", m, cl[m / 2].x, cl[m / 2].z, sg);
@@ -2790,6 +2776,8 @@ void World::buildJapan() {
         }
         vec3 tp = shore - toward * 42.f;
         waterTorii(tp, toward, 4.2f, 11.f);
+        lakeTorii = tp;
+        for (float d2 = 10.f; d2 < 110.f; d2 += 14.f) clearings.push_back(vec3((shore + toward * (d2 - 40.f)).x, 15.f, (shore + toward * (d2 - 40.f)).z));
         for (int k = -1; k <= 1; k += 2) toro(shore + toward * 6.f + normalize(cross(toward, up)) * (k * 4.f));
         sakuraSpots.push_back(shore + toward * 12.f + normalize(cross(toward, up)) * 9.f);
         sakuraSpots.push_back(shore + toward * 12.f - normalize(cross(toward, up)) * 9.f);
@@ -2827,6 +2815,67 @@ void World::buildJapan() {
     SDL_Log("Japan: %d people", people);
     rebuildBoxGrid();
     SDL_Log("Japan: %d buildings, %d utility poles", houses, poles);
+}
+
+
+// Covered riverboat (jikkokubune) in local space: x across, y up from just under the waterline,
+// z along with the bow at +z. Used moored in the canal and for the boat that runs along it.
+void buildRiverboat(MeshBuilder& b, bool boatman) {
+    auto tri = [&](vec3 p0, vec3 p1, vec3 p2, vec3 want, vec4 col) {
+        if (dot(cross(p1 - p0, p2 - p0), want) < 0) std::swap(p1, p2);
+        b.flatTri(p0, p1, p2, col);
+    };
+    auto quad = [&](vec3 p0, vec3 p1, vec3 p2, vec3 p3, vec3 want, vec4 col) { tri(p0, p1, p2, want, col); tri(p0, p2, p3, want, col); };
+    vec4 hull(0.36f, 0.25f, 0.16f, 0), deck(0.5f, 0.38f, 0.26f, 0), roofC(0.34f, 0.27f, 0.2f, 0), slat(0.22f, 0.17f, 0.12f, 0);
+    b.box(vec3(0, 0.15f, 0), vec3(1.0f, 0.38f, 4.3f), hull);
+    b.box(vec3(0, 0.55f, 0), vec3(0.95f, 0.04f, 4.2f), deck);
+    // pointed bow
+    vec3 b0 = (vec3(-1.0f, 0.53f, 4.3f)), b1 = (vec3(1.0f, 0.53f, 4.3f)), bt = (vec3(0, 0.62f, 5.6f));
+    vec3 b2 = (vec3(-1.0f, -0.23f, 4.3f)), b3 = (vec3(1.0f, -0.23f, 4.3f)), bb = (vec3(0, -0.1f, 5.4f));
+    tri(b0, b1, bt, vec3(0, 1, 0), deck);
+    quad(b0, bt, bb, b2, vec3(-1, 0, 1), hull);
+    quad(b1, b3, bb, bt, vec3(1, 0, 1), hull);
+    // low cabin roof on posts with slats, an opening at the stern
+    for (float zz : {-2.6f, 0.f, 2.6f})
+        for (int k = -1; k <= 1; k += 2) b.box(vec3(k * 0.85f, 1.25f, zz), vec3(0.05f, 0.68f, 0.05f), slat);
+    mat4 r1 = translate(vec3(-0.5f, 2.02f, 0)) * rotateZ(0.32f), r2 = translate(vec3(0.5f, 2.02f, 0)) * rotateZ(-0.32f);
+    b.box(vec3(0, 0, 0), vec3(0.62f, 0.04f, 3.0f), roofC, &r1);
+    b.box(vec3(0, 0, 0), vec3(0.62f, 0.04f, 3.0f), roofC, &r2);
+    for (int k = -5; k <= 5; k++) {
+        b.box(vec3(0, 0.05f, k * 0.55f), vec3(0.62f, 0.03f, 0.04f), slat, &r1);
+        b.box(vec3(0, 0.05f, k * 0.55f), vec3(0.62f, 0.03f, 0.04f), slat, &r2);
+    }
+    b.box(vec3(0, 2.25f, 0), vec3(0.08f, 0.06f, 3.05f), slat);  // ridge
+    for (int k = -1; k <= 1; k += 2) b.box(vec3(k * 0.95f, 0.9f, 0), vec3(0.03f, 0.3f, 2.7f), vec4(0.85f, 0.82f, 0.74f, 0));  // shoji screens
+    b.box(vec3(0, 1.05f, -3.6f), vec3(0.1f, 0.5f, 0.1f), slat);  // boatman's pole stand
+    b.tube((vec3(0.3f, 0.6f, -3.8f)), (vec3(0.6f, 4.2f, -4.6f)), 0.035f, 0.035f, 4, vec4(0.55f, 0.45f, 0.3f, 0));
+    if (boatman) {  // standing at the stern in a happi coat and a straw hat, pole in hand
+        vec3 q(0, 0.58f, -3.9f);
+        b.tube(q, q + vec3(0, 0.85f, 0), 0.13f, 0.13f, 6, vec4(0.15f, 0.15f, 0.2f, 0));
+        b.tube(q + vec3(0, 0.85f, 0), q + vec3(0, 1.45f, 0), 0.2f, 0.17f, 8, vec4(0.12f, 0.2f, 0.45f, 0));
+        b.sphere(q + vec3(0, 1.6f, 0), 0.11f, 1, vec4(0.9f, 0.75f, 0.62f, 0));
+        b.cone(q + vec3(0, 1.66f, 0), 0.32f, 0.2f, 10, vec4(0.85f, 0.75f, 0.45f, 0));
+        b.tube(q + vec3(0.2f, 1.2f, 0.1f), vec3(0.6f, 4.2f, -4.6f), 0.06f, 0.06f, 5, vec4(0.12f, 0.2f, 0.45f, 0));
+    }
+}
+
+// A swan pedal boat, as on the lakes round Fuji. Local space as above, about 2.4 m long.
+void buildSwanBoat(MeshBuilder& b) {
+    vec4 white(0.95f, 0.95f, 0.93f, 19), orange(0.95f, 0.55f, 0.1f, 19), black(0.05f, 0.05f, 0.05f, 0), seat(0.2f, 0.45f, 0.75f, 19);
+    b.box(vec3(0, 0.3f, 0), vec3(0.75f, 0.32f, 1.15f), white);
+    b.box(vec3(0, 0.66f, -0.2f), vec3(0.55f, 0.06f, 0.55f), seat);              // seats
+    b.box(vec3(0, 0.95f, -0.62f), vec3(0.55f, 0.3f, 0.06f), seat);
+    for (int k = -1; k <= 1; k += 2) {                                          // folded wings
+        mat4 w = translate(vec3(k * 0.78f, 0.72f, -0.15f)) * rotateZ(k * 0.5f);
+        b.box(vec3(0, 0, 0), vec3(0.08f, 0.32f, 0.95f), white, &w);
+    }
+    // neck in an S, head, beak
+    vec3 pts[5] = {{0, 0.55f, 0.95f}, {0, 1.2f, 1.25f}, {0, 1.75f, 1.1f}, {0, 2.05f, 1.25f}, {0, 2.1f, 1.45f}};
+    for (int k = 0; k < 4; k++) b.tube(pts[k], pts[k + 1], 0.2f - k * 0.03f, 0.17f - k * 0.03f, 8, white);
+    b.sphere(pts[4], 0.17f, 1, white);
+    b.tube(pts[4] + vec3(0, -0.02f, 0.12f), pts[4] + vec3(0, -0.06f, 0.42f), 0.07f, 0.02f, 6, orange);
+    for (int k = -1; k <= 1; k += 2) b.sphere(pts[4] + vec3(k * 0.13f, 0.05f, 0.06f), 0.035f, 1, black);
+    b.box(vec3(0, 0.75f, -1.1f), vec3(0.4f, 0.12f, 0.08f), white);              // tail
 }
 
 // rice paddies: flat low ground in the western countryside (the terrain shader draws the plots)
