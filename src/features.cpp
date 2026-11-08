@@ -200,6 +200,7 @@ void Game::buildStunts() {
 }
 
 void Game::showPopup(const std::string& title, const std::string& name, const std::string& value, int stars, bool best, vec4 col) {
+    if (stars > 0 && title != "CHALLENGE COMPLETE") festEvent(FS_STARS, float(stars));
     popup = {title, name, value, stars, best, 4.5f, col};
 }
 
@@ -353,6 +354,7 @@ void Game::chainBank() {
         int x = int(chainScore / 4.f);
         credits += cr;
         addXP(x);
+        festEvent(FS_SKILL, chainScore);
         toast("SKILL CHAIN  " + fmtThousands(int(chainScore)) + "   +" + fmtThousands(cr) + " CR  +" + fmtThousands(x) + " XP", F_ACCENT);
         audio.beep(1250, 0.12f);
     }

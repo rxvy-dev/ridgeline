@@ -6,7 +6,7 @@
 
 Written in C++17 with **SDL3** and OpenGL 3.3. No engine and no downloaded assets: every built-in car, texture, tree, road and mountain is generated in code when the game starts. You can also **import your own car models** (FBX or glTF) with the included converter.
 
-![Racing on the Ridge Highway](docs/screenshots/race.jpg)
+![Racing on the Hakone Turnpike](docs/screenshots/race.jpg)
 
 | | |
 |---|---|
@@ -17,15 +17,21 @@ Written in C++17 with **SDL3** and OpenGL 3.3. No engine and no downloaded asset
 
 ## Features
 
-- **Open world**: a 6 × 6 km island with about 46 km of roads you can leave whenever you want:
-  - the original valley with rolling hills, rock cliffs, four lakes and snow-capped mountains,
-  - **Neon Bay City**: a street grid with glass towers, neon signs and street lamps,
-  - **Harbour Docks**: container stacks, gantry cranes, warehouses and a container ship,
-  - the **Coast Highway** around the island, the **Akagi Touge** hairpins up into the northern mountains, and dirt lanes through the western farms,
-  - about 260,000 pines and autumn trees, plus scanned rocks, ferns and shrubs.
-- **14 race events** with AI drivers: circuits, point-to-point sprints, city and dock circuits, a coast-to-coast run, a touge, a dirt-trail scramble and an off-road cross-country race through checkpoints.
+- **Open world: Japan.** An 8 × 8 km island (64 km², bigger than San Andreas) with about 61 km of roads you can leave whenever you want:
+  - **Mount Fuji** in the north-west: long skirts, a flat crater summit, snow streaming down its gullies, the **Fuji Skyline** ring road round it and switchbacks up from the lake below,
+  - the **Japanese Alps** with the **Akagi Touge** and **Irohazaka** hairpins, the **Haruna Loop** and the **Usui Pass**,
+  - **Tokyo**: narrow buildings shoulder to shoulder along every street, back alleys, the Shinjuku towers, stacked neon signs, **Tokyo Tower** and a Shibuya scramble crossing,
+  - **Daikoku Wharf**: container stacks, gantry cranes, warehouses and a container ship,
+  - the **Wangan Highway** round the coast, the **Sea of Japan Road** up the west coast, the **Hakone Turnpike** ring in the valley, rice-country dirt lanes in the west,
+  - cherry blossom through the lowlands, torii gates and stone lanterns at the mountain roads, pines and autumn maples everywhere else.
+- **20+ race events** with AI drivers: circuits, sprints, touge, a downhill, drift zones, dirt scrambles and cross-country.
+- **Asphalt-style stunt ramps** on the road races: hit one and the car launches into a barrel roll, a double roll or a flat 360, with a moment of slow motion. Cars pitch with their arc in the air and land on their wheels.
+- **Festival Playlist**: three new challenges every day (win races, hit ramps, bank skill points, top speed...) for credits and XP, two Wheelspins for finishing all three, and a growing bonus for playing on consecutive days.
+- **Lucky cat boards**: 60 hidden around the island next to the roads. Smash them for XP and credits; every tenth gives a Wheelspin.
+- **Race craft**: place tags over the rivals, a braking racing line, guard rails where the road runs along a drop, and you're put back on the road if you go over the edge.
+- **Exhaust theatre**: backfires and flames on upshifts and the rev limiter, crackle when you lift off; hold brake and throttle at a standstill to rev.
 - **EventLab**: build your own race on any road. Pick the start, length or laps, direction, number of rivals, their class and the weather, test drive it and save it to **My Events** (it shows up on the map). Every event has a short **share code** (like `RL1-02000303-07040001-63`): copy it, post it anywhere, and a friend pastes it in with **Import Event**. No server needed, the code is the whole event.
-- **Houses**: five homes to buy around the island (Lakeside Cabin, Harvest Farmhouse, Harbour Loft, Summit Lodge, Clifftop Villa). Owning one unlocks fast travel to it, gives a Wheelspin, and its garage opens your car collection.
+- **Houses**: five homes to buy around the island (Lakeside Ryokan, Inaka Farmhouse, Daikoku Loft, Akagi Lodge, Clifftop Villa). Owning one unlocks fast travel to it, gives a Wheelspin, and its garage opens your car collection.
 - **Customization**: fourteen liveries (twin stripes, contrast roof, two-tone, shoulder stripes, race number roundels, speed slashes, carbon bonnet, split fade, chequered tail, flames, camo, hex grid, colour fade, Le Mans hoop) in any colour, your own race number, window tint, aero kits (ducktail, GT wing, GT wing + splitter), lowered or slammed ride height, and **camber kits** you buy (street, aggressive, stance). Cockpit steering wheels turn up to 180, 360, 540 or 900 degrees lock to lock (setting), on cars whose model has a separate wheel.
 - **Weather and time of day**: showers roll in and out (rain streaks, overcast sky, rain sound). Roads soak while it rains: the asphalt darkens and turns glossy, and only the puddles that build up act as mirrors, with drops rippling in them. A full day/night cycle (one game hour per real minute): pink dawn, photographed daytime sky, golden hour, sunset, then night with stars, a moon, lit windows in the city and your headlights on the road. Both can be fixed in Settings.
 - **Fair races**: rivals are picked at your car's performance level or below, never faster.
@@ -148,14 +154,22 @@ Menus: arrow keys or D-pad to move, `Enter` or `A` to select, `Esc` or `B` to go
 
 | Event | Type | Notes |
 |---|---|---|
-| Ridge Highway Circuit | Circuit, 1 lap | The fast highway ring around the valley |
-| Ridge Reverse | Circuit, 1 lap | The same ring, counter-clockwise |
-| Valley Sprint | Sprint | West to east across the valley floor |
-| Lakeshore Sprint | Sprint | The southern highway past the lake |
-| Summit Loop | Circuit, 2 laps | A twisting mountain loop up north |
-| Pass Climb | Sprint | Switchbacks up to the summit |
-| Timberline Scramble | Circuit, 2 laps | A dirt trail through the forest; off-road cars do well here |
-| Golden Fields Cross Country | Cross-country | Checkpoints through open meadows |
+| Hakone Turnpike Circuit | Circuit, 1 lap | The fast highway ring around the valley |
+| Hakone Reverse | Circuit, 1 lap | The same ring, counter-clockwise |
+| Chichibu Sprint | Sprint | West to east across the valley floor |
+| Lake Ashi Sprint | Sprint | The southern highway past the lake |
+| Haruna Loop | Circuit, 2 laps | A twisting mountain loop up north |
+| Usui Pass Climb | Sprint | Switchbacks up to the summit |
+| Okutama Scramble | Circuit, 2 laps | A dirt trail through the forest; off-road cars do well here |
+| Rice Fields Cross Country | Cross-country | Checkpoints through open meadows |
+| Tokyo Neon Circuit | Circuit | Through the streets of Tokyo |
+| Shuto Harbour Run / Wangan Coast to Coast | Sprint | The coast highway |
+| Daikoku Circuit, Daikoku Drift Arena | Circuit / drift | Round the wharf |
+| Akagi Touge, Akagi Downhill Drift | Sprint / drift | Hairpins into the Alps |
+| Fuji Skyline Circuit, Fuji Drift | Circuit / drift | The ring road round Fuji |
+| Irohazaka Downhill | Sprint | From the Skyline down to Akagi |
+| Sea of Japan Run | Sprint | Up the west coast |
+| Fuji Climb | Sprint | Past the lake and up the volcano |
 
 ### Cars
 

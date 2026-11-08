@@ -11,6 +11,7 @@
 #include <map>
 #include <vector>
 
+enum FestStat { FS_WIN, FS_RACE, FS_RAMP, FS_SKILL, FS_SPEED, FS_KM, FS_CAT, FS_STARS };
 enum State { ST_TITLE, ST_FREEROAM, ST_PAUSE, ST_MAP, ST_DEALER, ST_GARAGE, ST_SETTINGS, ST_RACE_INTRO, ST_RACE, ST_RESULTS, ST_PHOTO, ST_WHEELSPIN, ST_UPGRADE, ST_SWITCH, ST_CUSTOM, ST_EVENTLAB, ST_MYEVENTS };
 enum Action { A_NONE, A_UP, A_DOWN, A_LEFT, A_RIGHT, A_CONFIRM, A_BACK, A_PAUSE, A_CAMERA, A_RESET, A_MAP, A_INTERACT, A_TOGGLE, A_SELL, A_PHOTO, A_UPGRADE, A_HIDE, A_SWITCH };
 
@@ -220,6 +221,26 @@ private:
     Mesh gateLit, gatePaint, lampMesh, lineMesh;
     float slowmo = 0;
     static float rampHalfW(const EventDef& E) { return std::min(E.route.width * 0.3f, 3.6f); }
+    // festival playlist, streak, lucky cats, big wheel (festival.cpp)
+    struct LuckyCat { vec3 p; float yaw; };
+    static constexpr size_t kCatCount = 60;
+    std::vector<LuckyCat> cats;
+    std::vector<uint8_t> catHit;
+    Mesh catMesh, ferrisMesh, ferrisStatic, gondolaMesh;
+    bool catDirty = true;
+    int festDay = -1, festDone = 0, festPick[3] = {0, 1, 2}, streak = 0, lastDay = -1;
+    float festProg[3] = {0, 0, 0}, festShow = 0, festKmAcc = 0, ferrisAng = 0;
+    double kmDriven = 0;
+    vec3 ferrisPos, ferrisAxis = vec3(1, 0, 0);
+    const char* festText(int k) const;
+    void festNewDay();
+    void festEvent(int type, float amount);
+    void buildFestival();
+    void rebuildCatMesh();
+    void updateFestival(float dt);
+    void drawFestivalWorld(const Camera& c);
+    void drawFestivalHud();
+    void drawCatsOnMinimap(vec2 c, float Rr, std::function<vec2(vec3)> toScreen);
     std::vector<uint8_t> railSide[2];
     float railOff = 7.f;
     void buildRails(const EventDef& E, MeshBuilder& lit, MeshBuilder& paint);

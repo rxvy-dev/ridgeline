@@ -133,6 +133,7 @@ bool Game::init(const Options& o) {
     gps.build(world);
     if (!fx.init()) SDL_Log("Effects shaders failed to build");
     buildStunts();
+    buildFestival();
     hud.mapTex = world.mapTex;
     // imported cars: user folder, installed share folder, and ./cars next to the binary
     {
@@ -178,6 +179,8 @@ bool Game::init(const Options& o) {
     builtinEvents = int(events.size());
     rebuildCustomEvents();
     if (bestPlace.size() < events.size()) bestPlace.resize(events.size(), 0);
+    if (opt.scene.empty()) festNewDay();
+    else if (festDay < 0) { festDay = 0; festPick[0] = 3; festPick[1] = 5; festPick[2] = 11; }
     SDL_Log("World ready in %llu ms", (unsigned long long)(SDL_GetTicks() - t0));
 
     // helper meshes
@@ -618,6 +621,9 @@ void Game::save() {
     f << "credits=" << credits << "\n";
     f << "current=" << current << "\n";
     f << "wins=" << racesWon << "\n";
+    f << "festday=" << festDay << "\nfestdone=" << festDone << "\nstreak=" << streak << "\nlastday=" << lastDay << "\nkm=" << kmDriven << "\n";
+    f << "festpick=" << festPick[0] << "," << festPick[1] << "," << festPick[2] << "\nfestprog=" << festProg[0] << "," << festProg[1] << "," << festProg[2] << "\n";
+    { std::string cs; for (auto h : catHit) cs += h ? '1' : '0'; f << "cats=" << cs << "\n"; }
     for (auto& g : garage) f << "car=" << carId(kCars[g.spec]) << "," << g.paint << "," << (g.stripes ? 1 : 0) << "," << g.up[0] << "," << g.up[1] << "," << g.up[2]
                              << "," << g.livery << "," << g.livCol << "," << g.tint << "," << g.aero << "," << g.ride << "," << g.number
                              << "," << g.camber << "," << g.camberOwned << "\n";
@@ -647,6 +653,14 @@ bool Game::load() {
         if (k == "credits") credits = std::atoll(v.c_str());
         else if (k == "current") current = std::atoi(v.c_str());
         else if (k == "wins") racesWon = std::atoi(v.c_str());
+        else if (k == "festday") festDay = std::atoi(v.c_str());
+        else if (k == "festdone") festDone = std::atoi(v.c_str());
+        else if (k == "streak") streak = std::atoi(v.c_str());
+        else if (k == "lastday") lastDay = std::atoi(v.c_str());
+        else if (k == "km") kmDriven = std::atof(v.c_str());
+        else if (k == "festpick") std::sscanf(v.c_str(), "%d,%d,%d", &festPick[0], &festPick[1], &festPick[2]);
+        else if (k == "festprog") std::sscanf(v.c_str(), "%f,%f,%f", &festProg[0], &festProg[1], &festProg[2]);
+        else if (k == "cats") { catHit.assign(cats.size(), 0); for (size_t i = 0; i < v.size() && i < catHit.size(); i++) catHit[i] = v[i] == '1'; catDirty = true; }
         else if (k == "car") {
             // car=<id or index>,paint,stripes
             auto c1 = v.find(',');
@@ -883,7 +897,8 @@ void Game::finishRace() {
     prizeWon = playerPlace <= 3 ? E.prize[playerPlace - 1] : 1500;
     credits += prizeWon;
     addXP(playerPlace == 1 ? 1500 : playerPlace <= 3 ? 900 : 500);
-    if (playerPlace == 1) racesWon++;
+    if (playerPlace == 1) { racesWon++; festEvent(FS_WIN, 1); }
+    festEvent(FS_RACE, 1);
     if (int(bestPlace.size()) <= raceEvent) bestPlace.resize(raceEvent + 1, 0);
     if (bestPlace[raceEvent] == 0 || playerPlace < bestPlace[raceEvent]) bestPlace[raceEvent] = playerPlace;
     save();
@@ -1516,6 +1531,7 @@ void Game::update(float dt) {
             fx.update(dt, {&player}, world);
             updateSkills(dt);
             updateStunts(dt);
+            updateFestival(dt);
             if (player.car.waterTime > 1.2f) {
                 int r, s;
                 if (world.nearestRoad(player.car.pos, r, s)) {
@@ -1653,6 +1669,7 @@ void Game::updateRace(float dt) {
     rewinding = !player.finished && rewindHeld() && stepRewind();
     if (rewinding) return;
     recordRewind();
+    updateFestival(dt);
     raceTime += dt;
     playerCtl = readDriving();
     if (player.finished) playerCtl = Controls{0, 0, 0.3f, 0};
@@ -1712,6 +1729,7 @@ void Game::updateRace(float dt) {
                     float yawT = kind == 2 ? (k % 2 ? -1.f : 1.f) : 0.f;
                     c.startStunt(roll, yawT, T * 0.9f);
                     if (r->isPlayer) {
+                        festEvent(FS_RAMP, 1);
                         slowmo = 1.1f;
                         shake = 0.3f;
                         audio.beep(330, 0.25f);
@@ -2352,6 +2370,7 @@ void Game::renderWorld(const Camera& c, bool showroom) {
     glDisable(GL_CULL_FACE);
     world.propsMesh.draw();
     stuntMesh.draw();
+    if (!thumbActive) drawFestivalWorld(c);
     if (raceEvent >= 0 && !thumbActive) {
         gateLit.draw();
         glEnable(GL_POLYGON_OFFSET_FILL);
@@ -2905,6 +2924,7 @@ void Game::drawMinimap() {
             hud.circle(p, r, col, 16);
         };
         drawStuntsOnMinimap(c, Rr, toScreen);
+        drawCatsOnMinimap(c, Rr, toScreen);
         for (int i = 0; i < int(events.size()); i++) pin(events[i].markerPos, eventColor(events[i].type), 5 * u, gpsShown == i);
         pin(world.hubPos, vec4(1.f, 0.25f, 0.55f, 1), 6 * u, gpsShown == -2);
     }
@@ -3019,6 +3039,7 @@ void Game::drawHud() {
         hud.rect(84 * u, 93 * u, 172 * u * xp / float(xpToNext()), 4 * u, vec4(1.f, 0.25f, 0.55f, 1));
         if (wheelspins > 0) hud.text(262 * u, 87 * u, 13 * u, std::to_string(wheelspins) + " SPIN" + (wheelspins > 1 ? "S" : ""), vec4(1.f, 0.35f, 0.6f, 1), 0, false);
         hud.text(22 * u, 112 * u, 12 * u, clockText(), vec4(1, 1, 1, 0.7f), 0, true);
+        drawFestivalHud();
         // prompts
         std::string prompt;
         if (nearEvent >= 0) {
