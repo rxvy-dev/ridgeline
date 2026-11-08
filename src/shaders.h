@@ -1069,6 +1069,13 @@ void main(){
     float ground = texture(tHeight, (p + uHalf) / (2.0 * uHalf)).r;
     float depth = uWaterLevel - ground;
     if (depth < -0.05) discard;
+    if (uCamPos.y < vPos.y - 0.02) {
+        // seen from underneath: a dim teal ceiling instead of a sky mirror
+        float s = 0.5 + 0.5 * vnoise(p * 0.6 + t * 0.3);
+        if (uPass == 0) FragColor = vec4(vec3(0.18, 0.34, 0.38) * (0.8 + 0.4 * s), 1.0);
+        else FragColor = vec4(vec3(0.02, 0.09, 0.10) * (uSkyAmb * 1.5 + uSunColor * 0.3), 1.0);
+        return;
+    }
     float dist = length(uCamPos - vPos);
     // open, deep water gets the big swell; shallows and small lakes stay calmer
     float amp = mix(0.35, 1.0, smoothstep(1.5, 14.0, depth)) * (1.0 + uRain * 0.6);
