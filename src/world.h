@@ -123,4 +123,12 @@ private:
 public:
     std::vector<Instance> pineInst, leafInst, rockInst;
     MeshBuilder props;  // marker posts + guardrails
+    // built by buildJapan before scatter() resets the trunk grid; applied in buildShrines()
+    std::vector<TreeTrunk> pendingTrunks;
+    std::vector<vec3> sakuraSpots;
+    std::vector<vec3> clearings;  // (x, radius, z): no wild trees (temple grounds, castle park)
+    // paved strips outside the city (shopping streets): segment a-b, half width w
+    struct Strip { vec3 a, b; float w; };
+    std::vector<Strip> pavedStrips;
+    bool stripPaved(float x, float z, float pad) const;
 };

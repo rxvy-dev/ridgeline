@@ -374,8 +374,8 @@ void main(){
 
     // rice paddies in the western countryside: level plots of golden autumn rice (some still green,
     // some harvested to stubble, some flooded), separated by narrow grassy dikes
-    if (vCol.a < 0.5 && p.x < -1250.0 && p.x > -3350.0 && p.z > -1450.0 && p.z < 760.0 && p.y < 150.0 && n.y > 0.985) {
-        float edge = min(min(p.x + 3350.0, -1250.0 - p.x), min(p.z + 1450.0, 760.0 - p.z));
+    if (vCol.a < 0.5 && p.x < -1250.0 && p.x > -3350.0 && p.z > -1450.0 && p.z < 470.0 && p.y < 150.0 && n.y > 0.985) {
+        float edge = min(min(p.x + 3350.0, -1250.0 - p.x), min(p.z + 1450.0, 470.0 - p.z));
         float pk = smoothstep(0.0, 60.0, edge) * smoothstep(0.985, 0.992, n.y) * (1.0 - smoothstep(0.25, 0.45, vCol.a));
         vec2 q = p.xz / vec2(36.0, 24.0);
         vec2 id = floor(q), f = fract(q);
@@ -941,7 +941,7 @@ void main(){
     float d = length(xz - uCamPos.xz);
     float keep = step(1.0 + 0.6 * uScaleMul, rd) * step(uWaterLevel + 0.8, h) * step(0.82, gn.y) * step(52.0, length(xz - uHub.xz));
     // no wild grass in the rice paddies (same rule as the terrain shader)
-    if (xz.x < -1250.0 && xz.x > -3350.0 && xz.y > -1450.0 && xz.y < 760.0 && h < 150.0 && gn.y > 0.988 && rd > 5.0) keep = 0.0;
+    if (xz.x < -1250.0 && xz.x > -3350.0 && xz.y > -1450.0 && xz.y < 470.0 && h < 150.0 && gn.y > 0.988 && rd > 5.0) keep = 0.0;
     float dens = smoothstep(0.25, 0.55, h1(floor(xz / 9.0)) * 0.6 + h1(floor(xz / 2.3)) * 0.4);
     keep *= step(h1(cell + 3.1), 0.35 + dens * 0.65);
     float band = uSpacing * 9.0;
