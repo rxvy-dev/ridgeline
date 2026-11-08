@@ -1128,8 +1128,9 @@ void main(){
     if (vPos.y < uClipY) discard;
     vec2 p = vPos.xz; float t = uTime;
     float ground = texture(tHeight, (p + uHalf) / (2.0 * uHalf)).r;
-    float depth = uWaterLevel - ground;
+    float depth = vPos.y - ground;          // vPos.y: the lakes and sea sit at uWaterLevel, canals higher up
     if (depth < -0.05) discard;
+    bool atLevel = abs(vPos.y - uWaterLevel) < 0.3;
     if (uCamPos.y < vPos.y - 0.02) {
         // seen from underneath: a dim teal ceiling instead of a sky mirror
         float s = 0.5 + 0.5 * vnoise(p * 0.6 + t * 0.3);
@@ -1154,7 +1155,7 @@ void main(){
     vec3 R = reflect(-V, n);
     R.y = abs(R.y);
     vec3 refl = envColor(R);
-    if (uHasRefl == 1) {
+    if (uHasRefl == 1 && atLevel) {
         vec4 cp = uReflVP * vec4(vPos, 1.0);
         vec2 ruv = cp.xy / cp.w * 0.5 + 0.5 + n.xz * 0.045;
         vec3 pr = texture(tRefl, clamp(ruv, 0.002, 0.998)).rgb;

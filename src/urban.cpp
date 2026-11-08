@@ -110,8 +110,10 @@ void World::buildUrban(uint32_t seed) {
                 signs++;
             }
         }
-        // glowing shop floor and a stack of vertical signs on the street face
+        // glowing shop floor and a stack of vertical signs on the street face; the floor sits at the
+        // highest corner so a shop front is never half buried where the street slopes
         vec4 shop(1.0f, 0.86f, 0.62f, 20);
+        g = std::max(std::max(heightAt(x0, z0), heightAt(x1, z1)), std::max(heightAt(x0, z1), heightAt(x1, z0))) - 0.35f;
         int ns = H > 14.f ? rng.irange(1, 3) : 1;
         for (int k = 0; k < ns; k++) {
             vec4 nc = kNeon[rng.irange(0, 5)];
