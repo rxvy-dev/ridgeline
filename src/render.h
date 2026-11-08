@@ -78,7 +78,7 @@ struct MeshBuilder {
 
 struct Camera {
     vec3 pos, target;
-    float fov = 1.1f, aspect = 1.77f, nearZ = 0.25f, farZ = 4000.f;
+    float fov = 1.1f, aspect = 1.77f, nearZ = 0.25f, farZ = 7000.f;  // far enough for Fuji from across the island
     float roll = 0;  // radians, banks the horizon
     mat4 view, proj, viewProj;
     void update() {

@@ -1,4 +1,4 @@
-// Neon Bay City and the Harbour Docks: procedural buildings, signs, street lights,
+// Tokyo and Daikoku Wharf: procedural buildings, signs, street lights,
 // container stacks, gantry cranes, warehouses and a container ship.
 // Material ids (object shader): 0 plain, 7 steel, 14 facade, 15 neon/lamp, 16 corrugated, 17 glass tower.
 #include "world.h"
@@ -27,79 +27,200 @@ void World::buildUrban(uint32_t seed) {
         b.box((lo + hi) * 0.5f, (hi - lo) * 0.5f, col);
     };
 
-    // ================================================================ city
+    // ================================================================ Tokyo
+    // Every block is filled the way Tokyo is: narrow buildings shoulder to shoulder along each street
+    // frontage, a back alley behind, towers clustered round Shinjuku, signs stacked up the shop fronts.
     const float xs[] = {1800, 1950, 2100, 2250, 2400, 2550, 2700};
     const float zs[] = {-850, -700, -550, -400, -250, -100, 50, 200};
     const vec3 downtown(2240, 0, -260);
+    const vec4 kTile[] = {{0.86f, 0.84f, 0.78f, 14}, {0.74f, 0.72f, 0.68f, 14}, {0.56f, 0.55f, 0.53f, 14}, {0.66f, 0.58f, 0.50f, 14},
+                          {0.44f, 0.46f, 0.50f, 14}, {0.80f, 0.78f, 0.72f, 14}, {0.52f, 0.40f, 0.34f, 14}};
     int towers = 0, signs = 0;
+    auto clearOfRoads = [&](float x0, float z0, float x1, float z1) {
+        for (float x = x0; x <= x1 + 0.1f; x += std::max(2.f, (x1 - x0) / 4.f))
+            for (float z = z0; z <= z1 + 0.1f; z += std::max(2.f, (z1 - z0) / 4.f))
+                if (roadDistAt(x, z) < 1.0f) return false;
+        return true;
+    };
+    // a building: shaft, parapet, rooftop clutter, a lit shop floor and signs on its street face
+    // face: 0 = -z, 1 = +z, 2 = -x, 3 = +x (the side that faces the street)
+    auto building = [&](float x0, float z0, float x1, float z1, float H, int face, float down) {
+        if (x1 - x0 < 6.f || z1 - z0 < 6.f || !clearOfRoads(x0, z0, x1, z1)) return;
+        float g = std::min(std::min(heightAt(x0, z0), heightAt(x1, z1)), std::min(heightAt(x0, z1), heightAt(x1, z0))) - 0.3f;
+        bool glassy = H > 70.f || (down > 0.5f && rng.f() < 0.3f);
+        vec4 col = glassy ? kGlass[rng.irange(0, 3)] : (rng.f() < 0.6f ? kTile[rng.irange(0, 6)] : kConcrete[rng.irange(0, 6)]);
+        vec3 lo(x0, g, z0), hi(x1, g + H, z1);
+        block(city, lo, hi, col);
+        solid(x0, z0, x1, z1, hi.y);
+        if (H > 70.f) {
+            towers++;
+            float in = std::min(x1 - x0, z1 - z0) * 0.16f;
+            vec3 l2(x0 + in, hi.y, z0 + in), h2(x1 - in, hi.y + H * rng.range(0.08f, 0.22f), z1 - in);
+            block(city, l2, h2, col);
+            vec3 c = (l2 + h2) * 0.5f;
+            block(city, vec3(c.x - 0.4f, h2.y, c.z - 0.4f), vec3(c.x + 0.4f, h2.y + 16.f, c.z + 0.4f), vec4(0.6f, 0.6f, 0.6f, 7));
+            block(city, vec3(c.x - 0.6f, h2.y + 16.f, c.z - 0.6f), vec3(c.x + 0.6f, h2.y + 17.2f, c.z + 0.6f), vec4(1.f, 0.15f, 0.1f, 15));
+        } else {
+            vec4 dark(0.30f, 0.30f, 0.30f, 0);
+            block(city, vec3(x0, hi.y, z0), vec3(x1, hi.y + 1.1f, z0 + 0.35f), dark);
+            block(city, vec3(x0, hi.y, z1 - 0.35f), vec3(x1, hi.y + 1.1f, z1), dark);
+            if (x1 - x0 > 10.f && z1 - z0 > 10.f && rng.f() < 0.7f) {
+                float ax = rng.range(x0 + 2, x1 - 6), az = rng.range(z0 + 2, z1 - 6);
+                block(city, vec3(ax, hi.y, az), vec3(ax + rng.range(2, 4), hi.y + rng.range(1.5f, 3.f), az + rng.range(2, 4)), vec4(0.55f, 0.56f, 0.56f, 7));
+            }
+            // rooftop billboard on some of the mid-rise ones
+            if (H > 20.f && rng.f() < 0.25f) {
+                vec4 nc = kNeon[rng.irange(0, 5)];
+                if (face < 2) { float z = face == 0 ? z0 + 0.6f : z1 - 0.6f; block(city, vec3(x0 + 1, hi.y + 1.5f, z - 0.2f), vec3(x1 - 1, hi.y + 1.5f + std::min(8.f, (x1 - x0) * 0.4f), z + 0.2f), nc); }
+                else { float x = face == 2 ? x0 + 0.6f : x1 - 0.6f; block(city, vec3(x - 0.2f, hi.y + 1.5f, z0 + 1), vec3(x + 0.2f, hi.y + 1.5f + std::min(8.f, (z1 - z0) * 0.4f), z1 - 1), nc); }
+                signs++;
+            }
+        }
+        // glowing shop floor and a stack of vertical signs on the street face
+        vec4 shop(1.0f, 0.86f, 0.62f, 20);
+        int ns = H > 14.f ? rng.irange(1, 3) : 1;
+        for (int k = 0; k < ns; k++) {
+            vec4 nc = kNeon[rng.irange(0, 5)];
+            float sh = rng.range(5.f, std::min(16.f, H * 0.7f + 4.f)), y0 = g + 3.6f + rng.range(0.f, 2.f);
+            if (face < 2) {
+                float z = face == 0 ? z0 : z1, out = face == 0 ? -1.f : 1.f;
+                if (k == 0) block(city, vec3(x0 + 0.5f, g + 0.4f, std::min(z, z + out * 0.12f)), vec3(x1 - 0.5f, g + 3.2f, std::max(z, z + out * 0.12f)), shop);
+                float x = rng.range(x0 + 1.f, x1 - 1.f);
+                block(city, vec3(x - 0.12f, y0, std::min(z + out * 0.2f, z + out * 1.5f)), vec3(x + 0.12f, y0 + sh, std::max(z + out * 0.2f, z + out * 1.5f)), nc);
+            } else {
+                float x = face == 2 ? x0 : x1, out = face == 2 ? -1.f : 1.f;
+                if (k == 0) block(city, vec3(std::min(x, x + out * 0.12f), g + 0.4f, z0 + 0.5f), vec3(std::max(x, x + out * 0.12f), g + 3.2f, z1 - 0.5f), shop);
+                float z = rng.range(z0 + 1.f, z1 - 1.f);
+                block(city, vec3(std::min(x + out * 0.2f, x + out * 1.5f), y0, z - 0.12f), vec3(std::max(x + out * 0.2f, x + out * 1.5f), y0 + sh, z + 0.12f), nc);
+            }
+            signs++;
+        }
+    };
+    auto heightFor = [&](float cx, float cz, float& down) {
+        float dd = std::hypot(cx - downtown.x, cz - downtown.z);
+        down = std::exp(-dd * dd / (380.f * 380.f));
+        float H = 9.f + 22.f * rng.f() * rng.f() + down * (25.f + 120.f * rng.f() * rng.f());
+        if (rng.f() < 0.12f) H += 18.f;  // the odd pencil tower
+        return H;
+    };
     for (int bx = 0; bx < 6; bx++)
         for (int bz = 0; bz < 7; bz++) {
             float x0 = xs[bx] + 10.f, x1 = xs[bx + 1] - 10.f, z0 = zs[bz] + 10.f, z1 = zs[bz + 1] - 10.f;
-            // split the block into 1-4 lots
-            int nx = rng.f() < 0.55f ? 2 : 1, nz = rng.f() < 0.55f ? 2 : 1;
-            for (int ix = 0; ix < nx; ix++)
-                for (int iz = 0; iz < nz; iz++) {
-                    float lx0 = lerpf(x0, x1, ix / float(nx)) + 2.f, lx1 = lerpf(x0, x1, (ix + 1) / float(nx)) - 2.f;
-                    float lz0 = lerpf(z0, z1, iz / float(nz)) + 2.f, lz1 = lerpf(z0, z1, (iz + 1) / float(nz)) - 2.f;
-                    if (rng.f() < 0.07f) continue;  // the odd plaza / car park
-                    float cxp = (lx0 + lx1) * 0.5f, czp = (lz0 + lz1) * 0.5f;
-                    float dd = std::hypot(cxp - downtown.x, czp - downtown.z);
-                    float down = std::exp(-dd * dd / (420.f * 420.f));
-                    float H = 12.f + 26.f * rng.f() + down * (35.f + 175.f * rng.f() * rng.f());
-                    float g = heightAt(cxp, czp) - 0.5f;
-                    // shrink a little so blocks read as separate buildings
-                    float sx = (lx1 - lx0) * rng.range(0.04f, 0.14f), sz = (lz1 - lz0) * rng.range(0.04f, 0.14f);
-                    vec3 lo(lx0 + sx * 0.5f, g, lz0 + sz * 0.5f), hi(lx1 - sx * 0.5f, g + H, lz1 - sz * 0.5f);
-                    bool glassy = H > 65.f || rng.f() < 0.15f;
-                    vec4 col = glassy ? kGlass[rng.irange(0, 3)] : kConcrete[rng.irange(0, 6)];
-                    block(city, lo, hi, col);
-                    solid(lo.x, lo.z, hi.x, hi.z, hi.y);
-                    // podium / setbacks / crown on the tall ones
-                    if (H > 70.f) {
+            if (bx == 0 && bz == 0) continue;  // Tokyo Tower's park
+            float cx = (x0 + x1) * 0.5f, cz = (z0 + z1) * 0.5f, down;
+            heightFor(cx, cz, down);
+            if (down > 0.55f && rng.f() < 0.55f) {
+                // Shinjuku: a podium filling the block with one or two towers on it
+                float g = heightAt(cx, cz) - 0.3f;
+                if (clearOfRoads(x0, z0, x1, z1)) {
+                    block(city, vec3(x0, g, z0), vec3(x1, g + 14.f, z1), kConcrete[rng.irange(0, 6)]);
+                    solid(x0, z0, x1, z1, g + 14.f);
+                    int nt = rng.f() < 0.5f ? 2 : 1;
+                    for (int t = 0; t < nt; t++) {
+                        float w = rng.range(34.f, 52.f), d = rng.range(34.f, 52.f);
+                        float tx = nt == 2 ? (t ? x1 - w - 6 : x0 + 6) : cx - w * 0.5f, tz = rng.range(z0 + 6, z1 - d - 6);
+                        float H = 90.f + 140.f * rng.f() * down;
+                        vec4 col = kGlass[rng.irange(0, 3)];
+                        block(city, vec3(tx, g + 14.f, tz), vec3(tx + w, g + 14.f + H, tz + d), col);
+                        solid(tx, tz, tx + w, tz + d, g + 14.f + H);
+                        float in = std::min(w, d) * 0.18f;
+                        block(city, vec3(tx + in, g + 14.f + H, tz + in), vec3(tx + w - in, g + 14.f + H * 1.14f, tz + d - in), col);
+                        vec3 c(tx + w * 0.5f, g + 14.f + H * 1.14f, tz + d * 0.5f);
+                        block(city, vec3(c.x - 0.6f, c.y, c.z - 0.6f), vec3(c.x + 0.6f, c.y + 1.2f, c.z + 0.6f), vec4(1.f, 0.15f, 0.1f, 15));
                         towers++;
-                        float in = std::min(hi.x - lo.x, hi.z - lo.z) * 0.18f;
-                        vec3 l2(lo.x + in, hi.y, lo.z + in), h2(hi.x - in, hi.y + H * rng.range(0.12f, 0.3f), hi.z - in);
-                        block(city, l2, h2, col);
-                        block(city, vec3(lo.x - 1.5f, g, lo.z - 1.5f), vec3(hi.x + 1.5f, g + 9.f, hi.z + 1.5f), kConcrete[rng.irange(0, 6)]);
-                        if (rng.f() < 0.6f) {  // antenna
-                            vec3 c = (l2 + h2) * 0.5f;
-                            block(city, vec3(c.x - 0.4f, h2.y, c.z - 0.4f), vec3(c.x + 0.4f, h2.y + 18.f, c.z + 0.4f), vec4(0.6f, 0.6f, 0.6f, 7));
-                            block(city, vec3(c.x - 0.6f, h2.y + 18.f, c.z - 0.6f), vec3(c.x + 0.6f, h2.y + 19.2f, c.z + 0.6f), vec4(1.f, 0.15f, 0.1f, 15));
-                        }
-                    } else {
-                        // parapet and rooftop plant
-                        vec4 dark(0.30f, 0.30f, 0.30f, 0);
-                        block(city, vec3(lo.x, hi.y, lo.z), vec3(hi.x, hi.y + 1.1f, lo.z + 0.4f), dark);
-                        block(city, vec3(lo.x, hi.y, hi.z - 0.4f), vec3(hi.x, hi.y + 1.1f, hi.z), dark);
-                        for (int k = 0; k < 3; k++) {
-                            float ax = rng.range(lo.x + 3, hi.x - 6), az = rng.range(lo.z + 3, hi.z - 6);
-                            block(city, vec3(ax, hi.y, az), vec3(ax + rng.range(2, 5), hi.y + rng.range(1.5f, 3.f), az + rng.range(2, 5)), vec4(0.55f, 0.56f, 0.56f, 7));
-                        }
                     }
-                    // shop signs and neon on the street faces of the lower buildings
-                    if (H < 80.f || rng.f() < 0.4f) {
-                        for (int face = 0; face < 4; face++) {
-                            if (rng.f() < 0.45f) continue;
-                            vec4 nc = kNeon[rng.irange(0, 5)];
-                            float y0 = g + rng.range(4.f, 9.f);
-                            bool vertical = rng.f() < 0.35f;
-                            float w = vertical ? 1.6f : rng.range(5.f, 11.f), hgt = vertical ? rng.range(6.f, 12.f) : rng.range(1.6f, 3.2f);
-                            if (face < 2) {
-                                float z = face == 0 ? lo.z - 0.25f : hi.z + 0.25f;
-                                float x = rng.range(lo.x + w * 0.5f + 1, std::max(lo.x + w * 0.5f + 1.1f, hi.x - w * 0.5f - 1));
-                                if (vertical) block(city, vec3(x - 0.15f, y0, z - (face == 0 ? 1.4f : -0.2f)), vec3(x + 0.15f, y0 + hgt, z + (face == 0 ? -0.2f : 1.4f)), nc);
-                                else block(city, vec3(x - w * 0.5f, y0, std::min(z, z + (face == 0 ? -0.15f : 0.15f))), vec3(x + w * 0.5f, y0 + hgt, std::max(z, z + (face == 0 ? -0.15f : 0.15f))), nc);
-                            } else {
-                                float x = face == 2 ? lo.x - 0.25f : hi.x + 0.25f;
-                                float z = rng.range(lo.z + w * 0.5f + 1, std::max(lo.z + w * 0.5f + 1.1f, hi.z - w * 0.5f - 1));
-                                if (vertical) block(city, vec3(x - (face == 2 ? 1.4f : -0.2f), y0, z - 0.15f), vec3(x + (face == 2 ? -0.2f : 1.4f), y0 + hgt, z + 0.15f), nc);
-                                else block(city, vec3(std::min(x, x + (face == 2 ? -0.15f : 0.15f)), y0, z - w * 0.5f), vec3(std::max(x, x + (face == 2 ? -0.15f : 0.15f)), y0 + hgt, z + w * 0.5f), nc);
-                            }
-                            signs++;
-                        }
+                    // street-level signs round the podium
+                    for (float x = x0 + 6; x < x1 - 6; x += rng.range(10.f, 18.f)) {
+                        block(city, vec3(x - 0.12f, g + 4.f, z0 - 1.4f), vec3(x + 0.12f, g + 12.f, z0 - 0.2f), kNeon[rng.irange(0, 5)]);
+                        block(city, vec3(x - 0.12f, g + 4.f, z1 + 0.2f), vec3(x + 0.12f, g + 12.f, z1 + 1.4f), kNeon[rng.irange(0, 5)]);
+                        signs += 2;
                     }
                 }
+                continue;
+            }
+            // perimeter lots along the four frontages, an alley behind them
+            float dS = rng.range(24.f, 36.f), dN = rng.range(24.f, 36.f), dW = rng.range(22.f, 32.f), dE = rng.range(22.f, 32.f);
+            for (int side = 0; side < 2; side++) {
+                float za = side == 0 ? z0 : z1 - dN, zb = side == 0 ? z0 + dS : z1;
+                for (float x = x0; x < x1 - 4.f;) {
+                    float w = std::min(rng.range(10.f, 26.f), x1 - x);
+                    if (x1 - (x + w) < 8.f) w = x1 - x;
+                    float H = heightFor(x + w * 0.5f, (za + zb) * 0.5f, down);
+                    building(x + 0.4f, za, x + w - 0.4f, zb, H, side == 0 ? 0 : 1, down);
+                    x += w;
+                }
+            }
+            for (int side = 0; side < 2; side++) {
+                float xa = side == 0 ? x0 : x1 - dE, xb = side == 0 ? x0 + dW : x1;
+                float za = z0 + dS + 3.f, zb = z1 - dN - 3.f;
+                for (float z = za; z < zb - 4.f;) {
+                    float w = std::min(rng.range(10.f, 24.f), zb - z);
+                    if (zb - (z + w) < 8.f) w = zb - z;
+                    float H = heightFor((xa + xb) * 0.5f, z + w * 0.5f, down);
+                    building(xa, z + 0.4f, xb, z + w - 0.4f, H, side == 0 ? 2 : 3, down);
+                    z += w;
+                }
+            }
+            // the middle of the block: low back-street buildings around a little courtyard
+            float ix0 = x0 + dW + 4.f, ix1 = x1 - dE - 4.f, iz0 = z0 + dS + 4.f, iz1 = z1 - dN - 4.f;
+            if (ix1 - ix0 > 20.f && iz1 - iz0 > 20.f) {
+                float mx = (ix0 + ix1) * 0.5f;
+                building(ix0, iz0, mx - 3.f, iz1, rng.range(7.f, 14.f), 0, 0.f);
+                building(mx + 3.f, iz0, ix1, iz1, rng.range(7.f, 14.f), 1, 0.f);
+            }
         }
+    // ---- Tokyo Tower: a red and white lattice tower in its park
+    {
+        vec3 c(1875.f, 0, -775.f);
+        float g = heightAt(c.x, c.z);
+        const float Ht = 165.f;
+        vec4 red(0.95f, 0.28f, 0.08f, 0), wht(0.95f, 0.95f, 0.92f, 0);
+        auto half = [&](float y) { return 22.f * std::pow(1.f - y / Ht, 1.5f) + 1.2f; };
+        for (int band = 0; band < 11; band++) {
+            float y0 = band / 11.f * Ht, y1 = (band + 1) / 11.f * Ht;
+            vec4 col = band % 2 ? wht : red;
+            for (int k = 0; k < 4; k++) {
+                float sx = (k & 1) ? 1.f : -1.f, sz = (k & 2) ? 1.f : -1.f;
+                vec3 a(c.x + sx * half(y0), g + y0, c.z + sz * half(y0)), b(c.x + sx * half(y1), g + y1, c.z + sz * half(y1));
+                city.tube(a, b, 0.9f * (1.f - y0 / Ht * 0.6f), 0.9f * (1.f - y1 / Ht * 0.6f), 6, col);
+            }
+            // cross bracing ring at the band's top
+            float hy = half(y1);
+            for (int k = 0; k < 4; k++) {
+                vec3 p0(c.x + ((k == 0 || k == 3) ? -hy : hy), g + y1, c.z + (k < 2 ? -hy : hy));
+                vec3 p1(c.x + ((k == 0 || k == 1) ? hy : -hy), g + y1, c.z + ((k == 0 || k == 3) ? -hy : hy));
+                city.tube(p0, p1, 0.35f, 0.35f, 4, col);
+            }
+        }
+        // observation decks
+        block(city, vec3(c.x - 9, g + 58, c.z - 9), vec3(c.x + 9, g + 66, c.z + 9), vec4(0.85f, 0.85f, 0.82f, 0));
+        block(city, vec3(c.x - 9.3f, g + 60, c.z - 9.3f), vec3(c.x + 9.3f, g + 63.5f, c.z + 9.3f), vec4(1.f, 0.82f, 0.55f, 20));
+        block(city, vec3(c.x - 4.5f, g + 112, c.z - 4.5f), vec3(c.x + 4.5f, g + 117, c.z + 4.5f), vec4(1.f, 0.82f, 0.55f, 20));
+        city.tube(vec3(c.x, g + Ht, c.z), vec3(c.x, g + Ht + 18.f, c.z), 0.8f, 0.3f, 6, wht);
+        block(city, vec3(c.x - 0.7f, g + Ht + 18.f, c.z - 0.7f), vec3(c.x + 0.7f, g + Ht + 19.4f, c.z + 0.7f), vec4(1.f, 0.15f, 0.1f, 15));
+        solid(c.x - 24, c.z - 24, c.x + 24, c.z + 24, g + 30.f);
+    }
+    // ---- a scramble crossing at Shibuya (Kabuki-dori x Akiba Street)
+    {
+        vec3 c(2250.f, 0, -100.f);
+        float y = heightAt(c.x, c.z) + 0.09f;
+        vec4 w(0.95f, 0.95f, 0.93f, 21);
+        auto stripes = [&](vec3 a, vec3 b, float width) {
+            vec3 d = b - a; float L = length(d); d = d / L;
+            vec3 sd(-d.z, 0, d.x);
+            for (float t = 0; t < L - 0.5f; t += 1.2f) {
+                vec3 p0 = a + d * t, p1 = a + d * (t + 0.6f);
+                p0.y = p1.y = y;
+                city.flatQuad(p0 + sd * width, p1 + sd * width, p1 - sd * width, p0 - sd * width, w);
+            }
+        };
+        stripes(c + vec3(-11, 0, -9), c + vec3(11, 0, -9), 1.6f);
+        stripes(c + vec3(-11, 0, 9), c + vec3(11, 0, 9), 1.6f);
+        stripes(c + vec3(-9, 0, -11), c + vec3(-9, 0, 11), 1.6f);
+        stripes(c + vec3(9, 0, -11), c + vec3(9, 0, 11), 1.6f);
+        stripes(c + vec3(-8, 0, -8), c + vec3(8, 0, 8), 1.4f);
+        stripes(c + vec3(-8, 0, 8), c + vec3(8, 0, -8), 1.4f);
+    }
     // street lights along every city street, both sides
     for (float x : xs)
         for (float z = -860; z < 330; z += 34) {

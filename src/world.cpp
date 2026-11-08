@@ -57,6 +57,18 @@ float World::baseHeight(float x, float z) const {
     hOut += north * (230.f + ridge2 * 380.f);
     float inner = 1.f - smoothstepf(1450.f, 1900.f, edge);
     h = lerpf(hOut, hIn, inner);
+    // ---- Fuji: a lone volcanic cone in the north-west, concave flanks, a crater at the top
+    {
+        float fd = std::hypot(x - kFuji.x, z - kFuji.z);
+        if (fd < 2300.f) {
+            float t = clampf(1.f - fd / 2100.f, 0.f, 1.f);
+            float cone = 40.f + 940.f * std::pow(t, 1.65f);
+            cone += fbm(x / 160.f, z / 160.f, 3, 91) * 18.f * t;       // lava ribs down the flanks
+            cone -= (1.f - smoothstepf(70.f, 150.f, fd)) * 55.f;        // crater
+            float k = smoothstepf(2300.f, 1500.f, fd);
+            h = lerpf(h, std::max(h * 0.6f, cone), k);
+        }
+    }
     // ---- valleys through the ridge for the highways
     for (auto& c : kCorridors) {
         float d = segDist(x, z, c[0], c[1]);
@@ -73,7 +85,8 @@ float World::baseHeight(float x, float z) const {
     bool quay = x > kDocks.x0 && x < kDocks.x1;
     float seaS = quay ? smoothstepf(kDocks.z0 - 2.f, kDocks.z0 - 22.f, z) : smoothstepf(-2330.f, -2620.f, z);
     float seaE = smoothstepf(2830.f, 2960.f, x);
-    float sea = std::max(seaS, seaE);
+    float seaW = smoothstepf(-3480.f, -3650.f, x);  // the Sea of Japan along the west coast
+    float sea = std::max(std::max(seaS, seaE), seaW);
     h = lerpf(h, waterLevel - 16.f, sea);
     // lake bowls with irregular shorelines
     for (const Lake& L : lakes) {
@@ -284,7 +297,22 @@ void World::computeRoadHeights() {
         }
         // never steeper than a real road: relax neighbouring points towards each other until
         // no step is steeper than the limit (converges, and keeps loops closed)
-        const float gmax = r.surface == SURF_ASPHALT ? 0.13f : 0.18f;
+        float gmax = r.surface == SURF_ASPHALT ? 0.13f : 0.18f;
+        {
+            // a road pinned at both ends to very different heights may need more than the usual
+            // limit: spread the climb evenly rather than leaving a cliff where the constraints fight
+            int first = -1, last = -1;
+            for (int i = 0; i < m; i++) if (w[i] > 0.6f) { if (first < 0) first = i; last = i; }
+            if (!r.closed && first >= 0 && last > first) {
+                float len = 0;
+                for (int i = first; i < last; i++) len += std::hypot(r.pts[i + 1].x - r.pts[i].x, r.pts[i + 1].z - r.pts[i].z);
+                float need = std::fabs(hs[last] - hs[first]) / std::max(len, 1.f);
+                if (need * 1.15f > gmax) {
+                    SDL_Log("Road '%s' needs a %.0f%% grade between its junctions", r.name.c_str(), need * 100.f);
+                    gmax = need * 1.15f;
+                }
+            }
+        }
         std::vector<float> lim(m, 0.f);
         for (int i = 0; i < m; i++) {
             int j = r.closed ? (i + 1) % m : std::min(i + 1, m - 1);
@@ -450,6 +478,10 @@ void World::scatter(uint32_t seed) {
                 vec3 tint = autumn[0];
                 for (int k = 0; k < 6; k++) { acc += autumnW[k]; if (pick <= acc) { tint = autumn[k]; break; } }
                 tint = lerp(tint, autumn[rng.irange(0, 5)], rng.range(0.f, 0.35f)) * rng.range(0.9f, 1.12f);  // blend neighbours
+                // sakura: cherry blossom in drifts through the lowlands, thickest beside the roads
+                float sak = smoothstepf(0.15f, 0.55f, fbm(x / 260.f, z / 260.f, 2, 133)) * (1.f - smoothstepf(90.f, 220.f, h));
+                if (roadDistAt(x, z) < 40.f) sak = std::min(1.f, sak + 0.35f);
+                if (rng.f() < sak * 0.7f) tint = vec3(rng.range(0.98f, 1.05f), rng.range(0.66f, 0.76f), rng.range(0.78f, 0.88f)) * rng.range(0.95f, 1.1f);
                 leafInst.push_back({vec3(x, h - 0.3f, z), sc, tint, rng.range(0, 6.28f)});
                 addTrunk(x, z, 0.32f * sc);
             }
@@ -587,11 +619,11 @@ void World::generate(uint32_t seed) {
         buildRoad(r, c, closed);
         roads.push_back(r);
     };
-    addRoad("Ridge Highway", loop, true, 13.f, SURF_ASPHALT);
-    addRoad("Valley Road", valley, false, 12.f, SURF_ASPHALT);
-    addRoad("Summit Loop", summit, true, 11.f, SURF_ASPHALT);
-    addRoad("Pass Road", pass, false, 11.f, SURF_ASPHALT);
-    addRoad("Timberline Trail", trail, true, 8.5f, SURF_DIRT);
+    addRoad("Hakone Turnpike", loop, true, 13.f, SURF_ASPHALT);
+    addRoad("Chichibu Road", valley, false, 12.f, SURF_ASPHALT);
+    addRoad("Haruna Loop", summit, true, 11.f, SURF_ASPHALT);
+    addRoad("Usui Pass Road", pass, false, 11.f, SURF_ASPHALT);
+    addRoad("Okutama Trail", trail, true, 8.5f, SURF_DIRT);
 
     // ---- the wider island
     // Coast Highway: east through the city, down to the docks, along the south coast, up the west
@@ -601,29 +633,29 @@ void World::generate(uint32_t seed) {
                                vec3(300, 0, -1880), vec3(-500, 0, -2000), vec3(-1300, 0, -1850), vec3(-2050, 0, -1500),
                                vec3(-2480, 0, -800), vec3(-2480, 0, -50), vec3(-2150, 0, 450), vec3(-1500, 0, 380),
                                vec3(-1000, 0, 120), vec3(-890, 0, 40)};
-    addRoad("Coast Highway", coast, false, 14.f, SURF_ASPHALT);
+    addRoad("Wangan Highway", coast, false, 14.f, SURF_ASPHALT);
     // city grid (the Coast Highway is the main avenue at z = -250)
     {
         const float xs[] = {1800, 1950, 2100, 2250, 2400, 2550, 2700};
         const float zs[] = {-850, -700, -550, -400, -100, 50, 200};
-        static const char* ns[] = {"1st Avenue", "2nd Avenue", "3rd Avenue", "Neon Avenue", "5th Avenue", "6th Avenue", "Harbour Avenue"};
+        static const char* ns[] = {"Chuo-dori", "Meiji-dori", "Yasukuni-dori", "Kabuki-dori", "Aoyama-dori", "Omotesando", "Harumi-dori"};
         static const char* es[] = {"Kanda Street", "Ginza Street", "Shiba Street", "Ueno Street", "Akiba Street", "Roppongi Street", "Shibuya Street"};
         for (int i = 0; i < 7; i++) addRoad(ns[i], {vec3(xs[i], 0, -880), vec3(xs[i], 0, -500), vec3(xs[i], 0, -60), vec3(xs[i], 0, 320)}, false, 12.f, SURF_ASPHALT);
         for (int i = 0; i < 7; i++) addRoad(es[i], {vec3(1770, 0, zs[i]), vec3(2100, 0, zs[i]), vec3(2400, 0, zs[i]), vec3(2730, 0, zs[i])}, false, 12.f, SURF_ASPHALT);
     }
     // docks: the quay road and spurs up to the Coast Highway
-    addRoad("Quay Road", {vec3(260, 0, -2330), vec3(800, 0, -2330), vec3(1400, 0, -2330), vec3(2000, 0, -2330), vec3(2240, 0, -2330)}, false, 13.f, SURF_ASPHALT);
+    addRoad("Daikoku Quay", {vec3(260, 0, -2330), vec3(800, 0, -2330), vec3(1400, 0, -2330), vec3(2000, 0, -2330), vec3(2240, 0, -2330)}, false, 13.f, SURF_ASPHALT);
     for (float x : {450.f, 1150.f, 1750.f, 2200.f}) {
         // start each lane right on the Coast Highway so it joins it (no step at the junction)
         vec3 top(x, 0, -1905);
         float bd = 1e18f;
         for (auto& rd : roads)
-            if (rd.name == "Coast Highway")
+            if (rd.name == "Wangan Highway")
                 for (auto& q : rd.pts) {
                     float d = (q.x - x) * (q.x - x) + (q.z + 1905.f) * (q.z + 1905.f);
                     if (d < bd) { bd = d; top = vec3(q.x, 0, q.z); }
                 }
-        addRoad("Dock Lane", {top, vec3(x, 0, top.z - 40.f), vec3(x, 0, -2100), vec3(x, 0, -2320)}, false, 11.f, SURF_ASPHALT);
+        addRoad("Daikoku Lane", {top, vec3(x, 0, top.z - 40.f), vec3(x, 0, -2100), vec3(x, 0, -2320)}, false, 11.f, SURF_ASPHALT);
     }
     // Akagi Touge: hairpins from the Summit Loop up into the northern mountains
     {
@@ -640,7 +672,52 @@ void World::generate(uint32_t seed) {
             float a = i / 12.f * 2 * PI;
             farm.push_back(fc + vec3(std::cos(a) * 330.f * (1.f + rng.range(-0.15f, 0.15f)), 0, std::sin(a) * 520.f * (1.f + rng.range(-0.15f, 0.15f))));
         }
-        addRoad("Harvest Lanes", farm, true, 8.f, SURF_DIRT);
+        addRoad("Inaka Rice Lanes", farm, true, 8.f, SURF_DIRT);
+    }
+
+    // ---- the north: Fuji and the Alps (added after the original roads so saved EventLab codes keep their road numbers)
+    auto snapTo = [&](const char* name, vec3 near) {
+        vec3 best = near;
+        float bd = 1e18f;
+        for (auto& rd : roads)
+            if (rd.name == name)
+                for (auto& q : rd.pts) {
+                    float d = (q.x - near.x) * (q.x - near.x) + (q.z - near.z) * (q.z - near.z);
+                    if (d < bd) { bd = d; best = vec3(q.x, 0, q.z); }
+                }
+        return best;
+    };
+    {
+        // Fuji Skyline: a ring road round the volcano's lower flanks
+        std::vector<vec3> sky;
+        for (int i = 0; i < 22; i++) {
+            float a = i / 22.f * 2 * PI;
+            float wob = 1.f + 0.06f * std::sin(a * 3.f + 1.3f);
+            sky.push_back(kFuji + vec3(std::cos(a) * 1100.f * wob, 0, std::sin(a) * 800.f * wob));
+        }
+        addRoad("Fuji Skyline", sky, true, 12.f, SURF_ASPHALT);
+    }
+    {
+        // Fuji Road: up from the Wangan Highway past the lake to the Skyline
+        vec3 a = snapTo("Wangan Highway", vec3(-1500, 0, 380));
+        vec3 b = snapTo("Fuji Skyline", kFuji + vec3(150, 0, -800));
+        // switchbacks on the steep upper part so the grade stays drivable
+        addRoad("Fuji Road", {a, a + vec3(-10, 0, 90), vec3(-1560, 0, 1000), vec3(-1420, 0, 1500), vec3(-1200, 0, 1750), vec3(-1500, 0, 1900),
+                              vec3(-1250, 0, 2050), b + vec3(60, 0, -140), b}, false, 12.f, SURF_ASPHALT);
+    }
+    {
+        // Irohazaka: hairpins from the Skyline's east side across to the top of Akagi Touge
+        vec3 a = snapTo("Fuji Skyline", kFuji + vec3(1100, 0, -100));
+        vec3 b = snapTo("Akagi Touge", vec3(260, 0, 2380));
+        addRoad("Irohazaka", {a, a + vec3(120, 0, -40), vec3(-500, 0, 2840), vec3(-260, 0, 2830), vec3(-330, 0, 2680), vec3(-90, 0, 2660),
+                              vec3(-150, 0, 2520), vec3(90, 0, 2500), b + vec3(-60, 0, 10), b}, false, 10.f, SURF_ASPHALT);
+    }
+    {
+        // Sea of Japan Road: up the west coast from the Wangan Highway to the Skyline
+        vec3 a = snapTo("Wangan Highway", vec3(-2480, 0, -800));
+        vec3 b = snapTo("Fuji Skyline", kFuji + vec3(-1100, 0, 0));
+        addRoad("Sea of Japan Road", {a, a + vec3(-80, 0, 40), vec3(-3050, 0, -560), vec3(-3330, 0, 0), vec3(-3360, 0, 800), vec3(-3320, 0, 1600),
+                                      vec3(-3200, 0, 2300), vec3(-2900, 0, 2780), b + vec3(-60, 0, -60), b}, false, 13.f, SURF_ASPHALT);
     }
 
     // cross-country checkpoints through the north-west meadows
@@ -687,6 +764,7 @@ void World::generate(uint32_t seed) {
     hubSpawn.y = heightAt(hubSpawn.x, hubSpawn.z);
     buildUrban(seed);  // also builds the estates (shares the mesh and collision grid)
     scatter(seed);
+    buildShrines();
 }
 
 // ---------------------------------------------------------------- GPU
@@ -838,6 +916,28 @@ void World::buildGPU() {
             ch.center = vec3(-HALF + (cx + 0.5f) * CS * CELL, 0, -HALF + (cz + 0.5f) * CS * CELL);
         }
 
+    // ---- far terrain: every 8th vertex, sunk a little so the detailed chunks always win
+    {
+        const int S = 8, M = (N - 1) / S + 1;
+        std::vector<Vertex> v;
+        std::vector<uint32_t> idx;
+        v.reserve(M * M);
+        for (int z = 0; z < M; z++)
+            for (int x = 0; x < M; x++) {
+                int ix = x * S, iz = z * S;
+                float wx = -HALF + ix * CELL, wz = -HALF + iz * CELL;
+                vec4 col(0.30f, 0.25f, 0.15f, forestAt(wx, wz) * 0.45f);
+                if (urban(wx, wz, 2.f)) col = vec4(0.50f, 0.49f, 0.47f, 2.f);
+                v.push_back({vec3(wx, height[iz * N + ix] - 2.5f, wz), nrm[iz * N + ix], col});
+            }
+        for (int z = 0; z + 1 < M; z++)
+            for (int x = 0; x + 1 < M; x++) {
+                uint32_t a = z * M + x, b = a + 1, c = a + M, d = c + 1;
+                idx.insert(idx.end(), {a, d, b, a, c, d});
+            }
+        farTerrain.upload(v, idx);
+    }
+
     // ---- roads
     {
         MeshBuilder b;
@@ -906,8 +1006,9 @@ void World::buildGPU() {
                     b.tri(a + 1, a + gx + 1, a + gx + 2);
                 }
         };
-        sea(-HALF - 400, -HALF - 400, HALF + 400, -2280.f, 96, 24);
-        sea(2760.f, -2280.f, HALF + 400, HALF + 400, 12, 96);
+        sea(-HALF - 400, -HALF - 400, HALF + 400, -2280.f, 128, 24);
+        sea(2760.f, -2280.f, HALF + 400, HALF + 400, 16, 128);
+        sea(-HALF - 400, -2280.f, -3420.f, HALF + 400, 16, 128);
         b.build(waterMesh);
     }
     city.build(cityMesh);
@@ -1121,4 +1222,49 @@ void World::buildMapTexture() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+}
+
+// Torii gates over the mountain roads (red pillars, black kasagi with upturned ends) with a pair
+// of stone lanterns: the way into the touge, the Fuji climb and the pass.
+void World::buildShrines() {
+    auto torii = [&](const char* road, float frac) {
+        for (auto& r : roads) {
+            if (r.name != road || r.pts.size() < 20) continue;
+            int i = std::clamp(int(frac * (r.pts.size() - 1)), 2, int(r.pts.size()) - 3);
+            vec3 p = r.pts[i], t = r.tan[i], side(-t.z, 0, t.x);
+            float half = r.width * 0.5f + 1.4f, H = 8.5f;
+            vec4 red(0.86f, 0.16f, 0.07f, 0), black(0.06f, 0.06f, 0.07f, 0), stone(0.55f, 0.54f, 0.5f, 0);
+            for (int s2 = -1; s2 <= 1; s2 += 2) {
+                vec3 b = p + side * (s2 * half);
+                b.y = heightAt(b.x, b.z) - 0.3f;
+                props.cylinder(b, 0.42f, H + 0.3f, 12, red);
+                props.cylinder(b, 0.55f, 0.6f, 12, black);  // base ring
+                int cx = std::clamp(int((b.x + HALF) / TGRID), 0, tgN - 1), cz = std::clamp(int((b.z + HALF) / TGRID), 0, tgN - 1);
+                trunkGrid[cz * tgN + cx].push_back({b.x, b.z, 0.5f});
+                // stone lantern in front of each pillar
+                vec3 l = b + side * (s2 * 2.2f) - t * 3.f;
+                l.y = heightAt(l.x, l.z);
+                props.box(l + vec3(0, 0.5f, 0), vec3(0.35f, 0.5f, 0.35f), stone);
+                props.box(l + vec3(0, 1.25f, 0), vec3(0.45f, 0.25f, 0.45f), vec4(1.f, 0.8f, 0.5f, 15));
+                props.box(l + vec3(0, 1.6f, 0), vec3(0.6f, 0.12f, 0.6f), stone);
+            }
+            float y = std::max(heightAt((p - side * half).x, (p - side * half).z), heightAt((p + side * half).x, (p + side * half).z));
+            // nuki (lower tie beam) and kasagi (top beam, black, ends swept up)
+            mat4 xf = basis(side, vec3(0, 1, 0), t, vec3(p.x, y, p.z));
+            props.box(vec3(0, H - 1.6f, 0), vec3(half + 0.9f, 0.28f, 0.3f), red, &xf);
+            props.box(vec3(0, H + 0.05f, 0), vec3(half + 1.3f, 0.32f, 0.42f), red, &xf);
+            props.box(vec3(0, H + 0.55f, 0), vec3(half + 1.8f, 0.22f, 0.55f), black, &xf);
+            for (int s2 = -1; s2 <= 1; s2 += 2) {
+                mat4 tip = xf * translate(vec3(s2 * (half + 1.9f), H + 0.75f, 0)) * rotateZ(s2 * -0.28f);
+                props.box(vec3(0, 0, 0), vec3(0.6f, 0.16f, 0.55f), black, &tip);
+            }
+            props.box(vec3(0, H - 0.75f, 0), vec3(0.35f, 0.55f, 0.18f), black, &xf);  // gakuzuka (name plaque)
+        }
+    };
+    torii("Akagi Touge", 0.04f);
+    torii("Irohazaka", 0.05f);
+    torii("Fuji Road", 0.93f);
+    torii("Usui Pass Road", 0.08f);
+    torii("Haruna Loop", 0.3f);
+    torii("Chichibu Road", 0.5f);
 }

@@ -10,10 +10,10 @@
 namespace {
 struct EstateDef { const char* name; const char* blurb; vec3 target; int price; int style; };
 const EstateDef kEstateDefs[] = {
-    {"Lakeside Cabin", "A timber cabin on the water, a short drive from the festival.", vec3(380, 0, -20), 60000, 0},
-    {"Harvest Farmhouse", "Two-storey farmhouse with a barn big enough for a collection.", vec3(-2050, 0, -350), 150000, 1},
-    {"Harbour Loft", "Converted dockside warehouse with a drive-in workshop.", vec3(1000, 0, -1800), 300000, 4},
-    {"Summit Lodge", "Stone and timber lodge at the top of Akagi Touge.", vec3(330, 0, 2330), 450000, 3},
+    {"Lakeside Ryokan", "A timber inn on the water, a short drive from the festival.", vec3(380, 0, -20), 60000, 0},
+    {"Inaka Farmhouse", "Two-storey farmhouse with a barn big enough for a collection.", vec3(-2050, 0, -350), 150000, 1},
+    {"Daikoku Loft", "Converted dockside warehouse with a drive-in workshop.", vec3(1000, 0, -1800), 300000, 4},
+    {"Akagi Lodge", "Stone and timber lodge at the top of Akagi Touge.", vec3(330, 0, 2330), 450000, 3},
     {"Clifftop Villa", "Modernist villa above the south coast. The view is the point.", vec3(-1300, 0, -1760), 750000, 2},
 };
 }

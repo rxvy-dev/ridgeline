@@ -22,8 +22,9 @@ struct Box { float x0, z0, x1, z1, top; };  // axis-aligned solid (buildings, co
 
 // regions outside the original valley
 struct Region { const char* name; float x0, z0, x1, z1; };
-static const Region kCity = {"Neon Bay City", 1720.f, -950.f, 2760.f, 380.f};
-static const Region kDocks = {"Harbour Docks", 150.f, -2420.f, 2300.f, -1950.f};
+static const vec3 kFuji(-1700.f, 0.f, 3050.f);
+static const Region kCity = {"Tokyo", 1785.f, -870.f, 2715.f, 225.f};
+static const Region kDocks = {"Daikoku Wharf", 150.f, -2420.f, 2300.f, -1950.f};
 
 // a house the player can buy: levelled plot beside a road, with a garage
 struct Estate {
@@ -37,12 +38,12 @@ struct Estate {
 };
 
 struct World {
-    static constexpr float HALF = 3000.f;   // world spans [-HALF, HALF] on x and z (6 x 6 km)
-    static constexpr int N = 2401;          // heightmap vertices per side (2.5 m grid)
+    static constexpr float HALF = 4000.f;   // world spans [-HALF, HALF] on x and z (8 x 8 km)
+    static constexpr int N = 3201;          // heightmap vertices per side (2.5 m grid)
     static constexpr float CELL = 2 * HALF / (N - 1);
     float waterLevel = 6.f;
     struct Lake { vec3 c; float r; float seed; };
-    std::vector<Lake> lakes = {{vec3(380, 0, -300), 250.f, 1.f}, {vec3(-640, 0, -960), 230.f, 2.3f}, {vec3(980, 0, -880), 190.f, 4.1f}, {vec3(520, 0, 430), 80.f, 5.7f}};
+    std::vector<Lake> lakes = {{vec3(380, 0, -300), 250.f, 1.f}, {vec3(-640, 0, -960), 230.f, 2.3f}, {vec3(980, 0, -880), 190.f, 4.1f}, {vec3(520, 0, 430), 80.f, 5.7f}, {vec3(-1950, 0, 900), 260.f, 6.2f}};
     vec3 hubPos;           // festival hub centre
     float hubYaw = 0.f;    // spawn heading at hub
     vec3 hubSpawn;
@@ -61,6 +62,7 @@ struct World {
     // GPU resources
     struct Chunk { Mesh mesh; vec3 center; };
     std::vector<Chunk> chunks;
+    Mesh farTerrain;  // whole island at 20 m resolution, for the horizon beyond the chunks
     Mesh roadMesh, waterMesh, hubMesh, propsMesh, cityMesh, cityGlass;
     std::vector<Box> boxes;                       // solid buildings / containers
     std::vector<std::vector<int>> boxGrid;        // TGRID cells -> box indices
@@ -105,6 +107,7 @@ private:
     void computeRoadHeights();
     void carveTerrain();
     void scatter(uint32_t seed);
+    void buildShrines();
     void buildMapTexture();
     void buildUrban(uint32_t seed);
 public:

@@ -1813,6 +1813,15 @@ void Game::updateCamera(float dt) {
         cam.fov = blendFromFov + (cam.fov - blendFromFov) * t;
         cam.update();
     }
+    // test hook: RL_AERIAL="x,y,z,tx,ty,tz" pins the camera (aerial screenshots of the world)
+    if (const char* ae = getenv("RL_AERIAL")) {
+        float v[6] = {0, 300, 0, 0, 0, 1};
+        std::sscanf(ae, "%f,%f,%f,%f,%f,%f", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5]);
+        cam.pos = vec3(v[0], v[1], v[2]);
+        cam.target = vec3(v[3], v[4], v[5]);
+        cam.farZ = 9000.f;
+        cam.update();
+    }
 }
 
 void Game::updateCameraRaw(float dt) {
@@ -2074,7 +2083,7 @@ void Game::drawCar(Racer& r, Shader& s, bool glassPass) {
 void Game::renderWorld(const Camera& c, bool showroom) {
     const float dists[] = {800.f, 1200.f, 1800.f, 2600.f};
     float drawDist = dists[settings.drawDist];
-    R.atmo.fogDensity = 1.5f / drawDist;
+    R.atmo.fogDensity = 1.1f / drawDist;
     std::vector<Racer*> cars;
     if (thumbActive) cars = thumbCars;
     else if (state == ST_TITLE) cars.push_back(&titleCar);
@@ -2310,6 +2319,10 @@ void Game::renderWorld(const Camera& c, bool showroom) {
         }
         ch.mesh.draw();
     }
+    // the rest of the island out to the horizon (Fuji, the Alps, the far coast)
+    R.terrain.set("uFarCut", drawDist * 0.92f);
+    world.farTerrain.draw();
+    R.terrain.set("uFarCut", 0.f);
     // roads
     R.setCommon(R.road, c);
     R.road.set("uReflVP", reflVP);

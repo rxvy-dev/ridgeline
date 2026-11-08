@@ -197,7 +197,7 @@ std::vector<EventDef> buildEvents(const World& w) {
     const Road& trail = w.roads[4];
     {
         EventDef e;
-        e.name = "Ridge Highway Circuit";
+        e.name = "Hakone Turnpike Circuit";
         e.blurb = "One flat-out lap of the highway ring.";
         e.type = EV_CIRCUIT; e.laps = 1;
         int s = nearestIndex(loop, vec3(-870, 0, -200));
@@ -207,7 +207,7 @@ std::vector<EventDef> buildEvents(const World& w) {
     }
     {
         EventDef e;
-        e.name = "Valley Sprint";
+        e.name = "Chichibu Sprint";
         e.blurb = "Point-to-point dash across the valley floor.";
         e.type = EV_SPRINT;
         e.route = routeFromRoad(valley, 6, int(valley.pts.size()) - 1, false);
@@ -216,7 +216,7 @@ std::vector<EventDef> buildEvents(const World& w) {
     }
     {
         EventDef e;
-        e.name = "Summit Loop";
+        e.name = "Haruna Loop";
         e.blurb = "Two laps of the twisting mountain loop.";
         e.type = EV_CIRCUIT; e.laps = 2;
         int s = nearestIndex(summit, pass.pts.back());
@@ -226,7 +226,7 @@ std::vector<EventDef> buildEvents(const World& w) {
     }
     {
         EventDef e;
-        e.name = "Timberline Scramble";
+        e.name = "Okutama Scramble";
         e.blurb = "Two laps of the forest dirt trail.";
         e.type = EV_CIRCUIT; e.laps = 2;
         e.route = routeFromRoad(trail, 0, 0, true);
@@ -235,7 +235,7 @@ std::vector<EventDef> buildEvents(const World& w) {
     }
     {
         EventDef e;
-        e.name = "Pass Climb";
+        e.name = "Usui Pass Climb";
         e.blurb = "Sprint up the switchbacks to the summit.";
         e.type = EV_SPRINT;
         e.route = routeFromRoad(pass, 0, int(pass.pts.size()) - 1, false);
@@ -244,7 +244,7 @@ std::vector<EventDef> buildEvents(const World& w) {
     }
     {
         EventDef e;
-        e.name = "Lakeshore Sprint";
+        e.name = "Lake Ashi Sprint";
         e.blurb = "Run the southern highway along the lake.";
         e.type = EV_SPRINT;
         int a = nearestIndex(loop, vec3(-250, 0, -900));
@@ -255,7 +255,7 @@ std::vector<EventDef> buildEvents(const World& w) {
     }
     {
         EventDef e;
-        e.name = "Golden Fields Cross Country";
+        e.name = "Rice Fields Cross Country";
         e.blurb = "Off-road checkpoints through the meadows.";
         e.type = EV_CROSS;
         // Catmull-Rom through the checkpoints
@@ -288,7 +288,7 @@ std::vector<EventDef> buildEvents(const World& w) {
         vec3 best(x, 0, -1905);
         float bd = 1e18f;
         for (auto& r : w.roads)
-            if (r.name == "Coast Highway")
+            if (r.name == "Wangan Highway")
                 for (auto& q : r.pts) {
                     float d = (q.x - x) * (q.x - x) + (q.z + 1905.f) * (q.z + 1905.f);
                     if (d < bd) { bd = d; best = vec3(q.x, 0, q.z); }
@@ -337,7 +337,7 @@ std::vector<EventDef> buildEvents(const World& w) {
     };
     {
         EventDef e;
-        e.name = "Neon City Circuit";
+        e.name = "Tokyo Neon Circuit";
         e.blurb = "Two laps through the downtown grid, under the towers.";
         e.type = EV_CIRCUIT; e.laps = 2;
         e.route = through({vec3(1800, 0, -850), vec3(2400, 0, -850), vec3(2400, 0, -400), vec3(2700, 0, -400), vec3(2700, 0, 200),
@@ -345,19 +345,19 @@ std::vector<EventDef> buildEvents(const World& w) {
         e.prize[0] = 18000; e.prize[1] = 10000; e.prize[2] = 6000;
         finish(e);
     }
-    if (const Road* c = road("Coast Highway")) {
+    if (const Road* c = road("Wangan Highway")) {
         EventDef e;
-        e.name = "Harbour Run";
+        e.name = "Shuto Harbour Run";
         e.blurb = "Out of the city and down the coast to the docks.";
         e.type = EV_SPRINT;
         e.route = routeFromRoad(*c, nearestIndex(*c, vec3(2400, 0, -250)), nearestIndex(*c, vec3(400, 0, -1880)), false);
         e.prize[0] = 15000; e.prize[1] = 8500; e.prize[2] = 5000;
         finish(e);
     }
-    if (const Road* c = road("Coast Highway")) {
+    if (const Road* c = road("Wangan Highway")) {
         EventDef e;
-        e.name = "Coast to Coast";
-        e.blurb = "The whole Coast Highway: city, docks, farmland, home.";
+        e.name = "Wangan Coast to Coast";
+        e.blurb = "The whole Wangan Highway: city, docks, farmland, home.";
         e.type = EV_SPRINT;
         e.route = routeFromRoad(*c, 0, int(c->pts.size()) - 1, false);
         e.prize[0] = 30000; e.prize[1] = 17000; e.prize[2] = 9000;
@@ -365,7 +365,7 @@ std::vector<EventDef> buildEvents(const World& w) {
     }
     {
         EventDef e;
-        e.name = "Docks Circuit";
+        e.name = "Daikoku Circuit";
         e.blurb = "Two laps between the container stacks and the cranes.";
         e.type = EV_CIRCUIT; e.laps = 2;
         std::vector<vec3> c = {vec3(450, 0, -2330), vec3(1750, 0, -2330)};
@@ -383,9 +383,9 @@ std::vector<EventDef> buildEvents(const World& w) {
         e.prize[0] = 16000; e.prize[1] = 9000; e.prize[2] = 5000;
         finish(e);
     }
-    if (const Road* f = road("Harvest Lanes")) {
+    if (const Road* f = road("Inaka Rice Lanes")) {
         EventDef e;
-        e.name = "Harvest Scramble";
+        e.name = "Inaka Scramble";
         e.blurb = "Two dusty laps around the western farms.";
         e.type = EV_CIRCUIT; e.laps = 2;
         e.route = routeFromRoad(*f, 0, 0, true);
@@ -412,7 +412,7 @@ std::vector<EventDef> buildEvents(const World& w) {
     }
     {
         EventDef e;
-        e.name = "Docks Drift Arena";
+        e.name = "Daikoku Drift Arena";
         e.blurb = "Drift zone: three laps of the dock lanes and the quay.";
         e.type = EV_DRIFT; e.laps = 3;
         std::vector<vec3> c = {vec3(450, 0, -2330), vec3(1150, 0, -2330)};
@@ -425,7 +425,7 @@ std::vector<EventDef> buildEvents(const World& w) {
     }
     {
         EventDef e;
-        e.name = "Summit Loop Drift";
+        e.name = "Haruna Loop Drift";
         e.blurb = "Drift zone: two laps of the mountain loop.";
         e.type = EV_DRIFT; e.laps = 2;
         e.route = routeFromRoad(summit, 0, 0, true);
@@ -462,9 +462,9 @@ std::vector<EventDef> buildEvents(const World& w) {
         rt.finalize();
         return rt;
     };
-    if (const Road* f = road("Harvest Lanes")) {
+    if (const Road* f = road("Inaka Rice Lanes")) {
         EventDef e;
-        e.name = "Harvest Mud Run";
+        e.name = "Inaka Mud Run";
         e.blurb = "Off-road: cut straight across the fields and ditches. Bring something with tall tyres.";
         e.type = EV_CROSS;
         for (float sw : {55.f, 40.f, 28.f, 18.f, 8.f}) {
@@ -476,7 +476,7 @@ std::vector<EventDef> buildEvents(const World& w) {
     }
     {
         EventDef e;
-        e.name = "Timberline Cross Country";
+        e.name = "Okutama Cross Country";
         e.blurb = "Off-road: through the forest and over the ridges beside the trail.";
         e.type = EV_CROSS;
         for (float sw : {40.f, 30.f, 20.f, 12.f, 5.f}) {
@@ -488,17 +488,63 @@ std::vector<EventDef> buildEvents(const World& w) {
     }
     // boost pads in a few of the faster road races
     for (auto& e : ev)
-        if (e.name == "Neon City Circuit" || e.name == "Coast to Coast" || e.name == "Harbour Run" || e.name == "Ridge Highway Circuit")
+        if (e.name == "Tokyo Neon Circuit" || e.name == "Wangan Coast to Coast" || e.name == "Shuto Harbour Run" || e.name == "Hakone Turnpike Circuit")
             addBoostPads(e, 700.f);
     // a reverse-direction circuit for variety
     {
         EventDef e;
-        e.name = "Ridge Reverse";
+        e.name = "Hakone Reverse";
         e.blurb = "The highway ring, counter-clockwise.";
         e.type = EV_CIRCUIT; e.laps = 1;
         int s = nearestIndex(loop, vec3(870, 0, -250));
         e.route = reversed(routeFromRoad(loop, s, 0, true));
         e.prize[0] = 16000; e.prize[1] = 9000; e.prize[2] = 5000;
+        finish(e);
+    }
+    // ---------------- the north: Fuji and the Alps
+    if (const Road* f = road("Fuji Skyline")) {
+        EventDef e;
+        e.name = "Fuji Skyline Circuit";
+        e.blurb = "A lap of the ring road round the volcano. Snow above, the whole island below.";
+        e.type = EV_CIRCUIT; e.laps = 1;
+        e.route = routeFromRoad(*f, 0, 0, true);
+        e.prize[0] = 22000; e.prize[1] = 12000; e.prize[2] = 7000;
+        finish(e);
+        EventDef d;
+        d.name = "Fuji Drift";
+        d.blurb = "Drift zone: two laps of the Skyline. Keep it sideways.";
+        d.type = EV_DRIFT; d.laps = 2;
+        d.route = reversed(routeFromRoad(*f, 0, 0, true));
+        d.opponents = 0;
+        driftTargets(d, 0.8f);
+        d.prize[0] = 20000; d.prize[1] = 11000; d.prize[2] = 6000;
+        finish(d);
+    }
+    if (const Road* r = road("Irohazaka")) {
+        EventDef e;
+        e.name = "Irohazaka Downhill";
+        e.blurb = "From the Skyline down the hairpins to the top of Akagi.";
+        e.type = EV_SPRINT;
+        e.route = routeFromRoad(*r, 0, int(r->pts.size()) - 1, false);
+        e.prize[0] = 18000; e.prize[1] = 10000; e.prize[2] = 6000;
+        finish(e);
+    }
+    if (const Road* r = road("Sea of Japan Road")) {
+        EventDef e;
+        e.name = "Sea of Japan Run";
+        e.blurb = "Flat out up the west coast, the sea on your left, Fuji ahead.";
+        e.type = EV_SPRINT;
+        e.route = routeFromRoad(*r, 0, int(r->pts.size()) - 1, false);
+        e.prize[0] = 20000; e.prize[1] = 11000; e.prize[2] = 6500;
+        finish(e);
+    }
+    if (const Road* r = road("Fuji Road")) {
+        EventDef e;
+        e.name = "Fuji Climb";
+        e.blurb = "Past the lake and up the volcano's flank to the Skyline.";
+        e.type = EV_SPRINT;
+        e.route = routeFromRoad(*r, 0, int(r->pts.size()) - 1, false);
+        e.prize[0] = 15000; e.prize[1] = 8500; e.prize[2] = 5000;
         finish(e);
     }
     for (auto& e : ev)

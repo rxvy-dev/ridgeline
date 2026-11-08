@@ -309,6 +309,7 @@ uniform sampler2D tGrass, tDirt, tRock, tRockN;
 uniform sampler2D tSand, tLeafGround, tGrassN, tForestN;
 uniform sampler2D tHeight;
 uniform float uHalf;
+uniform float uFarCut;  // far-terrain pass: skip what the detailed chunks already cover
 out vec4 FragColor;
 // caustics: bright wavy lines of sunlight focused by the surface onto the bed
 float caustic(vec2 p, float t) {
@@ -326,6 +327,7 @@ vec3 tri(sampler2D t, vec3 p, vec3 w, float s){
 void main(){
     vec3 n = normalize(vNrm);
     vec3 p = vPos;
+    if (uFarCut > 0.0 && length(p.xz - uCamPos.xz) < uFarCut) discard;
     float dist = length(p - uCamPos);
     float slope = 1.0 - n.y;
     float macro = fbm2(p.xz * 0.0035);
