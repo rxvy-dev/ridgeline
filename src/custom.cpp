@@ -203,6 +203,7 @@ void Game::drawCustomize() {
         float vx = px + 20 * u;
         if (swatch.x >= 0) {
             hud.rect(vx, ry + 26 * u, 18 * u, 18 * u, vec4(swatch.x, swatch.y, swatch.z, 1));
+            inkBox(vx, ry + 26 * u, 18 * u, 18 * u, 1.5f * u, sel ? wa::PAPER : wa::INK);
             vx += 28 * u;
         }
         hud.text(vx, ry + 23 * u, 19 * u, val, sel ? wa::PAPER : wa::INK, 0, false);

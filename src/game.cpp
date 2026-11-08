@@ -3178,7 +3178,7 @@ void Game::drawHud() {
         using namespace wa;
         std::string carLine = carName(*player.car.spec) + "  ·  " + std::string(1, player.car.spec->cls) + " " + std::to_string(rateCar(*player.car.spec).pi);
         std::string crs = fmtThousands((long long)(creditsShown + 0.5));
-        float pw = std::max({260 * u, hud.textWidth(14 * u, carLine) + 40 * u, hud.textWidth(28 * u, crs) + 90 * u});
+        float pw = std::max({260 * u, hud.textWidth(14 * u, carLine) + 40 * u, hud.textWidth(28 * u, crs) + 130 * u});
         hudPanelW = pw;
         card(18 * u, 18 * u, pw, 92 * u, 0.96f, false, 71);
         hud.circle(vec2(42 * u, 44 * u), 12 * u, GOLD, 20);
@@ -3191,8 +3191,8 @@ void Game::drawHud() {
         hud.rect(30 * u + lvw, 92 * u, bw, 2 * u, A(INK, 0.18f));
         brush(vec2(30 * u + lvw, 93 * u), vec2(30 * u + lvw + bw * clampf(xp / float(xpToNext()), 0.f, 1.f), 93 * u), 6 * u, VERM, 19, 1.f);
         if (wheelspins > 0) {
-            hanko(vec2(18 * u + pw - 4 * u, 22 * u), 34 * u, "福", VERM, 0.15f, 1.f);
-            hud.text(18 * u + pw + 16 * u, 12 * u, 13 * u, "x" + std::to_string(wheelspins), INK, 0, false);
+            hanko(vec2(18 * u + pw - 30 * u, 44 * u), 34 * u, "福", VERM, 0.12f, 1.f);
+            if (wheelspins > 1) hud.text(18 * u + pw - 30 * u, 62 * u, 12 * u, "x" + std::to_string(wheelspins), VERM, 1, false);
         }
         {
             std::string ck = clockText();

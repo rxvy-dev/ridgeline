@@ -178,6 +178,7 @@ void Game::kitsune(float x, float y, float s, float a) {
 void Game::drawThemeBackdrop(float alpha) {
     if (alpha <= 0.01f) return;
     float u = hud.ui, T = R.time;
+    backdropFrame = frameNo;
     paper(0, 0, hud.w, hud.h, alpha, 11, PAPER);
     hud.rectV(0, hud.h * 0.55f, hud.w, hud.h * 0.45f, A(PAPER2, 0.f), A(PAPER2, 0.7f * alpha));
     // the sun and Fuji in a wash of thin ink, drifting very slowly
@@ -351,13 +352,14 @@ void Game::drawMenuHeader(float x0, float y0, float W, const std::string& sectio
     float in = ease(stateTime / 0.35f);
     float dy = (1.f - in) * -40 * u;
     float bandH = y0 + 70 * u;
-    paper(0, dy, hud.w, bandH, 0.97f, 13, PAPER);
+    float bx0 = backdropFrame == frameNo ? 60 * u : 0.f;  // leave the ink column showing on full-screen menus
+    paper(bx0, dy, hud.w - bx0, bandH, 0.97f, 13, PAPER);
     // deckled bottom edge
-    for (float x = 0; x < hud.w; x += 14 * u) {
+    for (float x = bx0; x < hud.w; x += 14 * u) {
         float d = (3.f + 5.f * hash(17, int(x))) * u;
         hud.triangle(vec2(x, dy + bandH), vec2(x + 14 * u, dy + bandH), vec2(x + 7 * u, dy + bandH + d), A(PAPER, 0.97f));
     }
-    brush(vec2(0, dy + bandH + 4 * u), vec2(hud.w, dy + bandH + 6 * u), 4 * u, A(INK, in), 8, in);
+    brush(vec2(bx0, dy + bandH + 4 * u), vec2(hud.w, dy + bandH + 6 * u), 4 * u, A(INK, in), 8, in);
     // RIDGELINE in spaced capitals, a seal, then the section with its kanji
     hanko(vec2(x0 + 20 * u, dy + y0 + 20 * u), 36 * u, "峠", VERM, -0.1f, in);
     hud.text(x0 + 52 * u, dy + y0 + 6 * u, 22 * u, "R I D G E L I N E", A(INK, in), 0, false);
