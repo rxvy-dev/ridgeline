@@ -106,13 +106,21 @@ struct Atmosphere {
 };
 
 struct Renderer {
-    Shader terrain, road, object, car, tree, grass, water, unlit, depth, depthTree, sky, post, hud, bright, blur, ssao;
+    Shader terrain, road, object, car, tree, grass, water, unlit, depth, depthTree, sky, post, hud, bright, blur, ssao, rainSh;
     Textures tex;
     GLuint skyTex = 0;   // HDRI sky (assets/sky/sky.hdr), 0 = procedural
     bool useSky = false; // only in the normal daytime atmosphere
     vec3 skySH[9];
     float motionBlur = 0;  // camera motion blur strength (0 = off)
-    bool wet = false;      // wet roads
+    float wet = 0;         // road / ground wetness 0..1
+    float rain = 0;        // rain amount 0..1 (overcast sky, rain streaks)
+    float hdriW = 1, night = 0;   // time of day: HDRI sky weight, night amount
+    vec3 hlPos, hlDir = vec3(0, 0, 1);
+    float hlOn = 0;              // player headlights
+    float gradeExposure = 1, gradeContrast = 1, gradeSat = 1, gradeWarmth = 0;
+    int colorBlind = 0;
+    Mesh rainMesh;
+    void drawRain(const Camera& cam, vec3 wind);
     mat4 prevViewProj;
     bool havePrev = false;
     int width = 1280, height = 720;

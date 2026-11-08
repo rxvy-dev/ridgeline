@@ -19,8 +19,11 @@ struct OwnedCar {
     int up[3] = {0, 0, 0};  // upgrades: engine, weight, tyres
     // cosmetics
     int livery = 0, livCol = 0, tint = 0, aero = 0, ride = 0, number = 0;
+    int camber = 0, camberOwned = 0;  // fitted camber kit level, highest level bought
 };
-constexpr int kLiveryCount = 9, kTintCount = 4, kAeroCount = 4, kRideCount = 3;
+constexpr int kLiveryCount = 15, kTintCount = 4, kAeroCount = 4, kRideCount = 3, kCamberCount = 4;
+extern const char* kCamberNames[];
+extern const int kCamberPrice[];
 extern const char* kLiveryNames[];
 extern const char* kTintNames[];
 extern const char* kAeroNames[];
@@ -45,7 +48,10 @@ struct Settings {
     bool vsync = true;
     bool assists = true;
     int grass = 2;  // 0 off, 1 low, 2 high
-    bool wet = false;  // after-rain roads with puddles
+    int weather = 0;  // 0 dynamic, 1 always clear, 2 always rain, 3 wet roads without rain
+    int timeMode = 0;     // 0 day/night cycle, 1 morning, 2 sunset, 3 night, 4 noon
+    int brightness = 100, contrast = 100, saturation = 100, warmth = 0;  // display colour (percent / -10..10)
+    int colorBlind = 0;   // 0 off, 1 protanopia, 2 deuteranopia, 3 tritanopia
     int steerLock = 2;  // cockpit wheel rotation lock to lock: 0 180, 1 360, 2 540, 3 900 degrees
 };
 
@@ -94,7 +100,7 @@ private:
     std::vector<CarModel> models;
     std::vector<struct ImportedModel*> importedModels;
     std::vector<EventDef> events;
-    Mesh blobMesh, beaconMesh, ringMesh, gateMesh;
+    Mesh blobMesh, beaconMesh, ringMesh, gateMesh, boostMesh;
 
     // player / progression
     Racer player;
@@ -193,6 +199,14 @@ private:
     // upgrades screen
     int upSel = 0;
     int custSel = 0;
+    // weather
+    float wxRain = 0, wxTarget = 0, wxWet = 0, wxTimer = 180;
+    void updateWeather(float dt);
+    float todHours = 10.5f;  // time of day
+    Atmosphere timeOfDayAtmo(float h, float& hdriW, float& night) const;
+    void updateTimeOfDay(float dt);
+    std::string clockText() const;
+    float tabSlideX = 0, tabSlideW = 0;  // pause hub tab underline animation
     int menuTab = 0;                  // pause hub tab
     std::vector<GLuint> houseThumb;   // menu shots of each house
     // EventLab
@@ -329,6 +343,7 @@ private:
 
     // skills / feedback
     float driftScore = 0, driftIdle = 0, driftMult = 1;
+    float driftTotal = 0;  // drift zone events: points scored this run
     std::vector<Toast> toasts;
     float flash = 0;
     float lastImpactSfx = 0;

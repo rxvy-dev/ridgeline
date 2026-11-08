@@ -524,9 +524,12 @@ def main():
     extra_tire = re.compile(a.tires, re.I) if a.tires else None
     extra_spin = re.compile(a.spin, re.I) if a.spin else None
     extra_fixed = re.compile(a.fixed, re.I) if a.fixed else None
+    steer_first = re.compile(a.steering, re.I) if a.steering else None
     for p in parts:
         nm = part_names(p)
-        if extra_fixed and extra_fixed.search(nm):
+        if steer_first and steer_first.search(p.name):
+            body_parts.append(p)  # steering wheel: animated in the cockpit, not a road wheel
+        elif extra_fixed and extra_fixed.search(nm):
             fixed_parts.append(p)
         elif (extra_tire and extra_tire.search(nm)) or (extra_spin and extra_spin.search(nm)):
             spin_parts.append(p)
@@ -725,6 +728,8 @@ def main():
         if any(e > 0.01 for e in m.emissive) or emi >= 0:
             flags |= F_EMISSIVE
         mat_records.append((m.name, m.color, base, nrm, emi, m.emissive, flags))
+    paints = [r[0] for r in mat_records if r[6] & F_PAINT]
+    print("paint materials:", paints if paints else "none (use --paint REGEX so the paint shop can recolour it)")
 
     os.makedirs(a.out, exist_ok=True)
     out = open(os.path.join(a.out, "model.rcar"), "wb")

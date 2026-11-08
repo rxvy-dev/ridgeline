@@ -182,7 +182,17 @@ void Audio::generate(float* out, int frames) {
             tm += (boomLp * 1.6f + thump * 0.9f) * boomEnv;
             boomEnv *= 0.99993f;
         }
-        float mix = (engine + squeal + wind + imp + bp + hn + sg + tm) * vol;
+        // ---- rain: hiss plus the odd louder drop on the roof
+        float rn = 0;
+        float ra = rain.load(std::memory_order_relaxed);
+        if (ra > 0.01f) {
+            rainLp += (noise - rainLp) * 0.35f;
+            rainHp += (rainLp - rainHp) * 0.02f;
+            if ((rng & 0xFFF) < 6) dropEnv = 1.f;
+            dropEnv *= 0.995f;
+            rn = ((rainLp - rainHp) * 0.16f + (rainLp - rainHp) * dropEnv * 0.25f) * ra;
+        }
+        float mix = (engine + squeal + wind + imp + bp + hn + sg + tm + rn) * vol;
         mix = std::tanh(mix);
         out[i * 2] = mix;
         out[i * 2 + 1] = mix;

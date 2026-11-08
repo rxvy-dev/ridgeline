@@ -318,6 +318,24 @@ bool Renderer::init() {
     ok &= hud.build("hud", kHudVS, kHudFS, false);
     ok &= bright.build("bright", kFullscreenVS, kBrightFS, false);
     ok &= blur.build("blur", kFullscreenVS, kBlurFS, false);
+    ok &= rainSh.build("rain", kRainVS, kRainFS, false);
+    {
+        // rain streaks: random seeds in a unit box, wrapped around the camera in the shader
+        MeshBuilder b;
+        uint32_t st = 12345;
+        auto rnd = [&]() { st = st * 1664525u + 1013904223u; return (st >> 8) / 16777216.f; };
+        for (int i = 0; i < 9000; i++) {
+            vec3 p(rnd(), rnd(), rnd());
+            float r = rnd();
+            uint32_t a = b.add(p, vec3(-1, 0, r), vec4(1, 1, 1, 1));
+            b.add(p, vec3(1, 0, r), vec4(1, 1, 1, 1));
+            b.add(p, vec3(1, 1, r), vec4(1, 1, 1, 1));
+            b.add(p, vec3(-1, 1, r), vec4(1, 1, 1, 1));
+            b.tri(a, a + 1, a + 2);
+            b.tri(a, a + 2, a + 3);
+        }
+        b.build(rainMesh);
+    }
     ok &= ssao.build("ssao", kFullscreenVS, kSsaoFS, false);
     if (!ok) return false;
     glGenVertexArrays(1, &emptyVao);
@@ -504,10 +522,23 @@ void Renderer::setCommon(Shader& s, const Camera& cam) {
     s.set("uPhoto", tex.photo ? 1 : 0);
     s.set("tSky", int(U_SKY));
     s.set("uHdri", (useSky && skyTex) ? 1 : 0);
-    s.set("uWet", wet ? 1.f : 0.f);
+    s.set("uWet", wet);
+    s.set("uRain", useSky && skyTex ? rain : 0.f);
+    s.set("uHdriW", hdriW);
+    s.set("uNight", night);
+    s.set("uHL", vec4(hlPos.x, hlPos.y, hlPos.z, hlOn));
+    s.set("uHLDir", hlDir);
+    s.set("uHeadlights", night * 2.5f);
     if (useSky && skyTex) {
         static const char* names[9] = {"uSH[0]", "uSH[1]", "uSH[2]", "uSH[3]", "uSH[4]", "uSH[5]", "uSH[6]", "uSH[7]", "uSH[8]"};
-        for (int k = 0; k < 9; k++) s.set(names[k], skySH[k]);
+        for (int k = 0; k < 9; k++) {
+            vec3 c = skySH[k];
+            if (rain > 0.f) {  // overcast: greyer, dimmer sky light
+                float l = c.x * 0.299f + c.y * 0.587f + c.z * 0.114f;
+                c = (c + (vec3(l, l, l) * 1.05f - c) * (0.7f * rain)) * (1.f - 0.3f * rain);
+            }
+            s.set(names[k], c);
+        }
     }
     glActiveTexture(GL_TEXTURE0 + U_SKY);
     glBindTexture(GL_TEXTURE_2D, skyTex ? skyTex : tex.flakes);
@@ -661,6 +692,11 @@ void Renderer::endScene(float blurAmt, float flash, const Camera* cam, bool main
     }
     post.set("uTexelS", vec2(1.f / width, 1.f / height));
     post.set("uGrainT", std::fmod(time, 10.f));
+    post.set("uExposure", gradeExposure);
+    post.set("uContrast", gradeContrast);
+    post.set("uSat", gradeSat);
+    post.set("uWarmth", gradeWarmth);
+    post.set("uCB", colorBlind);
     post.set("uAOAmt", ao ? 0.85f : 0.f);
     post.set("uAOTexel", vec2(1.f / aw, 1.f / ah));
     glActiveTexture(GL_TEXTURE0 + U_AO);
@@ -671,4 +707,23 @@ void Renderer::endScene(float blurAmt, float flash, const Camera* cam, bool main
     glBindTexture(GL_TEXTURE_2D, sceneTex);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glActiveTexture(GL_TEXTURE0);
+}
+
+void Renderer::drawRain(const Camera& cam, vec3 wind) {
+    if (rain < 0.02f || !rainMesh.count) return;
+    rainSh.use();
+    rainSh.set("uViewProj", cam.viewProj);
+    rainSh.set("uCamPos", cam.pos);
+    rainSh.set("uTime", time);
+    rainSh.set("uWind", wind);
+    rainSh.set("uRain", rain);
+    rainSh.set("uTint", vec3(0.62f, 0.66f, 0.72f) * (0.6f + 0.4f * (atmo.skyAmb.x + atmo.skyAmb.y + atmo.skyAmb.z) / 1.4f));
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_CULL_FACE);
+    rainMesh.draw();
+    glEnable(GL_CULL_FACE);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
 }

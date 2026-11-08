@@ -197,7 +197,7 @@ void Game::drawEventLab() {
             case LR_DIR: val = c.reverse ? "Reverse" : "Forward"; break;
             case LR_RIVALS: val = c.opponents == 0 ? "None (time trial)" : std::to_string(c.opponents); break;
             case LR_CLASS: val = kClassNames[c.cls]; break;
-            case LR_WEATHER: val = c.wet ? "Wet roads" : "Dry"; break;
+            case LR_WEATHER: val = c.wet ? "Rain" : "Dry"; break;
         }
         hud.textFit(px + 190 * u, ty - 1 * u, 18 * u, val, L_WHITE, 0, pw - 250 * u);
         if (sel) {

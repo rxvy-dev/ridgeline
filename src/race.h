@@ -21,7 +21,7 @@ struct Route {
     int project(vec3 p, int hint, int window) const;
 };
 
-enum EventType { EV_CIRCUIT, EV_SPRINT, EV_CROSS };
+enum EventType { EV_CIRCUIT, EV_SPRINT, EV_CROSS, EV_DRIFT };
 
 struct EventDef {
     std::string name;
@@ -37,10 +37,13 @@ struct EventDef {
     char clsLimit = 0;    // 0 = match the player's class
     bool wet = false;
     int custom = -1;      // index into the player's saved custom events
+    std::vector<float> boosts;  // boost pads: distance along the route
+    int driftTarget[3] = {0, 0, 0};  // drift events: points for 1st / 2nd / 3rd
     float totalLength() const { return route.closed ? route.length * laps : route.length; }
 };
 
 std::vector<EventDef> buildEvents(const World& w);
+void addBoostPads(EventDef& e, float spacing);
 
 // EventLab: player-made events on any road, shareable as a short text code.
 struct CustomEvent {
@@ -66,7 +69,8 @@ struct Racer {
     // cosmetics
     int livery = 0, aero = 0, number = 7;
     vec3 livCol = vec3(1, 1, 1);
-    float tint = 0, ride = 0;
+    float tint = 0, ride = 0, camber = 0;
+    float lastProg = 0;  // route progress last frame (boost pads)  // camber: radians, top of the wheel tilted in
     std::string name;
     bool isPlayer = false;
     int idx = 0;              // last projected route index

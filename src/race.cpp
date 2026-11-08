@@ -113,6 +113,19 @@ static int nearestIndex(const Road& r, vec3 p) {
     return bi;
 }
 
+// Boost pads on the straighter parts of a route, roughly every `spacing` metres.
+void addBoostPads(EventDef& e, float spacing) {
+    e.boosts.clear();
+    const Route& rt = e.route;
+    float L = rt.length;
+    for (float d = 260.f; d < L - 150.f; d += 40.f) {
+        if (!e.boosts.empty() && d - e.boosts.back() < spacing) continue;
+        vec3 t0 = rt.tangentAt(d - 60.f), t1 = rt.tangentAt(d + 60.f);
+        if (dot(t0, t1) < 0.985f) continue;  // only where it's fairly straight
+        e.boosts.push_back(d);
+    }
+}
+
 std::vector<EventDef> buildEvents(const World& w) {
     std::vector<EventDef> ev;
     auto finish = [&](EventDef& e) {
@@ -308,6 +321,96 @@ std::vector<EventDef> buildEvents(const World& w) {
         e.prize[0] = 12000; e.prize[1] = 7000; e.prize[2] = 4000;
         finish(e);
     }
+    // ---------------- drift zones: no rivals, score points by sliding
+    auto driftTargets = [](EventDef& e, float k) {
+        float L = e.totalLength();
+        e.driftTarget[0] = int(L * 6.5f * k) / 100 * 100;
+        e.driftTarget[1] = int(L * 4.0f * k) / 100 * 100;
+        e.driftTarget[2] = int(L * 2.2f * k) / 100 * 100;
+    };
+    if (const Road* t = road("Akagi Touge")) {
+        EventDef e;
+        e.name = "Akagi Downhill Drift";
+        e.blurb = "Drift zone: slide every hairpin on the way down. Score beats rivals here.";
+        e.type = EV_DRIFT;
+        e.route = reversed(routeFromRoad(*t, 0, int(t->pts.size()) - 1, false));
+        e.opponents = 0;
+        driftTargets(e, 1.f);
+        e.prize[0] = 16000; e.prize[1] = 9000; e.prize[2] = 5000;
+        finish(e);
+    }
+    {
+        EventDef e;
+        e.name = "Docks Drift Arena";
+        e.blurb = "Drift zone: three laps of tight corners between the containers.";
+        e.type = EV_DRIFT; e.laps = 3;
+        e.route = through({vec3(600, 0, -2000), vec3(600, 0, -2250), vec3(1100, 0, -2250), vec3(1100, 0, -2000)}, true, 14.f);
+        e.opponents = 0;
+        driftTargets(e, 1.1f);
+        e.prize[0] = 12000; e.prize[1] = 7000; e.prize[2] = 4000;
+        finish(e);
+    }
+    {
+        EventDef e;
+        e.name = "Summit Loop Drift";
+        e.blurb = "Drift zone: two laps of the mountain loop.";
+        e.type = EV_DRIFT; e.laps = 2;
+        e.route = routeFromRoad(summit, 0, 0, true);
+        e.opponents = 0;
+        driftTargets(e, 0.9f);
+        e.prize[0] = 14000; e.prize[1] = 8000; e.prize[2] = 4500;
+        finish(e);
+    }
+    // ---------------- off-road: checkpoints across open country, zig-zagging off a dirt road
+    auto crossFrom = [&](const Road& rd, float swing, int stride) {
+        std::vector<vec3> c;
+        int n = int(rd.pts.size());
+        for (int i = 0, k = 0; i < n; i += stride, k++) {
+            vec3 t = rd.tan[i], side(-t.z, 0, t.x);
+            vec3 p = rd.pts[i] + side * ((k % 2 ? 1.f : -1.f) * swing);
+            if (w.heightAt(p.x, p.z) < w.waterLevel + 1.f) p = rd.pts[i];
+            c.push_back(p);
+        }
+        Route rt;
+        int m = int(c.size());
+        for (int s2 = 0; s2 + 1 < m; s2++) {
+            vec3 p0 = c[std::max(s2 - 1, 0)], p1 = c[s2], p2 = c[s2 + 1], p3 = c[std::min(s2 + 2, m - 1)];
+            int steps = std::max(2, int(length(p2 - p1) / 4.f));
+            for (int k = 0; k < steps; k++) {
+                float t = k / float(steps), t2 = t * t, t3 = t2 * t;
+                vec3 p = (p1 * 2.f + (p2 - p0) * t + (p0 * 2.f - p1 * 5.f + p2 * 4.f - p3) * t2 + (p1 * 3.f - p0 - p2 * 3.f + p3) * t3) * 0.5f;
+                p.y = w.heightAt(p.x, p.z);
+                rt.pts.push_back(p);
+            }
+        }
+        rt.pts.push_back(c.back());
+        rt.closed = false;
+        rt.width = 26;
+        rt.finalize();
+        return rt;
+    };
+    if (const Road* f = road("Harvest Lanes")) {
+        EventDef e;
+        e.name = "Harvest Mud Run";
+        e.blurb = "Off-road: cut straight across the fields and ditches. Bring something with tall tyres.";
+        e.type = EV_CROSS;
+        e.route = crossFrom(*f, 55.f, 45);
+        e.prize[0] = 13000; e.prize[1] = 7500; e.prize[2] = 4000;
+        finish(e);
+    }
+    {
+        EventDef e;
+        e.name = "Timberline Cross Country";
+        e.blurb = "Off-road: through the forest and over the ridges beside the trail.";
+        e.type = EV_CROSS;
+        e.route = crossFrom(trail, 40.f, 40);
+        e.prize[0] = 14000; e.prize[1] = 8000; e.prize[2] = 4500;
+        finish(e);
+    }
+    // boost pads in a few of the faster road races
+    for (auto& e : ev)
+        if (e.name == "Neon City Circuit" || e.name == "Coast to Coast" || e.name == "Harbour Run" || e.name == "Ridge Highway Circuit")
+            addBoostPads(e, 700.f);
     // a reverse-direction circuit for variety
     {
         EventDef e;
@@ -371,7 +474,7 @@ bool makeCustomEvent(const World& w, const CustomEvent& c, EventDef& e) {
     e.prize[0] = p; e.prize[1] = p * 55 / 100; e.prize[2] = p * 3 / 10;
     char buf[160];
     std::snprintf(buf, sizeof(buf), "EventLab: %s, %d rival%s%s%s.", r.surface == SURF_ASPHALT ? "tarmac" : "dirt", e.opponents,
-                  e.opponents == 1 ? "" : "s", e.clsLimit ? (std::string(", class ") + e.clsLimit).c_str() : "", e.wet ? ", wet roads" : "");
+                  e.opponents == 1 ? "" : "s", e.clsLimit ? (std::string(", class ") + e.clsLimit).c_str() : "", e.wet ? ", in the rain" : "");
     e.blurb = buf;
     e.markerPos = e.route.pts[0];
     e.startYaw = std::atan2(e.route.tan[0].x, e.route.tan[0].z);

@@ -8,10 +8,13 @@
 #include <cstdio>
 
 const char* kLiveryNames[] = {"None", "Twin Stripes", "Contrast Roof", "Two-Tone", "Shoulder Stripes",
-                              "Race Number", "Speed Slashes", "Carbon Bonnet", "Split Fade"};
+                              "Race Number", "Speed Slashes", "Carbon Bonnet", "Split Fade", "Chequered Tail",
+                              "Flames", "Camo", "Hex Grid", "Colour Fade", "Le Mans Hoop"};
 const char* kTintNames[] = {"None", "Light (35%)", "Dark (15%)", "Limo (5%)"};
 const char* kAeroNames[] = {"Stock", "Ducktail Spoiler", "GT Wing", "GT Wing + Splitter"};
 const char* kRideNames[] = {"Stock", "Lowered (-35 mm)", "Slammed (-70 mm)"};
+const char* kCamberNames[] = {"Stock (0 deg)", "Street (-2.5 deg)", "Aggressive (-6 deg)", "Stance (-11 deg)"};
+const int kCamberPrice[] = {0, 3000, 6500, 10000};
 
 static const vec4 C_ACCENT(0.96f, 0.10f, 0.50f, 1.f);
 static const vec4 C_WHITE(1, 1, 1, 1);
@@ -24,6 +27,8 @@ void Game::applyCosmetics(Racer& r, const OwnedCar& oc) const {
     r.aero = std::clamp(oc.aero, 0, kAeroCount - 1);
     r.ride = std::array<float, kRideCount>{0.f, 0.035f, 0.07f}[std::clamp(oc.ride, 0, kRideCount - 1)];
     r.number = oc.number > 0 ? oc.number : 1 + (oc.spec * 37 + 11) % 98;
+    const float camb[kCamberCount] = {0.f, 2.5f, 6.f, 11.f};
+    r.camber = camb[std::clamp(oc.camber, 0, kCamberCount - 1)] * PI / 180.f;
 }
 
 void Game::setCosmeticUniforms(Shader& s, const Racer& r, bool body) const {
@@ -111,13 +116,25 @@ const Mesh* Game::aeroMesh(const Racer& r) {
 
 // ---------------------------------------------------------------- menu
 namespace {
-enum CustomRow { CR_PAINT, CR_LIVERY, CR_LIVCOL, CR_NUMBER, CR_TINT, CR_AERO, CR_RIDE, CR_STRIPES, CR_COUNT };
-const char* kRowNames[CR_COUNT] = {"PAINT", "LIVERY", "LIVERY COLOUR", "RACE NUMBER", "WINDOW TINT", "AERO KIT", "RIDE HEIGHT", "RACING STRIPES"};
+enum CustomRow { CR_PAINT, CR_LIVERY, CR_LIVCOL, CR_NUMBER, CR_TINT, CR_AERO, CR_RIDE, CR_CAMBER, CR_STRIPES, CR_COUNT };
+const char* kRowNames[CR_COUNT] = {"PAINT", "LIVERY", "LIVERY COLOUR", "RACE NUMBER", "WINDOW TINT", "AERO KIT", "RIDE HEIGHT", "CAMBER KIT", "RACING STRIPES"};
 }
 
 void Game::customInput(Action a) {
     OwnedCar& oc = garage[std::clamp(subSel, 0, int(garage.size()) - 1)];
+    if (a == A_CONFIRM && custSel == CR_CAMBER && oc.camber > oc.camberOwned) {
+        int price = kCamberPrice[oc.camber];
+        if (credits < price) { toast("Not enough credits for that camber kit", vec4(1, 0.4f, 0.3f, 1)); audio.beep(220, 0.2f); return; }
+        credits -= price;
+        oc.camberOwned = oc.camber;
+        if (subSel == current) setPlayerCar(current);
+        toast(std::string(kCamberNames[oc.camber]) + " camber fitted", vec4(0.4f, 1, 0.5f, 1));
+        audio.beep(1400, 0.2f);
+        save();
+        return;
+    }
     if (a == A_BACK || a == A_CONFIRM) {
+        if (oc.camber > oc.camberOwned) oc.camber = oc.camberOwned;  // previewed but not bought
         if (subSel == current) setPlayerCar(current);
         save();
         state = ST_GARAGE;
@@ -143,6 +160,7 @@ void Game::customInput(Action a) {
         case CR_TINT: cyc(oc.tint, kTintCount); break;
         case CR_AERO: cyc(oc.aero, kAeroCount); break;
         case CR_RIDE: cyc(oc.ride, kRideCount); break;
+        case CR_CAMBER: cyc(oc.camber, kCamberCount); break;
         case CR_STRIPES: oc.stripes = !oc.stripes; break;
     }
     audio.beep(1100, 0.04f);
@@ -176,6 +194,10 @@ void Game::drawCustomize() {
             case CR_TINT: val = kTintNames[oc.tint]; break;
             case CR_AERO: val = kAeroNames[oc.aero]; break;
             case CR_RIDE: val = kRideNames[oc.ride]; break;
+            case CR_CAMBER:
+                val = kCamberNames[oc.camber];
+                if (oc.camber > oc.camberOwned) val += "   CR " + fmtThousands(kCamberPrice[oc.camber]) + (pad ? "  (A) buy" : "  ENTER buy");
+                break;
             case CR_STRIPES: val = oc.stripes ? "Fitted" : "None"; break;
         }
         float vx = px + 20 * u;

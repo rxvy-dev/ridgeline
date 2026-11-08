@@ -17,6 +17,10 @@ cars/*
 !cars/daewoo_nexia/
 !cars/skyline_r34/
 !cars/oiia_cat/
+!cars/old_truck/
+!cars/ferrari_288gto/
+!cars/lambo/
+!cars/porsche_gt3r/
 *.rcar
 !cars/delorean/model.rcar
 !cars/agera_rs/model.rcar
@@ -27,6 +31,10 @@ cars/*
 !cars/skyline_r34/model.rcar
 !cars/oiia_cat/model.rcar
 !assets/props/*/model.rcar
+!cars/old_truck/model.rcar
+!cars/ferrari_288gto/model.rcar
+!cars/lambo/model.rcar
+!cars/porsche_gt3r/model.rcar
 # meme audio for the secret car: not ours to redistribute, stays local
 cars/oiia_cat/*.wav
 cars/oiia_cat/*.mp3

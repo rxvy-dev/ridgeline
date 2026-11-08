@@ -22,7 +22,21 @@ uniform sampler2D tSky;   // equirectangular HDRI sky (assets/sky/sky.hdr)
 uniform int uHdri;
 uniform int uPhoto;       // photo ground textures installed
 uniform vec3 uSH[9];      // sky light from the HDRI
-uniform float uWet;       // 1 = wet roads after rain
+uniform float uWet;       // road / ground wetness 0..1
+uniform float uRain;      // rain (overcast) amount 0..1
+uniform float uHdriW;     // how much of the HDRI sky shows (1 by day, 0 at sunset / night)
+uniform float uNight;     // 0 day .. 1 night
+uniform vec4 uHL;         // player headlights: position, on (w)
+uniform vec3 uHLDir;
+vec3 procSky(vec3 d){
+    float t = clamp(d.y, 0.0, 1.0);
+    vec3 c = mix(uSkyHorizon, uSkyTop, pow(t, 0.45));
+    if (d.y < 0.0) c = mix(uSkyHorizon, uGroundAmb * 1.1, clamp(-d.y * 4.0, 0.0, 1.0));
+    float s = max(dot(d, uSunDir), 0.0);
+    c += uSunColor * (pow(s, 1400.0) * 14.0 + pow(s, 48.0) * 0.30 + pow(s, 5.0) * 0.12);
+    c += uSunColor * vec3(0.25, 0.12, 0.02) * pow(s, 2.0) * (1.0 - t);
+    return c;
+}
 vec3 shEval(vec3 d){
     return max(uSH[0] * 0.282095 + uSH[1] * 0.488603 * d.y + uSH[2] * 0.488603 * d.z + uSH[3] * 0.488603 * d.x
          + uSH[4] * 1.092548 * d.x * d.y + uSH[5] * 1.092548 * d.y * d.z + uSH[6] * 0.315392 * (3.0 * d.z * d.z - 1.0)
@@ -31,7 +45,16 @@ vec3 shEval(vec3 d){
 vec3 hdri(vec3 d, float lod){
     float u = atan(d.x, -d.z) * 0.15915494 + 0.5;
     float v = acos(clamp(d.y, -1.0, 1.0)) * 0.31830989;
-    return textureLod(tSky, vec2(u, v), lod).rgb;
+    vec3 c = textureLod(tSky, vec2(u, v), lod).rgb;
+    if (uHdriW < 0.999) c = mix(procSky(d), c, uHdriW);
+    if (uRain > 0.0) {
+        // overcast: a flat, darker grey sky that hides the sun (and dims with the daylight)
+        float l = dot(c, vec3(0.299, 0.587, 0.114));
+        float day = clamp(dot(uSkyAmb, vec3(0.333)) / 0.47, 0.04, 1.0);
+        vec3 grey = vec3(0.44, 0.47, 0.52) * day * (0.6 + 0.4 * clamp(d.y * 1.6 + 0.25, 0.0, 1.0)) * (0.96 + 0.08 * min(l, 1.0));
+        c = mix(c, grey, uRain * 0.97);
+    }
+    return c;
 }
 
 float hash12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
@@ -55,7 +78,9 @@ float pcf5(sampler2DShadow s, vec3 p, float texel){
             sum += texture(s, vec3(p.xy + vec2(x, y) * texel * 0.85, p.z));
     return sum / 25.0;
 }
-float shadowFactor(vec3 wp, vec3 n){
+float shadowFactor0(vec3 wp, vec3 n);
+float shadowFactor(vec3 wp, vec3 n){ return mix(shadowFactor0(wp, n), 1.0, uRain * 0.8); }
+float shadowFactor0(vec3 wp, vec3 n){
     if (uShadows == 0) return 1.0;
     vec4 a = uShadowMat0 * vec4(wp + n * 0.05, 1.0);
     vec3 pa = a.xyz * 0.5 + 0.5;
@@ -75,13 +100,7 @@ float shadowFactor(vec3 wp, vec3 n){
 }
 vec3 skyColor(vec3 d){
     if (uHdri == 1 && d.y > -0.02) return hdri(vec3(d.x, max(d.y, 0.002), d.z), 0.0);
-    float t = clamp(d.y, 0.0, 1.0);
-    vec3 c = mix(uSkyHorizon, uSkyTop, pow(t, 0.45));
-    if (d.y < 0.0) c = mix(uSkyHorizon, uGroundAmb * 1.1, clamp(-d.y * 4.0, 0.0, 1.0));
-    float s = max(dot(d, uSunDir), 0.0);
-    c += uSunColor * (pow(s, 1400.0) * 14.0 + pow(s, 48.0) * 0.30 + pow(s, 5.0) * 0.12);
-    c += uSunColor * vec3(0.25, 0.12, 0.02) * pow(s, 2.0) * (1.0 - t);
-    return c;
+    return procSky(d);
 }
 // environment used for reflections (sky above, tree line at the horizon, ground below)
 vec3 envColor(vec3 R){
@@ -108,13 +127,45 @@ vec3 applyFog(vec3 col, vec3 wp){
         vec3 hz = hdri(normalize(vec3(dir.x, max(dir.y, 0.03) + 0.05, dir.z)), 6.0);
         fogBase = mix(uFogColor, hz * vec3(0.92, 0.96, 1.04), 0.75);
     }
-    vec3 fc = mix(fogBase, uSunColor * vec3(0.85, 0.7, 0.5) + vec3(0.1), s * (uHdri == 1 ? 0.3 : 0.55));
+    vec3 fc = mix(fogBase, uSunColor * vec3(0.85, 0.7, 0.5) + vec3(0.1) * (1.0 - uNight), s * (uHdri == 1 ? 0.3 : 0.55));
+    // player headlights: a spot of light thrown down the road ahead
+    if (uHL.w > 0.0) {
+        vec3 L = wp - uHL.xyz;
+        float dl = length(L);
+        float cs = dot(L / max(dl, 0.01), uHLDir);
+        float spot = smoothstep(0.86, 0.96, cs) * smoothstep(70.0, 6.0, dl) / (1.0 + dl * dl * 0.0025);
+        float amb = max(dot(uSkyAmb, vec3(0.333)), 0.03);
+        vec3 alb = clamp(col / amb, 0.0, 1.2);
+        col += alb * vec3(1.0, 0.94, 0.82) * spot * uHL.w * 1.6;
+    }
     return mix(col, fc, clamp(f, 0.0, 1.0));
 }
-vec3 ambient(vec3 n){ return uHdri == 1 ? shEval(n) : mix(uGroundAmb, uSkyAmb, n.y * 0.5 + 0.5); }
+vec3 gradAmb(vec3 n){ return mix(uGroundAmb, uSkyAmb, n.y * 0.5 + 0.5); }
+vec3 ambient(vec3 n){ return uHdri == 1 ? mix(gradAmb(n), shEval(n), uHdriW) : gradAmb(n); }
 vec3 lighting(vec3 albedo, vec3 n, float shadow){
     float ndl = max(dot(n, uSunDir), 0.0);
+    albedo *= 1.0 - 0.3 * uWet * smoothstep(0.4, 0.9, n.y);  // wet ground soaks up light
     return albedo * (ambient(n) + uSunColor * ndl * shadow);
+}
+// expanding rain-drop rings on standing water: returns a normal offset (xz)
+vec2 rainRipples(vec2 p){
+    vec2 off = vec2(0.0);
+    for (int layer = 0; layer < 2; layer++) {
+        vec2 q = p * (layer == 0 ? 2.2 : 3.7) + float(layer) * 17.3;
+        vec2 cell = floor(q), f = fract(q);
+        for (int j = -1; j <= 1; j++)
+            for (int i = -1; i <= 1; i++) {
+                vec2 c = cell + vec2(i, j);
+                float h = hash12(c);
+                vec2 ctr = vec2(i, j) + vec2(hash12(c + 3.1), hash12(c + 7.7)) * 0.8 + 0.1 - f;
+                float t = fract(uTime * 0.9 + h);
+                float d = length(ctr);
+                float r = t * 0.55;
+                float ring = sin((d - r) * 60.0) * exp(-abs(d - r) * 30.0) * (1.0 - t);
+                off += (d > 1e-3 ? -ctr / d : vec2(0.0)) * ring;
+            }
+    }
+    return off * 0.25;
 }
 
 // ---- car liveries, drawn procedurally in body space (x left, y up from the ground, z forward)
@@ -190,6 +241,35 @@ vec3 applyLivery(vec3 a, vec3 o, float k) {
         return mix(a, carbonWeave(o), hood);
     } else if (uLivery == 8) {     // diagonal split fade
         m = lstep(0.0, -zy * 0.9 + (hy - 0.5) * 0.7 - 0.05);
+    } else if (uLivery == 9) {     // chequered tail
+        vec2 q = ax > 0.6 ? vec2(o.z, o.y) : vec2(o.x, o.z);
+        vec2 cq = floor(q / 0.16);
+        float chk = mod(cq.x + cq.y, 2.0);
+        float zone = 1.0 - lstep(-0.32, zy);
+        a = mix(a, vec3(0.02) * k, zone * (1.0 - chk));
+        m = zone * chk;
+    } else if (uLivery == 10) {    // hot-rod flames licking back from the nose
+        float h = 0.62 + (zy - 0.6) * 0.45 + 0.06 * sin(o.z * 15.0 + 1.3) + 0.03 * sin(o.z * 37.0);
+        float fl = (1.0 - lstep(h, hy)) * lstep(-0.45, zy) * lstep(0.25, hy);
+        float core = (1.0 - lstep(h - 0.09, hy)) * fl;
+        a = mix(a, lc * k, fl);
+        return mix(a, vec3(1.0, 0.82, 0.18) * k, core);
+    } else if (uLivery == 11) {    // three-tone camouflage
+        float n = vnoise(o.xz * 1.6 + o.y * 1.3) * 0.65 + vnoise(o.zy * 3.1 + o.x * 2.0) * 0.35;
+        a = mix(a, lc * k * 0.55, lstep(0.58, n));
+        m = lband(n, 0.36, 0.58);
+    } else if (uLivery == 12) {    // hex grid
+        vec2 q = (ax > 0.6 ? vec2(o.z, o.y) : vec2(o.x, o.z)) * 5.0;
+        vec2 r = vec2(1.0, 1.732);
+        vec2 ha = mod(q, r) - r * 0.5, hb = mod(q - r * 0.5, r) - r * 0.5;
+        vec2 g = dot(ha, ha) < dot(hb, hb) ? ha : hb;
+        vec2 ag = abs(g);
+        float hd = max(dot(ag, normalize(vec2(1.0, 1.732))), ag.x);
+        m = lstep(0.43, hd) * lstep(0.3, hy) * (1.0 - lstep(0.2, zy) * 0.0);
+    } else if (uLivery == 13) {    // colour fade from the sills up
+        m = 1.0 - smoothstep(0.12, 0.62, hy);
+    } else if (uLivery == 14) {    // Le Mans hoop: a band right round the middle of the car
+        m = lband(zy, -0.1, 0.12) + lband(zy, 0.15, 0.18) + lband(zy, -0.16, -0.13);
     }
     return mix(a, lc * k, clamp(m, 0.0, 1.0));
 }
@@ -364,37 +444,50 @@ void main(){
     float sh = shadowFactor(p, n);
     vec3 V = normalize(uCamPos - p);
     float puddle = 0.0;
-    if (uWet > 0.5) {
-        // after rain: darker, saturated surface; puddles in the dips, the wheel tracks and the edges
-        float pn = fbm2(p.xz * 0.11) * 0.75 + vnoise(p.xz * 0.9) * 0.25;
+    float w = clamp(uWet, 0.0, 1.0);
+    if (w > 0.01) {
+        // wet: the whole surface darkens and turns glossy; standing water collects in the dips,
+        // the wheel tracks and the edges as it keeps raining
+        float pn = fbm2(p.xz * 0.17) * 0.7 + vnoise(p.xz * 1.1) * 0.3;
         float lane = abs(abs(x) - width * 0.25);
         float rut = mat == 10 ? exp(-pow((lane - 0.85) * 2.0, 2.0)) * 0.22 : 0.15;
-        puddle = smoothstep(0.64, 0.72, pn + rut + smoothstep(width * 0.38, width * 0.5, abs(x)) * 0.12);
-        c *= mix(0.55, 0.35, puddle);
-        nn = normalize(mix(nn, n, 0.6 + 0.4 * puddle));
-        spec = mix(0.6, 1.0, puddle); gloss = mix(120.0, 900.0, puddle);
+        float th = 0.74 - 0.08 * w;
+        puddle = smoothstep(th, th + 0.11, pn + rut + smoothstep(width * 0.38, width * 0.5, abs(x)) * 0.12) * smoothstep(0.35, 0.8, w);
+        c *= mix(1.0, 0.72, w) * mix(1.0, 0.55, puddle);
+        nn = normalize(mix(nn, n, 0.35 * w + 0.65 * puddle));
+        if (uRain > 0.05 && puddle > 0.01) {
+            vec2 rp = rainRipples(p.xz) * uRain * puddle;
+            nn = normalize(nn + vec3(rp.x, 0.0, rp.y));
+        }
+        spec = mix(spec, 0.7, w); gloss = mix(gloss, 160.0, w);
+        gloss = mix(gloss, 1200.0, puddle);
     }
     vec3 col = lighting(c, nn, sh);
     vec3 H = normalize(V + uSunDir);
     col += uSunColor * pow(max(dot(nn, H), 0.0), gloss) * spec * sh;
-    if (uWet > 0.5) {
-        // wet sheen and mirror-like puddles reflecting the sky
+    if (w > 0.01) {
         float ndv = max(dot(nn, V), 0.0);
         float F = 0.02 + 0.98 * pow(1.0 - ndv, 5.0);
         vec3 R = reflect(-V, nn);
-        vec3 env = envColor(R);
-        // the roadside forest blocks the low sky: darken reflections near the horizon
         vec3 treeLine = vec3(0.05, 0.06, 0.04) * (ambient(vec3(0.0, 1.0, 0.0)) + uSunColor * 0.2);
-        env = mix(treeLine, env * 0.8, smoothstep(0.08, 0.42, R.y));
-        if (uHasRefl == 1) {
-            // planar reflection of the real scene (trees, cars) rippled slightly by the surface
-            vec4 cp = uReflVP * vec4(p, 1.0);
-            vec2 ruv = cp.xy / cp.w * 0.5 + 0.5 + (nn.xz - n.xz) * 0.06;
-            float edge = smoothstep(0.0, 0.05, ruv.x) * smoothstep(1.0, 0.95, ruv.x) * smoothstep(1.0, 0.95, ruv.y) * smoothstep(0.0, 0.05, ruv.y);
-            vec3 pr = texture(tRefl, clamp(ruv, 0.002, 0.998)).rgb;
-            env = mix(env, pr * 0.85, edge * (0.45 + 0.55 * puddle));
+        // damp asphalt: a soft, blurry sheen (no mirror)
+        vec3 soft = uHdri == 1 ? hdri(vec3(R.x, max(R.y, 0.02), R.z), 4.5) : envColor(R);
+        soft = mix(treeLine, soft * 0.75, smoothstep(0.02, 0.35, R.y));
+        col = mix(col, soft, clamp(F * 0.55 * w, 0.0, 0.5));
+        // puddles: sharp mirror of the real scene
+        if (puddle > 0.01) {
+            vec3 env = envColor(R);
+            env = mix(treeLine, env * 0.62, smoothstep(0.08, 0.42, R.y));
+            if (uHasRefl == 1) {
+                vec4 cp = uReflVP * vec4(p, 1.0);
+                vec2 ruv = cp.xy / cp.w * 0.5 + 0.5 + (nn.xz - n.xz) * 0.06;
+                float edge = smoothstep(0.0, 0.05, ruv.x) * smoothstep(1.0, 0.95, ruv.x) * smoothstep(1.0, 0.95, ruv.y) * smoothstep(0.0, 0.05, ruv.y);
+                vec3 pr = texture(tRefl, clamp(ruv, 0.002, 0.998)).rgb;
+                env = mix(env, pr * 0.85, edge);
+            }
+            float Fp = 0.12 + 0.8 * pow(1.0 - ndv, 4.0);
+            col = mix(col, env, clamp(puddle * Fp, 0.0, 0.85));
         }
-        col = mix(col, env, clamp(F * (0.3 + 0.7 * puddle) + puddle * 0.2, 0.0, 0.85));
     }
     FragColor = vec4(applyFog(col, p), 1.0);
 }
@@ -502,9 +595,9 @@ void main(){
             vec3 glassC = tower ? vCol.rgb * 0.45 : vec3(0.08, 0.10, 0.12);
             albedo = mix(frame, glassC, win);
             // a few lit windows, warm and cool
-            float lit = step(0.86, rnd) * win;
+            float lit = step(mix(0.86, 0.45, uNight), rnd) * win;
             vec3 interior = mix(vec3(1.0, 0.82, 0.55), vec3(0.75, 0.88, 1.0), step(0.5, fract(rnd * 7.3)));
-            col0 = interior * lit * 0.12;
+            col0 = interior * lit * mix(0.12, 1.6, uNight);
             refl = win * (tower ? 0.55 : 0.32); spec = 0.2 + win * 0.6; gloss = 60.0 + win * 300.0;
         }
     } else if (mat == 16) {
@@ -821,7 +914,18 @@ void main(){
     vec4 b = uInvViewProj * vec4(vUV * 2.0 - 1.0, 1.0, 1.0);
     vec3 d = normalize(b.xyz / b.w - a.xyz / a.w);
     vec3 c = skyColor(d);
-    if (d.y > 0.0 && uHdri == 0) {
+    float cloudW = uHdri == 0 ? 1.0 : 1.0 - uHdriW;
+    if (d.y > 0.0 && uNight > 0.0) {
+        // stars, twinkling a little, fading near the horizon
+        vec3 q = floor(d * 380.0);
+        float h = hash12(q.xy + q.z * 17.13);
+        float tw = 0.7 + 0.3 * sin(uTime * 3.0 + h * 40.0);
+        c += vec3(0.85, 0.9, 1.0) * smoothstep(0.9972, 1.0, h) * tw * uNight * smoothstep(0.02, 0.25, d.y) * (1.0 - uRain);
+        // moon glow around the night "sun"
+        float m = max(dot(d, uSunDir), 0.0);
+        c += vec3(0.75, 0.8, 0.95) * (smoothstep(0.9993, 0.9996, m) * 1.6 + pow(m, 60.0) * 0.08) * uNight;
+    }
+    if (d.y > 0.0 && cloudW > 0.01) {
         vec2 uv = d.xz / (d.y + 0.12) * 0.9 + vec2(uTime * 0.004, uTime * 0.0015);
         float n = fbm2(uv * 1.3);
         float n2 = fbm2(uv * 4.1 + 4.0);
@@ -830,11 +934,12 @@ void main(){
         float cloud = smoothstep(0.52, 0.8, dens) * smoothstep(0.0, 0.2, d.y);
         float thick = smoothstep(0.6, 0.95, dens);
         float sun = max(dot(d, uSunDir), 0.0);
-        vec3 lit = mix(vec3(1.0, 0.97, 0.92), uSunColor * vec3(1.0, 0.85, 0.65), 0.35 + 0.4 * pow(sun, 3.0));
-        vec3 shade = mix(uSkyHorizon * 0.8, vec3(0.55, 0.57, 0.62), 0.5);
+        float dayL = clamp(dot(uSkyAmb, vec3(0.333)) / 0.47, 0.03, 1.0);
+        vec3 lit = mix(vec3(1.0, 0.97, 0.92) * dayL, uSunColor * vec3(1.0, 0.85, 0.65), 0.35 + 0.4 * pow(sun, 3.0));
+        vec3 shade = mix(uSkyHorizon * 0.8, vec3(0.55, 0.57, 0.62) * dayL, 0.5);
         vec3 cc = mix(lit, shade, thick * 0.6);
         cc += uSunColor * pow(sun, 12.0) * (1.0 - thick) * 0.6;
-        c = mix(c, cc, cloud * 0.9);
+        c = mix(c, cc, cloud * 0.9 * cloudW);
     }
     float hz = 1.0 - smoothstep(-0.03, 0.10, d.y);
     c = mix(c, uFogColor, hz * 0.7);
@@ -1010,6 +1115,23 @@ uniform sampler2D uAO;
 uniform float uAOAmt;
 uniform vec2 uAOTexel;
 uniform vec2 uTexelS;
+uniform float uExposure, uContrast, uSat, uWarmth;
+uniform int uCB;
+// colour-blind correction (daltonization): simulate the deficiency, then shift the
+// colour difference it loses into channels that can still be seen
+vec3 daltonize(vec3 c, int mode) {
+    mat3 toLMS = mat3(17.8824, 3.45565, 0.0299566, 43.5161, 27.1554, 0.184309, 4.11935, 3.86714, 1.46709);
+    mat3 toRGB = mat3(0.0809444479, -0.0102485335, -0.000365296938, -0.130504409, 0.0540193266, -0.00412161469, 0.116721066, -0.113614708, 0.693511405);
+    vec3 lms = toLMS * c;
+    vec3 s;
+    if (mode == 1) s = vec3(2.02344 * lms.y - 2.52581 * lms.z, lms.y, lms.z);
+    else if (mode == 2) s = vec3(lms.x, 0.494207 * lms.x + 1.24827 * lms.z, lms.z);
+    else s = vec3(lms.x, lms.y, -0.395913 * lms.x + 0.801109 * lms.y);
+    vec3 sim = toRGB * s;
+    vec3 err = c - sim;
+    vec3 shift = vec3(0.0, err.r * 0.7 + err.g, err.r * 0.7 + err.b);
+    return clamp(c + shift, 0.0, 1.0);
+}
 uniform float uGrainT;
 uniform float uMB;
 uniform sampler2D uDepthP;
@@ -1084,7 +1206,7 @@ void main(){
         }
         c += acc / 40.0 * uSunAmt * 2.2 * vec3(1.0, 0.85, 0.65);
     }
-    c = aces(c * 1.12);
+    c = aces(c * 1.12 * uExposure);
     float l = dot(c, vec3(0.299, 0.587, 0.114));
     c *= mix(vec3(0.93, 0.99, 1.06), vec3(1.07, 1.0, 0.88), smoothstep(0.15, 0.75, l));
     l = dot(c, vec3(0.299, 0.587, 0.114));
@@ -1101,6 +1223,13 @@ void main(){
     // fine film grain (also hides banding in the sky gradients)
     float g = fract(sin(dot(gl_FragCoord.xy + uGrainT * 61.7, vec2(12.9898, 78.233))) * 43758.5453);
     c += (g - 0.5) * 0.018;
+    // player display settings: contrast, saturation, colour temperature, colour-blind aid
+    c = (c - 0.5) * uContrast + 0.5;
+    float lg = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    c = mix(vec3(lg), c, uSat);
+    c *= vec3(1.0 + 0.06 * uWarmth, 1.0 + 0.01 * uWarmth, 1.0 - 0.07 * uWarmth);
+    c = clamp(c, 0.0, 1.0);
+    if (uCB > 0) c = daltonize(c, uCB);
     c = mix(c, vec3(1.0), uFlash);
     FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
 }
@@ -1136,5 +1265,42 @@ void main(){
         c.a *= 1.0 - smoothstep(uClip.z - 1.5, uClip.z, d);
     }
     FragColor = c;
+}
+)";
+
+// ---------------------------------------------------------------- rain streaks
+static const char* kRainVS = R"(
+layout(location=0) in vec3 aPos;   // seed in [0,1)^3
+layout(location=1) in vec3 aNrm;   // x: side -1/1, y: 0 head / 1 tail, z: random
+uniform mat4 uViewProj;
+uniform vec3 uCamPos;
+uniform float uTime;
+uniform vec3 uWind;
+out float vA; out float vT;
+void main(){
+    vec3 box = vec3(34.0, 24.0, 34.0);
+    float speed = 9.5 + aNrm.z * 3.5;
+    vec3 vel = vec3(uWind.x, -speed, uWind.z);
+    vec3 p = aPos * box + vel * uTime;
+    vec3 rel = mod(p - uCamPos, box) - box * 0.5;
+    vec3 c = uCamPos + rel;
+    vec3 dir = normalize(vel);
+    vec3 toCam = normalize(uCamPos - c);
+    vec3 side = normalize(cross(dir, toCam)) * (0.003 + 0.003 * aNrm.z);
+    vec3 pos = c + side * aNrm.x - dir * (aNrm.y * (0.3 + 0.25 * aNrm.z));
+    gl_Position = uViewProj * vec4(pos, 1.0);
+    float d = length(rel);
+    vA = smoothstep(17.0, 5.0, d) * smoothstep(1.5, 4.0, d);
+    vT = aNrm.y;
+}
+)";
+static const char* kRainFS = R"(
+uniform float uRain;
+uniform vec3 uTint;
+in float vA; in float vT;
+out vec4 FragColor;
+void main(){
+    if (vA < 0.01) discard;
+    FragColor = vec4(uTint, vA * uRain * 0.3 * (1.0 - vT * 0.7));
 }
 )";

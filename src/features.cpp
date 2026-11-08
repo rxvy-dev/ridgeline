@@ -45,6 +45,8 @@ CarSpec Game::tunedSpec(const OwnedCar& oc) const {
     s.massKg *= 1.f - 0.045f * oc.up[1];
     s.grip += 0.035f * oc.up[2];
     s.offroad = std::min(1.f, s.offroad + 0.02f * oc.up[2]);
+    const float camberGrip[4] = {0.f, 0.015f, 0.025f, 0.012f};  // stance looks the part but gives some back
+    s.grip += camberGrip[std::clamp(oc.camber, 0, 3)];
     char c = piClass(rateCar(s).pi);
     if (classRank(c) > classRank(s.cls)) s.cls = c;
     return s;
@@ -377,7 +379,12 @@ void Game::updateSkills(float dt) {
     bool any = false;
     // drift
     bool drifting = c.grounded && v > 9.f && std::fabs(c.slipAngle) > 0.26f && c.forwardSpeed() > 5.f;
-    if (drifting) { chainAdd("DRIFT", int(v * std::fabs(c.slipAngle) * dt * 14.f + 0.5f)); any = true; }
+    if (drifting) {
+        float pts = v * std::fabs(c.slipAngle) * dt * 14.f;
+        chainAdd("DRIFT", int(pts + 0.5f));
+        if (state == ST_RACE && raceEvent >= 0 && events[raceEvent].type == EV_DRIFT) driftTotal += pts * chainMult;
+        any = true;
+    }
     driftScore = 0;
     // speed skill above 180 km/h on the ground
     if (c.grounded && c.speedKmh() > 180.f) {
@@ -646,4 +653,137 @@ void Game::drawWheelspin() {
         hud.text(x + w + 40 * u, cy - 30 * u, 14 * u, "YOU WON", vec4(1.f, 0.35f, 0.6f, a), 0, false);
         hud.text(x + w + 40 * u, cy - 10 * u, 24 * u, p.car >= 0 ? fname(kCars[p.car]) : "CR " + fmtThousands(p.credits), vec4(1, 1, 1, a), 0, true);
     }
+}
+
+// ====================================================================== weather
+// Dynamic weather: dry spells and showers roll in and out. Roads soak while it rains
+// (puddles grow) and dry out slowly afterwards.
+void Game::updateWeather(float dt) {
+    int mode = settings.weather;
+    if (opt.wet) mode = 3;
+    if (raceEvent >= 0 && raceEvent < int(events.size()) && events[raceEvent].wet) mode = 2;
+    if (opt.scene == "rain") mode = 2;
+    switch (mode) {
+        case 1: wxTarget = 0; break;
+        case 2: wxTarget = 1; break;
+        case 3: wxTarget = 0; wxWet = 1; break;
+        default:
+            wxTimer -= dt;
+            if (wxTimer <= 0) {
+                static uint32_t s = SDL_GetTicks() | 1u;
+                s = s * 1664525u + 1013904223u;
+                float r = (s >> 8) / 16777216.f;
+                if (wxTarget > 0.5f) { wxTarget = 0; wxTimer = 240 + r * 300; }        // dry spell
+                else if (r < 0.35f) { wxTarget = 0.6f + r; wxTimer = 120 + r * 360; }  // a shower
+                else wxTimer = 120 + r * 200;
+                if (wxTarget > 0.5f) toast("Rain is rolling in", vec4(0.6f, 0.75f, 1.f, 1));
+            }
+    }
+    wxRain += (wxTarget - wxRain) * std::min(1.f, dt / 20.f);
+    if (mode != 3) {
+        if (wxRain > 0.25f) wxWet = std::min(1.f, wxWet + dt * wxRain / 30.f);
+        else wxWet = std::max(0.f, wxWet - dt / 150.f);
+    }
+    if (!opt.scene.empty() && mode == 2) { wxRain = wxTarget; wxWet = 1; }
+}
+
+// ====================================================================== time of day
+// A day lasts 24 real minutes. By day the photographed HDRI sky shows; towards evening
+// it hands over to a procedural sky so the sun can set, then night (moon and stars)
+// and a pink dawn.
+static Atmosphere lerpAtmo(const Atmosphere& a, const Atmosphere& b, float t) {
+    auto L = [t](vec3 x, vec3 y) { return x + (y - x) * t; };
+    Atmosphere r;
+    r.sunDir = normalize(L(a.sunDir, b.sunDir));
+    r.sunColor = L(a.sunColor, b.sunColor);
+    r.skyAmb = L(a.skyAmb, b.skyAmb);
+    r.groundAmb = L(a.groundAmb, b.groundAmb);
+    r.skyTop = L(a.skyTop, b.skyTop);
+    r.skyHorizon = L(a.skyHorizon, b.skyHorizon);
+    r.fogColor = L(a.fogColor, b.fogColor);
+    r.fogDensity = a.fogDensity + (b.fogDensity - a.fogDensity) * t;
+    return r;
+}
+
+Atmosphere Game::timeOfDayAtmo(float h, float& hdriW, float& night) const {
+    const Atmosphere& day = eraAtmo[0];
+    float az0 = std::atan2(day.sunDir.x, day.sunDir.z);
+    auto sunAt = [&](float hr) {
+        float el = std::sin((hr - 6.f) / 12.f * PI) * 0.9f;
+        float az = az0 + (hr - 13.f) / 12.f * PI;
+        float c = std::cos(el);
+        return normalize(vec3(std::sin(az) * c, std::max(el, 0.03f), std::cos(az) * c));
+    };
+    const vec3 moon = normalize(vec3(0.35f, 0.62f, 0.55f));
+    struct Key { float h; Atmosphere a; float w, n; };
+    Atmosphere nightA = day;
+    nightA.sunDir = moon;
+    nightA.sunColor = vec3(0.22f, 0.28f, 0.45f);
+    nightA.skyTop = vec3(0.012f, 0.02f, 0.055f);
+    nightA.skyHorizon = vec3(0.05f, 0.065f, 0.12f);
+    nightA.fogColor = vec3(0.04f, 0.05f, 0.09f);
+    nightA.fogDensity = day.fogDensity * 0.9f;
+    nightA.skyAmb = vec3(0.09f, 0.11f, 0.18f);
+    nightA.groundAmb = vec3(0.035f, 0.04f, 0.06f);
+    Atmosphere dawn = day;
+    dawn.sunDir = sunAt(6.4f);
+    dawn.sunColor = vec3(1.7f, 1.0f, 0.68f);
+    dawn.skyTop = vec3(0.16f, 0.24f, 0.48f);
+    dawn.skyHorizon = vec3(0.96f, 0.66f, 0.58f);
+    dawn.fogColor = vec3(0.80f, 0.64f, 0.58f);
+    dawn.skyAmb = vec3(0.36f, 0.34f, 0.42f);
+    dawn.groundAmb = vec3(0.20f, 0.16f, 0.13f);
+    Atmosphere morning = day;  // day colours with a moving sun, under the procedural sky
+    morning.sunDir = sunAt(7.4f);
+    Atmosphere afternoon = day;
+    afternoon.sunDir = sunAt(16.8f);
+    Atmosphere golden = day;
+    golden.sunDir = sunAt(17.7f);
+    golden.sunColor = vec3(2.1f, 1.3f, 0.68f);
+    golden.skyTop = vec3(0.13f, 0.25f, 0.52f);
+    golden.skyHorizon = vec3(0.98f, 0.74f, 0.50f);
+    golden.fogColor = vec3(0.86f, 0.68f, 0.50f);
+    golden.skyAmb = vec3(0.44f, 0.38f, 0.40f);
+    golden.groundAmb = vec3(0.28f, 0.20f, 0.13f);
+    Atmosphere sunset = golden;
+    sunset.sunDir = sunAt(18.55f);
+    sunset.sunColor = vec3(1.9f, 0.78f, 0.34f);
+    sunset.skyTop = vec3(0.10f, 0.14f, 0.36f);
+    sunset.skyHorizon = vec3(1.0f, 0.46f, 0.26f);
+    sunset.fogColor = vec3(0.72f, 0.42f, 0.32f);
+    sunset.skyAmb = vec3(0.30f, 0.22f, 0.28f);
+    sunset.groundAmb = vec3(0.17f, 0.11f, 0.08f);
+    Atmosphere dusk = nightA;
+    dusk.sunDir = normalize(sunAt(19.2f) + moon);
+    dusk.sunColor = vec3(0.35f, 0.25f, 0.35f);
+    dusk.skyTop = vec3(0.04f, 0.05f, 0.14f);
+    dusk.skyHorizon = vec3(0.32f, 0.17f, 0.20f);
+    dusk.fogColor = vec3(0.14f, 0.10f, 0.14f);
+    dusk.skyAmb = vec3(0.12f, 0.11f, 0.17f);
+    dusk.groundAmb = vec3(0.05f, 0.04f, 0.05f);
+    const Key keys[] = {
+        {0.f, nightA, 0, 1}, {4.9f, nightA, 0, 1}, {6.1f, dawn, 0, 0.2f}, {7.3f, morning, 0, 0},
+        {8.2f, day, 1, 0}, {16.4f, day, 1, 0}, {17.0f, afternoon, 0, 0}, {17.7f, golden, 0, 0},
+        {18.55f, sunset, 0, 0}, {19.3f, dusk, 0, 0.6f}, {20.2f, nightA, 0, 1}, {24.f, nightA, 0, 1}};
+    h = std::fmod(h + 24.f, 24.f);
+    int n = int(sizeof(keys) / sizeof(keys[0]));
+    for (int i = 0; i + 1 < n; i++)
+        if (h >= keys[i].h && h <= keys[i + 1].h) {
+            float t = (h - keys[i].h) / std::max(keys[i + 1].h - keys[i].h, 1e-3f);
+            t = t * t * (3.f - 2.f * t);
+            hdriW = keys[i].w + (keys[i + 1].w - keys[i].w) * t;
+            night = keys[i].n + (keys[i + 1].n - keys[i].n) * t;
+            return lerpAtmo(keys[i].a, keys[i + 1].a, t);
+        }
+    hdriW = 1; night = 0;
+    return day;
+}
+
+void Game::updateTimeOfDay(float dt) {
+    const float fixedH[5] = {0.f, 9.0f, 18.4f, 23.0f, 13.0f};
+    int m = std::clamp(settings.timeMode, 0, 4);
+    if (m == 0) todHours = std::fmod(todHours + dt / 60.f, 24.f);  // one game hour per real minute
+    else todHours = fixedH[m];
+    if (opt.scene == "night") todHours = 22.5f;
+    else if (opt.scene == "sunset") todHours = 18.4f;
 }

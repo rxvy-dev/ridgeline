@@ -12,6 +12,8 @@ struct Audio {
     std::atomic<float> impactReq{0};
     std::atomic<float> beepFreq{0}, beepLen{0};
     std::atomic<int> horn{0};
+    std::atomic<float> rain{0};
+    float rainLp = 0, rainHp = 0, dropEnv = 0;
     float hornEnv = 0, hornPh1 = 0, hornPh2 = 0, hornLp = 0;
     // secret-car song (a wav file next to the car, or a little vowel synth if there is none)
     std::vector<float> song;          // mono, 48 kHz
