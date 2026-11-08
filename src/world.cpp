@@ -1,5 +1,6 @@
 #include "world.h"
 #include "signs.h"
+#include "textures.h"
 #include <SDL3/SDL.h>
 #include <algorithm>
 #include <cstring>
@@ -517,9 +518,9 @@ void World::scatter(uint32_t seed) {
                 for (int k = 0; k < 6; k++) { acc += autumnW[k]; if (pick <= acc) { tint = autumn[k]; break; } }
                 tint = lerp(tint, autumn[rng.irange(0, 5)], rng.range(0.f, 0.35f)) * rng.range(0.9f, 1.12f);  // blend neighbours
                 // sakura: cherry blossom in drifts through the lowlands, thickest beside the roads
-                float sak = smoothstepf(0.15f, 0.55f, fbm(x / 260.f, z / 260.f, 2, 133)) * (1.f - smoothstepf(90.f, 220.f, h));
-                if (roadDistAt(x, z) < 40.f) sak = std::min(1.f, sak + 0.35f);
-                if (rng.f() < sak * 0.7f) tint = vec3(rng.range(0.98f, 1.05f), rng.range(0.66f, 0.76f), rng.range(0.78f, 0.88f)) * rng.range(0.95f, 1.1f);
+                float sak = smoothstepf(0.0f, 0.4f, fbm(x / 260.f, z / 260.f, 2, 133) + 0.15f) * (1.f - smoothstepf(140.f, 300.f, h));
+                if (roadDistAt(x, z) < 60.f) sak = std::min(1.f, sak + 0.5f);
+                if (rng.f() < sak * 0.85f) tint = vec3(rng.range(0.98f, 1.05f), rng.range(0.66f, 0.76f), rng.range(0.78f, 0.88f)) * rng.range(0.95f, 1.1f);
                 leafInst.push_back({vec3(x, h - 0.3f, z), sc, tint, rng.range(0, 6.28f)});
                 addTrunk(x, z, 0.32f * sc);
             }
@@ -804,6 +805,15 @@ void World::generate(uint32_t seed) {
         vec3 a = snapTo("Sea of Japan Road", vec3(-4850, 0, -250));
         vec3 b = snapTo("Canal Road South", vec3(-3500, 0, 980));
         addRoad("Chaba Lane", {a, vec3(-4500, 0, -100), vec3(-4250, 0, 150), vec3(-3950, 0, 300), vec3(-3700, 0, 600), b + vec3(0, 0, -60), b}, false, 8.f, SURF_ASPHALT);
+    }
+    {
+        // Fujiyoshida: the town behind Honcho-dori, two back streets parallel to it and three cross streets
+        vec3 c0 = snapTo("Fuji Road", vec3(-1510, 0, 520)), c1 = snapTo("Fuji Road", vec3(-1535, 0, 730)), c2 = snapTo("Fuji Road", vec3(-1558, 0, 930));
+        addRoad("Gekkoji-dori", {vec3(-1392, 0, 470), vec3(-1398, 0, 640), vec3(-1405, 0, 800), vec3(-1412, 0, 975)}, false, 8.f, SURF_ASPHALT);
+        addRoad("Shimoyoshida-dori", {vec3(-1285, 0, 470), vec3(-1290, 0, 640), vec3(-1296, 0, 800), vec3(-1300, 0, 975)}, false, 7.f, SURF_ASPHALT);
+        addRoad("Nishiura Street", {c0, c0 + vec3(40, 0, 0), vec3(-1395, 0, 520), vec3(-1288, 0, 520)}, false, 7.f, SURF_ASPHALT);
+        addRoad("Kamiyoshida Street", {c1, c1 + vec3(40, 0, 0), vec3(-1402, 0, 730), vec3(-1293, 0, 730)}, false, 7.f, SURF_ASPHALT);
+        addRoad("Shimoda Street", {c2, c2 + vec3(40, 0, 0), vec3(-1410, 0, 930), vec3(-1299, 0, 930)}, false, 7.f, SURF_ASPHALT);
     }
 
     // cross-country checkpoints through the north-west meadows
@@ -1113,6 +1123,40 @@ void World::buildGPU() {
             ch.center.y = 0;
             ch.state = 0;
         }
+
+    // ---- fallen petals: a soft pool under every cherry tree, uploaded as a coverage texture
+    {
+        const int PR = 2048;
+        const float mpp = 2 * HALF / PR;
+        std::vector<float> acc(size_t(PR) * PR, 0.f);
+        for (auto& in : leafInst) {
+            vec3 t = in.tint;
+            bool cherry = t.z > 0.6f * t.x && t.y < 0.93f * t.x;
+            if (!cherry) continue;
+            float rad = 10.f * in.scale, cx = (in.pos.x + HALF) / mpp, cz = (in.pos.z + HALF) / mpp, rp = rad / mpp + 1.f;
+            for (int z = int(cz - rp); z <= int(cz + rp); z++)
+                for (int x = int(cx - rp); x <= int(cx + rp); x++) {
+                    if (x < 0 || z < 0 || x >= PR || z >= PR) continue;
+                    float d = std::hypot((x + 0.5f - cx) * mpp, (z + 0.5f - cz) * mpp);
+                    acc[size_t(z) * PR + x] += 1.f - smoothstepf(rad * 0.3f, rad, d);
+                }
+        }
+        std::vector<uint8_t> img(size_t(PR) * PR);
+        for (size_t k = 0; k < img.size(); k++) img[k] = uint8_t(clampf(acc[k], 0.f, 1.f) * 255.f);
+        glGenTextures(1, &petalTex);
+        glBindTexture(GL_TEXTURE_2D, petalTex);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, PR, PR, 0, GL_RED, GL_UNSIGNED_BYTE, img.data());
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+        glGenerateMipmap(GL_TEXTURE_2D);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glActiveTexture(GL_TEXTURE0 + U_PETALS);
+        glBindTexture(GL_TEXTURE_2D, petalTex);
+        glActiveTexture(GL_TEXTURE0);
+    }
 
     // ---- far terrain: every 8th vertex, sunk a little so the detailed chunks always win
     {
@@ -1571,6 +1615,8 @@ void World::buildShrines() {
         sakura(festCenter + vec3(std::cos(a), 0, std::sin(a)) * sr.range(252.f, 262.f), sr.range(1.1f, 1.45f));
     }
     SDL_Log("Japan: %d sakura", sakuraN);
+    for (auto& rd : roads)
+        if (rd.name == "Okutama Trail" && !rd.pts.empty()) { landmarks.push_back({"Fushimi Inari Torii", rd.pts[size_t(0.075f * (rd.pts.size() - 1))]}); break; }
 }
 
 // ---------------------------------------------------------------- Japan
@@ -1578,6 +1624,14 @@ void World::buildShrines() {
 // with grey-blue tiled hip roofs right up against the road, concrete utility poles with sagging
 // wires, vending machines glowing by the doors; plus a five-storey pagoda looking across at Fuji.
 void World::buildJapan() {
+    landmarks.clear();
+    landmarks.push_back({"Mt. Fuji", kFuji});
+    landmarks.push_back({"Tokyo Tower", vec3(1875, 0, -775)});
+    landmarks.push_back({"Shibuya Crossing", vec3(2250, 0, -100)});
+    landmarks.push_back({"Daikoku Wharf", vec3((kDocks.x0 + kDocks.x1) * 0.5f, 0, (kDocks.z0 + kDocks.z1) * 0.5f)});
+    landmarks.push_back({"Honcho-dori", vec3(-1535, 0, 720)});
+    landmarks.push_back({"Fujiyoshida", vec3(-1345, 0, 720)});
+    landmarks.push_back({"Fuji Five Lakes", vec3(-150, 0, 5000)});
     // the canal's centre line, halfway between its two bank roads (height = bank level)
     canalLine.clear();
     {
@@ -2149,6 +2203,10 @@ void World::buildJapan() {
                 vec3 c = p + t * (w * 0.5f) + side * (s * (hwR + walk + d * 0.5f));
                 vec3 f = side * (float)s, r(f.z, 0, -f.x);
                 nextAt = along + w + 0.15f;
+                {   // leave the corner open where a cross street comes in
+                    int ri, si;
+                    if (nearestRoad(c, ri, si, d * 0.5f + w * 0.5f + 3.f) && roads[ri].name != "Fuji Road") continue;
+                }
                 int floors = rng.f() < 0.4f ? 3 : 2;
                 float hw = w * 0.5f, hd = d * 0.5f, fh = 3.2f, H = floors * fh + 0.35f;
                 // the street climbs: set the floor at the uphill corner so no shop front is buried,
@@ -2658,6 +2716,8 @@ void World::buildJapan() {
         SDL_Log("Japan: %d guide signs, %d warning signs, %d stop markings", guides, warns, marks);
     }
 
+    // Fujiyoshida's back streets, packed with houses and little shops
+    for (const char* st : {"Gekkoji-dori", "Shimoyoshida-dori", "Nishiura Street", "Kamiyoshida Street", "Shimoda Street"}) town(st, 0.f, 1.f, 1.f, false);
     // towns go wherever a road runs through level ground for a while (not in cuttings or on
     // embankments), spaced out across the island; farm roads get scattered farmhouses
     {
@@ -2803,6 +2863,7 @@ void World::buildJapan() {
         clearings.push_back(vec3(c.x, 75.f, c.z));
         for (int k = 0; k < 22; k++) { float a = k / 22.f * 6.2832f; sakuraSpots.push_back(c + vec3(std::cos(a) * 34.f, 0, std::sin(a) * 29.f)); }
         SDL_Log("Japan: castle at (%.0f, %.0f)", c.x, c.z);
+        landmarks.push_back({"Castle", c});
     }
     // ---------------------------------------------------------------- set pieces
     auto levelDisc = [&](vec3 c, float r0, float r1, float y) {
@@ -2912,6 +2973,7 @@ void World::buildJapan() {
         signFitted(b, xf.transformPoint(vec3(0, 9.2f, -2.26f)), -fwd, 0.6f, 0.75f, SV_SENGEN, true);
     };
 
+    landmarks.push_back({"Chureito Pagoda", vec3(-1730.f, 0, 640.f)});
     // ---- Chureito: the five-storey pagoda on the hill above the town, cherry trees all round it,
     // a long stone stair up from a vermilion gate, stone and red lanterns, Fuji behind
     {
@@ -3220,6 +3282,7 @@ void World::buildJapan() {
         sakuraSpots.push_back(shore + toward * 12.f + normalize(cross(toward, up)) * 9.f);
         sakuraSpots.push_back(shore + toward * 12.f - normalize(cross(toward, up)) * 9.f);
         SDL_Log("Japan: lake torii at (%.0f, %.0f)", tp.x, tp.z);
+        landmarks.push_back({"Floating Torii", tp});
     }
     {
         for (float z : {300.f, -300.f}) {
@@ -3356,6 +3419,128 @@ void World::buildJapan() {
             acc -= L;
         }
         SDL_Log("Japan: %d pylons", placed);
+    }
+
+    // ---- real landmarks for the new land: the Great Buddha and the Golden Pavilion
+    auto findSite = [&](vec3 near, float searchR, float clearR, float rdMin, float rdMax) {
+        vec3 best(0, -1e9f, 0);
+        float bestScore = 1e9f;
+        for (float rr = 0; rr <= searchR; rr += 20.f)
+            for (float a = 0; a < 6.283f; a += (rr > 0 ? 20.f / rr : 7.f)) {
+                vec3 q = near + vec3(std::cos(a), 0, std::sin(a)) * rr;
+                float rd = roadDistAt(q.x, q.z);
+                if (rd < rdMin || rd > rdMax) continue;
+                float hq = heightAt(q.x, q.z);
+                if (hq < waterLevel + 3.f || inBox(q.x, q.z, clearR) || urban(q.x, q.z, clearR) || nearCanal(q, clearR + 10.f)) continue;
+                float lo = hq, hi = hq;
+                bool ok = true;
+                for (int k = 0; k < 8 && ok; k++) {
+                    vec3 e = q + vec3(std::cos(k * 0.785f), 0, std::sin(k * 0.785f)) * clearR;
+                    float he = heightAt(e.x, e.z);
+                    lo = std::min(lo, he); hi = std::max(hi, he);
+                    ok = he > waterLevel + 1.5f && roadDistAt(e.x, e.z) > 3.f;
+                }
+                if (!ok) continue;
+                float score = (hi - lo) + rr * 0.01f;
+                if (score < bestScore) { bestScore = score; best = vec3(q.x, hq, q.z); }
+            }
+        return best;
+    };
+    auto faceRoad = [&](vec3 c) {
+        int ri, si;
+        if (nearestRoad(c, ri, si, 200.f)) { vec3 d = roads[ri].pts[si] - c; d.y = 0; return normalize(d); }
+        return vec3(0, 0, -1);
+    };
+    // Kamakura Daibutsu: a seated bronze Buddha, green with age, on a stone dais
+    {
+        vec3 c = findSite(vec3(-4600, 0, 1900), 600.f, 22.f, 25.f, 90.f);
+        if (c.y > -1e8f) {
+            float g = c.y;
+            levelDisc(c, 24.f, 40.f, g);
+            vec3 fw = faceRoad(c), rt = normalize(cross(fw, up));
+            vec4 bronze(0.30f, 0.42f, 0.36f, 7), dark(0.22f, 0.3f, 0.26f, 7), stone(0.6f, 0.59f, 0.55f, 0);
+            b.box(vec3(c.x, g + 0.4f, c.z), vec3(10.f, 0.6f, 10.f), stone);
+            b.box(vec3(c.x, g + 1.2f, c.z), vec3(8.f, 0.4f, 8.f), stone);
+            vec3 o = vec3(c.x, g + 1.6f, c.z);
+            b.cylinder(o, 6.6f, 0.9f, 24, dark);                                              // lotus pedestal
+            b.tube(o + up * 2.3f - rt * 5.2f + fw * 1.4f, o + up * 2.3f + rt * 5.2f + fw * 1.4f, 1.9f, 1.9f, 16, bronze);  // folded legs
+            b.sphere(o + up * 2.4f + fw * 1.2f, 3.4f, 2, bronze);
+            b.tube(o + up * 1.5f - fw * 0.8f, o + up * 8.6f - fw * 0.6f, 4.4f, 3.0f, 20, bronze);   // body in its robe
+            b.sphere(o + up * 8.0f - fw * 0.6f, 3.25f, 2, bronze);                                // shoulders
+            b.sphere(o + up * 3.9f + fw * 2.5f, 1.25f, 2, dark);                                  // hands in the lap
+            b.tube(o + up * 9.4f - fw * 0.4f, o + up * 10.4f - fw * 0.3f, 1.3f, 1.3f, 12, bronze);   // neck
+            vec3 hc = o + up * 11.7f - fw * 0.2f;
+            b.sphere(hc, 2.25f, 2, bronze);
+            b.sphere(hc + up * 2.0f - fw * 0.2f, 1.15f, 2, dark);                                 // ushnisha
+            for (int k = 0; k < 46; k++) {                                                        // snail-shell curls
+                float a = k * 2.399f, el = 0.25f + 0.9f * (k / 46.f);
+                vec3 dir = normalize(rt * (std::cos(a) * std::cos(el)) + fw * (std::sin(a) * std::cos(el) * 0.9f - 0.15f) + up * std::sin(el));
+                b.sphere(hc + dir * 2.2f, 0.3f, 1, dark);
+            }
+            for (int k = -1; k <= 1; k += 2) {
+                mat4 ex = basis(rt, up, fw, hc + rt * (k * 2.25f) - up * 0.7f);
+                b.box(vec3(0, 0, 0), vec3(0.32f, 1.25f, 0.55f), bronze, &ex);                    // long ears
+            }
+            b.sphere(hc + fw * 2.2f + up * 0.45f, 0.12f, 1, dark);                                // urna
+            for (int k = -1; k <= 1; k += 2) b.box(hc + fw * 2.08f + up * 0.15f + rt * (k * 0.7f), vec3(0.42f, 0.05f, 0.08f), dark);  // closed eyes
+            // incense burner and lanterns in front
+            vec3 ib = c + fw * 16.f;
+            ib.y = heightAt(ib.x, ib.z);
+            b.cylinder(ib, 0.9f, 0.8f, 12, dark);
+            b.tube(ib + up * 0.8f, ib + up * 1.6f, 1.0f, 1.4f, 14, dark);
+            b.cone(ib + up * 2.4f, 1.3f, 1.0f, 8, dark);
+            for (int k = -1; k <= 1; k += 2) { toro(c + fw * 13.f + rt * (k * 5.f)); toro(c + fw * 20.f + rt * (k * 5.f)); }
+            boxes.push_back({c.x - 9.f, c.z - 9.f, c.x + 9.f, c.z + 9.f, g + 15.f});
+            clearings.push_back(vec3(c.x, 40.f, c.z));
+            for (int k = 0; k < 12; k++) { float a = k / 12.f * 6.2832f + 0.3f; sakuraSpots.push_back(c + vec3(std::cos(a), 0, std::sin(a)) * 28.f); }
+            canalPts.push_back(c);  // (keeps the grass off the dais)
+            landmarks.push_back({"Great Buddha", c});
+            SDL_Log("Japan: Great Buddha at (%.0f, %.0f)", c.x, c.z);
+        }
+    }
+    // Kinkaku-ji: the Golden Pavilion on the shore of the middle of the Five Lakes
+    {
+        vec3 c = findSite(vec3(-150, 0, 4560), 500.f, 16.f, 15.f, 120.f);
+        if (c.y > -1e8f) {
+            float g = c.y;
+            levelDisc(c, 16.f, 30.f, g);
+            vec3 lakeC(-150, 0, 5000);
+            vec3 fw = normalize(vec3(lakeC.x - c.x, 0, lakeC.z - c.z)), rt = normalize(cross(fw, up));
+            vec4 gold(0.95f, 0.74f, 0.24f, 7), wood(0.35f, 0.25f, 0.17f, 0), white(0.92f, 0.9f, 0.84f, 0), roofC(0.2f, 0.17f, 0.14f, 23), stone(0.58f, 0.57f, 0.53f, 0);
+            mat4 xf = basis(rt, up, fw, vec3(c.x, g, c.z));
+            vec3 cc(c.x, 0, c.z);
+            b.box(vec3(0, 0.2f, 0), vec3(7.5f, 0.5f, 6.0f), stone, &xf);
+            // first storey: natural wood and white shoji
+            b.box(vec3(0, 2.1f, 0), vec3(6.0f, 1.45f, 4.6f), white, &xf);
+            for (float x = -6.f; x <= 6.01f; x += 1.5f)
+                for (int z2 = -1; z2 <= 1; z2 += 2) b.box(vec3(x, 2.1f, z2 * 4.62f), vec3(0.09f, 1.45f, 0.06f), wood, &xf);
+            b.box(vec3(0, 0.75f, 0), vec3(6.6f, 0.08f, 5.2f), wood, &xf);  // veranda
+            hipRoof(cc, fw, rt, 6.4f, 5.0f, g + 3.6f, 0.9f, roofC);
+            // second and third storeys covered in gold leaf
+            b.box(vec3(0, 5.6f, 0), vec3(5.6f, 1.3f, 4.2f), gold, &xf);
+            b.box(vec3(0, 4.45f, 0), vec3(6.0f, 0.07f, 4.6f), gold, &xf);
+            for (int z2 = -1; z2 <= 1; z2 += 2) b.box(vec3(0, 4.9f, z2 * 4.6f), vec3(6.0f, 0.04f, 0.04f), gold, &xf);
+            for (int x2 = -1; x2 <= 1; x2 += 2) b.box(vec3(x2 * 6.0f, 4.9f, 0), vec3(0.04f, 0.04f, 4.6f), gold, &xf);
+            hipRoof(cc, fw, rt, 6.0f, 4.6f, g + 7.0f, 0.9f, roofC);
+            b.box(vec3(0, 9.0f, 0), vec3(3.4f, 1.15f, 3.4f), gold, &xf);
+            hipRoof(cc, fw, rt, 4.2f, 4.2f, g + 10.2f, 2.4f, roofC);
+            // the phoenix on the ridge
+            vec3 ph(c.x, g + 13.4f, c.z);
+            b.tube(ph - up * 0.8f, ph, 0.12f, 0.12f, 6, gold);
+            b.sphere(ph + up * 0.25f, 0.35f, 1, gold);
+            b.tube(ph + up * 0.35f, ph + up * 0.75f + fw * 0.4f, 0.12f, 0.06f, 5, gold);
+            for (int k = -1; k <= 1; k += 2) {
+                mat4 wx = basis(rt, up, fw, ph + up * 0.3f + rt * (k * 0.45f)) * rotateZ(k * 0.5f);
+                b.box(vec3(0, 0, 0), vec3(0.45f, 0.06f, 0.3f), gold, &wx);
+            }
+            b.tube(ph + up * 0.2f - fw * 0.3f, ph + up * 0.6f - fw * 1.0f, 0.1f, 0.03f, 5, gold);  // tail
+            boxes.push_back({c.x - 7.f, c.z - 7.f, c.x + 7.f, c.z + 7.f, g + 13.f});
+            clearings.push_back(vec3(c.x, 30.f, c.z));
+            canalPts.push_back(c);
+            for (int k = 0; k < 6; k++) { float a = k / 6.f * 6.2832f; toro(c + vec3(std::cos(a), 0, std::sin(a)) * 13.f - fw * 3.f); }
+            landmarks.push_back({"Kinkaku-ji", c});
+            SDL_Log("Japan: Kinkaku-ji at (%.0f, %.0f)", c.x, c.z);
+        }
     }
 
     // people in kimono strolling on Honcho-dori's pavements

@@ -140,7 +140,10 @@ public:
     std::vector<vec3> canalPts;
     std::vector<vec3> canalLine;   // centre between the canal's bank roads (y = bank level)
     std::vector<std::pair<int, int>> canalPools;  // index ranges of canalPath at one water level
-    std::vector<vec3> sakuraClose; // cherry trees allowed close to a road (the canal rows)
+    std::vector<vec3> sakuraClose;
+    GLuint petalTex = 0;           // fallen petal coverage (R8, whole island)
+    struct Landmark { std::string name; vec3 pos; };
+    std::vector<Landmark> landmarks;  // named on the world map // cherry trees allowed close to a road (the canal rows)
     std::vector<vec3> canalPath;   // canal centre at water height (the boat runs along it)
     vec3 lakeTorii{0, -1e9f, 0};   // torii standing in the lake (swan boats paddle round it)    // canal centre line (keeps grass off the canal bed)
     std::vector<vec3> clearings;  // (x, radius, z): no wild trees (temple grounds, castle park)

@@ -60,6 +60,23 @@ vec3 hdri(vec3 d, float lod){
     return c;
 }
 
+uniform sampler2D tPetals;  // fallen cherry petals: coverage over the whole island
+float petalCover(vec3 p, float speckScale){
+    float m = texture(tPetals, (p.xz + 5600.0) / 11200.0).r;
+    if (m < 0.01) return 0.0;
+    // a soft carpet where the blossom is thickest, and loose petals scattered round it:
+    // one petal per small cell, at a random spot, round and soft-edged
+    vec2 q = p.xz * speckScale;
+    vec2 id = floor(q), f = fract(q);
+    vec3 h3 = fract(vec3(id.xyx) * 0.1031); h3 += dot(h3, h3.yzx + 33.33);
+    vec2 r = fract((h3.xx + h3.yz) * h3.zy);
+    float d = length((f - (0.2 + 0.6 * r)) * vec2(1.0, 1.6));
+    float petal = (1.0 - smoothstep(0.14, 0.26, d)) * step(0.3, fract(r.x * 7.31 + r.y * 3.17));
+    float far = smoothstep(18.0, 45.0, length(p - uCamPos));
+    float speck = mix(petal, 0.4, far);  // far away the dots blend into an even blush
+    return clamp(smoothstep(0.25, 0.9, m) * 0.7 + m * speck, 0.0, 1.0);
+}
+const vec3 kPetal = vec3(0.96, 0.72, 0.80);
 float hash12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 float vnoise(vec2 p){
     vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.0-2.0*f);
@@ -474,6 +491,8 @@ void main(){
     float under = smoothstep(0.0, 0.8, -hw);
     c *= mix(1.0, 0.62, max(wetSand, under * 0.7));
 
+    // a carpet of fallen cherry petals under the blossom
+    c = mix(c, kPetal * (0.92 + 0.16 * vnoise(p.xz * 5.0)), petalCover(p, 6.0) * (1.0 - sn) * step(0.3, hw));
     float sh = shadowFactor(p, normalize(vNrm));
     vec3 col = lighting(c, n, sh);
     vec3 V = normalize(uCamPos - p);
@@ -580,6 +599,7 @@ void main(){
         spec = mix(spec, 0.7, w); gloss = mix(gloss, 160.0, w);
         gloss = mix(gloss, 1200.0, puddle);
     }
+    c = mix(c, kPetal, petalCover(p, 7.0) * 0.7);  // petals blown across the asphalt
     vec3 col = lighting(c, nn, sh);
     vec3 H = normalize(V + uSunDir);
     col += uSunColor * pow(max(dot(nn, H), 0.0), gloss) * spec * sh;
@@ -1002,6 +1022,7 @@ void main(){
     ground *= mix(vec3(0.86, 0.95, 0.72), vec3(1.10, 0.98, 0.80), smoothstep(0.25, 0.75, fbm2(vPos.xz * 0.0035)));
     vec3 albedo = mix(ground * 0.85, t.rgb * ground * 1.7, 0.7) * (0.55 + 0.45 * (1.0 - vUV.y));
     if (uPhoto == 1) albedo = t.rgb * mix(vec3(0.95), ground * 1.6, 0.35) * (0.45 + 0.55 * (1.0 - vUV.y));  // blade colour, rooted in the ground tone
+    albedo = mix(albedo, kPetal * 0.9, petalCover(vPos, 4.0) * 0.6);  // petals caught in the grass
     vec3 n = normalize(vGround + vec3(0.0, 0.6, 0.0));
     float sh = shadowFactor(vPos, vGround);
     vec3 V = normalize(uCamPos - vPos);

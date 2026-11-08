@@ -3414,6 +3414,16 @@ void Game::drawMap() {
         vec2 lab = toMap(cp[cp.size() / 2]);
         hud.text(lab.x, lab.y + 8 * u, 13 * u, "Sakura Canal", vec4(0.75f, 0.9f, 1.f, 0.95f), 1, false);
     }
+    // landmarks: a small gold diamond and the name
+    for (auto& lm : world.landmarks) {
+        vec2 q = toMap(lm.pos);
+        float d = 5.f * u;
+        hud.triangle(q + vec2(0, -d - u), q + vec2(d + u, 0), q + vec2(-d - u, 0), vec4(0, 0, 0, 0.8f));
+        hud.triangle(q + vec2(0, d + u), q + vec2(-d - u, 0), q + vec2(d + u, 0), vec4(0, 0, 0, 0.8f));
+        hud.triangle(q + vec2(0, -d), q + vec2(d, 0), q + vec2(-d, 0), vec4(1.f, 0.82f, 0.35f, 1));
+        hud.triangle(q + vec2(0, d), q + vec2(-d, 0), q + vec2(d, 0), vec4(1.f, 0.82f, 0.35f, 1));
+        hud.text(q.x + 8 * u, q.y - 7 * u, 12 * u, lm.name, vec4(1.f, 0.93f, 0.75f, 0.95f));
+    }
     for (size_t i = 1; i < gps.path.size(); i++) hud.line(toMap(gps.path[i - 1]), toMap(gps.path[i]), 4 * u, vec4(0.78f, 0.38f, 1.f, 0.95f));
     for (int i = 0; i < int(events.size()); i++) {
         vec2 q = toMap(events[i].markerPos);
