@@ -685,6 +685,22 @@ void main(){
         return;
     }
     else if (mat == 21) { albedo = vCol.rgb; spec = 0.12; gloss = 20.0; }                  // road paint / banners
+    else if (mat == 23) {                                                                   // kawara roof tiles
+        vec2 sd = n.xz / max(length(n.xz), 1e-3);
+        float slope = length(n.xz);
+        float across = dot(vPos.xz, vec2(-sd.y, sd.x));
+        float rib = abs(sin(across * 3.14159 / 0.32));
+        float course = fract(vPos.y / max(0.3 * slope, 0.04));
+        float tone = 0.9 + 0.2 * vnoise(vPos.xz * 0.7);
+        albedo = vCol.rgb * tone * (0.72 + 0.4 * rib) * (1.0 - 0.4 * smoothstep(0.8, 1.0, course) * step(0.15, slope));
+        spec = 0.4; gloss = 45.0; refl = 0.05;
+    }
+    else if (mat == 24) {                                                                   // lap siding
+        float l = fract(vPos.y / 0.24);
+        float shadow = 1.0 - 0.28 * (1.0 - smoothstep(0.0, 0.08, l));
+        albedo = vCol.rgb * shadow * (0.94 + 0.1 * vnoise(vPos.xz * 1.3 + vPos.y));
+        spec = 0.08; gloss = 16.0;
+    }
     else if (mat == 22) {                                                                   // lettered signboards (atlas)
         vec4 sgA = texture(tSigns, vCol.rg);
         if (sgA.a < 0.5) discard;

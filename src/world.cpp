@@ -1405,10 +1405,16 @@ void World::buildJapan() {
         // dark ridge tiles
         b.tube(r0 + vec3(0, 0.08f, 0), r1 + vec3(0, 0.08f, 0), 0.18f, 0.18f, 5, vec4(0.1f, 0.1f, 0.11f, 0));
     };
+    // A Japanese house as you see them along every country road: siding walls, aluminium sash
+    // windows on every side, a kawara tile roof (hip or gable) with gutters and downpipes, a
+    // balcony with the washing out, the entrance under a little canopy, a block wall and gate,
+    // air-con units, a water heater, a pruned pine in the garden and a kei car in the carport.
+    // f points away from the road: the front (local -z) faces it.
+    vec3 lastHouse, lastHouseF;
     auto house = [&](vec3 c, vec3 f, float w, float d, int floors, bool shop) {
+        const vec3 upv(0, 1, 0);
         vec3 r(f.z, 0, -f.x);
         float hw = w * 0.5f, hd = d * 0.5f;
-        // stand it on the lowest corner so it never floats
         float g = 1e9f, gmax = -1e9f;
         for (int k = 0; k < 4; k++) {
             vec3 q = c + r * ((k & 1) ? hw : -hw) + f * ((k & 2) ? hd : -hd);
@@ -1420,60 +1426,204 @@ void World::buildJapan() {
         {
             vec3 fe = c - f * hd;
             float py = heightAt(fe.x, fe.z);
-            float rad = std::max(hw, hd) + 8.f;
+            float rad = std::max(hw, hd) + 9.f;
             int x0 = std::max(0, int((c.x - rad + HALF) / CELL)), x1 = std::min(N - 1, int((c.x + rad + HALF) / CELL) + 1);
             int z0 = std::max(0, int((c.z - rad + HALF) / CELL)), z1 = std::min(N - 1, int((c.z + rad + HALF) / CELL) + 1);
             for (int iz = z0; iz <= z1; iz++)
                 for (int ix = x0; ix <= x1; ix++) {
                     float wx = -HALF + ix * CELL, wz = -HALF + iz * CELL;
                     if (roadDist[iz * N + ix] < 1.5f) continue;  // never touch the road
-                    vec3 d(wx - c.x, 0, wz - c.z);
-                    float lx = std::fabs(dot(d, r)) - hw - 1.5f, lz = std::fabs(dot(d, f)) - hd - 1.5f;
+                    vec3 dd(wx - c.x, 0, wz - c.z);
+                    float lx = std::fabs(dot(dd, r)) - hw - 3.5f, lz = std::fabs(dot(dd, f)) - hd - 2.5f;
                     float out = std::max(lx, lz);
                     float k = 1.f - smoothstepf(0.f, 6.f, out);
                     if (k > 0) height[iz * N + ix] = lerpf(height[iz * N + ix], py, k);
                 }
             g = py;
         }
-        g -= 0.25f;
-        float H = floors * 3.1f + 0.4f;
-        mat4 xf = basis(r, vec3(0, 1, 0), f, vec3(c.x, g, c.z));
-        vec4 wall = wallCols[rng.irange(0, 4)];
-        b.box(vec3(0, H * 0.5f, 0), vec3(hw, H * 0.5f, hd), wall, &xf);
-        // timber base band and dark window strips on the road side
-        b.box(vec3(0, 0.45f, 0), vec3(hw + 0.02f, 0.45f, hd + 0.02f), vec4(0.22f, 0.17f, 0.13f, 0), &xf);
+        g -= 0.2f;
+        auto P = [&](float x, float y, float z) { return vec3(c.x, g + y, c.z) + r * x + f * z; };  // local -> world
+        mat4 xf = basis(r, upv, f, vec3(c.x, g, c.z));
+        auto tri = [&](vec3 p0, vec3 p1, vec3 p2, vec3 want, vec4 col) {
+            if (dot(cross(p1 - p0, p2 - p0), want) < 0) std::swap(p1, p2);
+            b.flatTri(p0, p1, p2, col);
+        };
+        auto quad = [&](vec3 p0, vec3 p1, vec3 p2, vec3 p3, vec3 want, vec4 col) { tri(p0, p1, p2, want, col); tri(p0, p2, p3, want, col); };
+        const vec4 sidings[] = {{0.90f, 0.88f, 0.82f, 24}, {0.82f, 0.79f, 0.72f, 24}, {0.62f, 0.66f, 0.68f, 24}, {0.86f, 0.84f, 0.80f, 24},
+                                {0.55f, 0.47f, 0.40f, 24}, {0.93f, 0.92f, 0.90f, 24}, {0.70f, 0.62f, 0.52f, 24}, {0.34f, 0.27f, 0.22f, 24}};
+        const vec4 kawara[] = {{0.25f, 0.29f, 0.35f, 23}, {0.19f, 0.20f, 0.23f, 23}, {0.46f, 0.30f, 0.22f, 23}, {0.23f, 0.31f, 0.30f, 23}, {0.33f, 0.34f, 0.36f, 23}};
+        const vec4 alu(0.74f, 0.75f, 0.76f, 7), glassC(0.1f, 0.12f, 0.15f, 2), white(0.92f, 0.92f, 0.9f, 0), block(0.68f, 0.67f, 0.63f, 0), darkWood(0.25f, 0.18f, 0.13f, 0);
+        float fh = 2.9f, H = floors * fh + 0.35f;
+        vec4 wall = sidings[rng.irange(0, 7)];
+        b.box(vec3(0, H * 0.5f - 0.3f, 0), vec3(hw, H * 0.5f + 0.3f, hd), wall, &xf);
+        b.box(vec3(0, 0.25f, 0), vec3(hw + 0.03f, 0.5f, hd + 0.03f), vec4(0.55f, 0.54f, 0.51f, 0), &xf);   // concrete footing
+        if (floors == 2) b.box(vec3(0, fh + 0.18f, 0), vec3(hw + 0.05f, 0.08f, hd + 0.05f), vec4(wall.x * 0.8f, wall.y * 0.8f, wall.z * 0.8f, 0), &xf);  // floor band
+        // sash windows: aluminium frame, two glass panes, a sill; on all four walls
+        auto window = [&](float x, float y, int face, float ww, float wh) {
+            // face: 0 front (-z), 1 back (+z), 2 left (-x), 3 right (+x)
+            vec3 n = face == 0 ? vec3(0, 0, -1) : face == 1 ? vec3(0, 0, 1) : face == 2 ? vec3(-1, 0, 0) : vec3(1, 0, 0);
+            float off = face < 2 ? hd : hw;
+            vec3 tl = face < 2 ? vec3(1, 0, 0) : vec3(0, 0, 1);
+            vec3 cen = tl * x + vec3(0, y, 0) + n * off;
+            auto ext = [&](float a, float hgt, float dep) { return tl * a + vec3(0, hgt, 0) + vec3(std::fabs(n.x), 0, std::fabs(n.z)) * dep + vec3(face < 2 ? 0.f : 0.f, 0, 0); };
+            vec3 e1 = ext(ww * 0.5f + 0.06f, wh * 0.5f + 0.06f, 0.04f);
+            b.box(cen + n * 0.03f, vec3(std::fabs(e1.x), e1.y, std::fabs(e1.z)), alu, &xf);
+            vec3 e2 = ext(ww * 0.5f, wh * 0.5f, 0.03f);
+            b.box(cen + n * 0.06f, vec3(std::fabs(e2.x), e2.y, std::fabs(e2.z)), glassC, &xf);
+            vec3 e3 = ext(0.025f, wh * 0.5f, 0.03f);
+            b.box(cen + n * 0.08f, vec3(std::fabs(e3.x), e3.y, std::fabs(e3.z)), alu, &xf);              // meeting rail
+            vec3 e4 = ext(ww * 0.5f + 0.1f, 0.03f, 0.08f);
+            b.box(cen + n * 0.08f - vec3(0, wh * 0.5f + 0.07f, 0), vec3(std::fabs(e4.x), e4.y, std::fabs(e4.z)), alu, &xf);  // sill
+            if (rng.f() < 0.25f) {  // a storm-shutter box beside it
+                vec3 e5 = ext(0.12f, wh * 0.5f + 0.1f, 0.12f);
+                b.box(cen + tl * (ww * 0.5f + 0.2f) + n * 0.12f, vec3(std::fabs(e5.x), e5.y, std::fabs(e5.z)), vec4(wall.x * 0.85f, wall.y * 0.85f, wall.z * 0.85f, 0), &xf);
+            }
+        };
+        bool balcony = floors == 2 && rng.f() < 0.55f;
+        float doorX = (rng.f() < 0.5f ? -1.f : 1.f) * (hw - 1.3f);
         for (int fl = 0; fl < floors; fl++) {
-            float wy = fl * 3.1f + 1.9f;
-            b.box(vec3(0, wy, -hd - 0.02f), vec3(hw * 0.7f, 0.55f, 0.03f), vec4(0.10f, 0.12f, 0.15f, 2), &xf);
-            b.box(vec3(0, wy, hd + 0.02f), vec3(hw * 0.6f, 0.5f, 0.03f), vec4(0.10f, 0.12f, 0.15f, 2), &xf);
+            float wy = fl * fh + (fl == 0 ? 1.45f : 1.6f);
+            for (int face = 0; face < 4; face++) {
+                float len = face < 2 ? w : d;
+                int nw = std::max(1, int(len / 3.0f));
+                for (int k = 0; k < nw; k++) {
+                    float x = (k + 0.5f) / nw * len - len * 0.5f;
+                    if (face == 0 && fl == 0 && !shop && std::fabs(x - doorX) < 1.4f) continue;  // the entrance goes here
+                    if (rng.f() < 0.15f) continue;
+                    bool small = rng.f() < 0.25f;
+                    window(x, small ? wy + 0.3f : wy, face, small ? 0.6f : std::min(1.7f, len / nw * 0.62f), small ? 0.5f : 1.1f);
+                }
+            }
         }
-        if (floors == 2) {
-            // the little skirt roof between the floors
-            mat4 sx = xf * translate(vec3(0, 3.25f, -hd - 0.55f)) * rotateX(-0.35f);
-            b.box(vec3(0, 0, 0), vec3(hw + 0.3f, 0.06f, 0.65f), roofCols[0], &sx);
-        }
-        vec4 rc = roofCols[rng.irange(0, 3)];
+        // roof: kawara tiles, hip or gable, with gutters and a downpipe
+        vec4 rc = kawara[rng.irange(0, 4)];
         vec3 cw(c.x, 0, c.z);
-        hipRoof(cw, f, r, hw, hd, g + H, std::min(hw, hd) * 0.62f, rc);
+        float eaveY = g + H;
+        if (rng.f() < 0.6f) hipRoof(cw, f, r, hw, hd, eaveY, std::min(hw, hd) * 0.6f, rc);
+        else {
+            // gable: ridge along the longer side, eaves overhanging, gable walls in the siding
+            bool alongR = w >= d;
+            vec3 A = alongR ? r : f, B = alongR ? f : r;
+            float la = (alongR ? hw : hd) + 0.6f, lb = (alongR ? hd : hw) + 0.75f, rh = (alongR ? hd : hw) * 0.62f;
+            vec3 base(c.x, eaveY, c.z);
+            vec3 e0 = base - A * la - B * lb, e1 = base + A * la - B * lb, e2 = base + A * la + B * lb, e3 = base - A * la + B * lb;
+            vec3 r0 = base - A * la + upv * rh, r1 = base + A * la + upv * rh;
+            quad(e0, e1, r1, r0, -B + upv, rc);
+            quad(e3, r0, r1, e2, B + upv, rc);
+            float wa = alongR ? hw : hd, wb = alongR ? hd : hw;
+            for (int s2 = -1; s2 <= 1; s2 += 2) {
+                vec3 gb = base + A * (s2 * wa);
+                tri(gb - B * wb, gb + B * wb, gb + upv * (rh * (wb / lb)), A * (float)s2, wall);
+            }
+            b.tube(r0 + upv * 0.08f, r1 + upv * 0.08f, 0.16f, 0.16f, 5, vec4(0.12f, 0.12f, 0.13f, 0));
+            for (int s2 = -1; s2 <= 1; s2 += 2)  // bargeboards
+                for (int s3 = -1; s3 <= 1; s3 += 2)
+                    b.tube(base + A * (s2 * la) + B * (s3 * lb) + upv * 0.05f, base + A * (s2 * la) + upv * (rh + 0.05f), 0.06f, 0.06f, 4, darkWood);
+        }
+        for (int s2 = -1; s2 <= 1; s2 += 2)  // gutters along the long eaves
+            b.box(vec3(0, H - 0.06f, s2 * (hd + 0.78f)), vec3(hw + 0.7f, 0.06f, 0.07f), vec4(0.6f, 0.6f, 0.6f, 7), &xf);
+        {
+            float sx = (rng.f() < 0.5f ? -1.f : 1.f) * (hw + 0.1f);
+            b.tube(P(sx, H - 0.1f, -hd - 0.7f), P(sx, H - 0.6f, -hd - 0.12f), 0.045f, 0.045f, 5, vec4(0.6f, 0.6f, 0.6f, 7));
+            b.tube(P(sx, H - 0.6f, -hd - 0.12f), P(sx, 0.05f, -hd - 0.12f), 0.045f, 0.045f, 5, vec4(0.6f, 0.6f, 0.6f, 7));
+        }
+        if (!shop) {
+            // entrance: sliding door under a canopy, a light and the name plate
+            b.box(vec3(doorX, 1.15f, -hd - 0.04f), vec3(0.85f, 1.1f, 0.04f), darkWood, &xf);
+            b.box(vec3(doorX, 1.2f, -hd - 0.07f), vec3(0.32f, 0.85f, 0.02f), vec4(0.75f, 0.72f, 0.62f, 2), &xf);  // frosted glass
+            b.box(vec3(doorX + 0.42f, 1.2f, -hd - 0.07f), vec3(0.32f, 0.85f, 0.02f), vec4(0.75f, 0.72f, 0.62f, 2), &xf);
+            b.box(vec3(doorX, 2.45f, -hd - 0.55f), vec3(1.2f, 0.06f, 0.6f), vec4(0.3f, 0.3f, 0.32f, 7), &xf);
+            b.box(vec3(doorX - 1.05f, 2.0f, -hd - 0.06f), vec3(0.08f, 0.1f, 0.04f), vec4(1.f, 0.9f, 0.7f, 15), &xf);
+            b.box(vec3(doorX, 0.08f, -hd - 0.6f), vec3(0.95f, 0.08f, 0.55f), vec4(0.6f, 0.59f, 0.56f, 0), &xf);  // step
+        }
+        if (balcony) {
+            // balcony across the front with the washing out (and sometimes the futons over the rail)
+            float by = fh + 0.15f;
+            b.box(vec3(0, by, -hd - 0.6f), vec3(hw * 0.8f, 0.1f, 0.6f), vec4(0.6f, 0.6f, 0.6f, 0), &xf);
+            b.box(vec3(0, by + 0.6f, -hd - 1.18f), vec3(hw * 0.8f, 0.5f, 0.03f), vec4(0.7f, 0.71f, 0.72f, 7), &xf);
+            for (int k = -1; k <= 1; k += 2) b.box(vec3(k * hw * 0.8f, by + 0.6f, -hd - 0.6f), vec3(0.03f, 0.5f, 0.6f), vec4(0.7f, 0.71f, 0.72f, 7), &xf);
+            b.box(vec3(0, by + 1.7f, -hd - 0.75f), vec3(hw * 0.7f, 0.02f, 0.02f), alu, &xf);  // laundry pole
+            int items = rng.irange(3, 8);
+            const vec4 cloth[] = {{0.95f, 0.95f, 0.95f, 0}, {0.3f, 0.45f, 0.75f, 0}, {0.9f, 0.6f, 0.65f, 0}, {0.85f, 0.8f, 0.4f, 0}, {0.3f, 0.3f, 0.32f, 0}, {0.55f, 0.75f, 0.6f, 0}};
+            for (int k = 0; k < items; k++) {
+                float x = -hw * 0.65f + (k + 0.5f) / items * hw * 1.3f;
+                float ch = rng.range(0.35f, 0.7f);
+                b.box(vec3(x, by + 1.68f - ch * 0.5f, -hd - 0.75f), vec3(rng.range(0.15f, 0.3f), ch * 0.5f, 0.015f), cloth[rng.irange(0, 5)], &xf);
+            }
+            if (rng.f() < 0.35f) {
+                b.box(vec3(-hw * 0.35f, by + 1.12f, -hd - 1.22f), vec3(0.7f, 0.04f, 0.06f), vec4(0.85f, 0.7f, 0.75f, 0), &xf);
+                b.box(vec3(-hw * 0.35f, by + 0.75f, -hd - 1.27f), vec3(0.7f, 0.38f, 0.04f), vec4(0.85f, 0.7f, 0.75f, 0), &xf);
+            }
+        }
+        // services: air-con units, a water heater, a gas meter
+        {
+            float sx = (rng.f() < 0.5f ? -1.f : 1.f);
+            b.box(vec3(sx * (hw + 0.2f), 0.33f, hd * 0.3f), vec3(0.2f, 0.3f, 0.4f), vec4(0.88f, 0.88f, 0.86f, 0), &xf);
+            b.box(vec3(sx * (hw + 0.41f), 0.33f, hd * 0.3f), vec3(0.01f, 0.2f, 0.2f), vec4(0.15f, 0.15f, 0.15f, 0), &xf);
+            if (floors == 2) b.box(vec3(-sx * (hw + 0.2f), fh + 0.5f, -hd * 0.4f), vec3(0.2f, 0.28f, 0.38f), vec4(0.88f, 0.88f, 0.86f, 0), &xf);
+            b.box(vec3(-sx * (hw + 0.32f), 0.9f, hd - 0.5f), vec3(0.3f, 0.9f, 0.3f), vec4(0.93f, 0.93f, 0.92f, 0), &xf);  // water heater
+            b.box(vec3(sx * (hw + 0.08f), 1.1f, -hd * 0.5f), vec3(0.06f, 0.15f, 0.12f), vec4(0.8f, 0.8f, 0.78f, 7), &xf);  // gas meter
+        }
         if (shop) {
-            // lit shop front, a fabric awning, a vertical sign
+            // lit shop front, a fabric awning, a projecting sign, a fascia board, vending machines
             b.box(vec3(0, 1.35f, -hd - 0.04f), vec3(hw * 0.85f, 0.95f, 0.03f), vec4(1.f, 0.86f, 0.62f, 20), &xf);
             mat4 aw = xf * translate(vec3(0, 2.55f, -hd - 0.7f)) * rotateX(-0.28f);
             vec4 awc = rng.f() < 0.5f ? vec4(0.15f, 0.25f, 0.55f, 21) : vec4(0.7f, 0.12f, 0.1f, 21);
             b.box(vec3(0, 0, 0), vec3(hw * 0.9f, 0.04f, 0.75f), awc, &aw);
             float sx = rng.range(-hw + 0.6f, hw - 0.6f);
-            {
-                float sh = 1.3f + floors * 0.4f;
-                vec3 sc = xf.transformPoint(vec3(sx, 4.2f + (floors - 1) * 1.5f, -hd - 0.5f));
-                signBoardBox(b, sc, r, 0.45f, sh, 0.08f, SV_SHOP0 + rng.irange(0, SV_SHOP_N - 1), true, true);
-                signBoardBox(b, xf.transformPoint(vec3(0, 2.95f, -hd - 0.06f)), -f, std::min(hw * 0.8f, 2.4f), 0.3f, 0.04f,
-                             SH_SHOP0 + rng.irange(0, SH_SHOP_N - 1), false, false);
-            }
-            if (rng.f() < 0.45f) {  // a pair of vending machines by the door
+            float sh = 1.3f + floors * 0.4f;
+            signBoardBox(b, xf.transformPoint(vec3(sx, 4.0f + (floors - 1) * 1.3f, -hd - 0.5f)), r, 0.45f, sh, 0.08f, SV_SHOP0 + rng.irange(0, SV_SHOP_N - 1), true, true);
+            signBoardBox(b, xf.transformPoint(vec3(0, 2.95f, -hd - 0.06f)), -f, std::min(hw * 0.8f, 2.4f), 0.3f, 0.04f, SH_SHOP0 + rng.irange(0, SH_SHOP_N - 1), false, false);
+            if (rng.f() < 0.6f)
                 for (int k = 0; k < 2; k++) {
                     vec3 vm(hw + 0.9f + k * 1.05f, 0.95f, -hd + 0.5f);
-                    b.box(vm, vec3(0.48f, 0.95f, 0.38f), vec4(0.9f, 0.9f, 0.92f, 0), &xf);
+                    b.box(vm, vec3(0.48f, 0.95f, 0.38f), k ? vec4(0.75f, 0.1f, 0.1f, 0) : vec4(0.9f, 0.9f, 0.92f, 0), &xf);
                     b.box(vm + vec3(0, 0.25f, -0.39f), vec3(0.4f, 0.55f, 0.01f), vec4(1.f, 0.95f, 0.85f, 20), &xf);
+                }
+        } else {
+            // the plot: a low block wall along the front with a gate, a garden pine, a carport
+            float wz = -hd - 2.0f;
+            float gx0 = doorX - 1.1f, gx1 = doorX + 1.1f;
+            for (int seg = 0; seg < 2; seg++) {
+                float xa = seg ? gx1 : -hw - 1.2f, xb = seg ? hw + 1.2f : gx0;
+                if (xb - xa < 0.4f) continue;
+                b.box(vec3((xa + xb) * 0.5f, 0.5f, wz), vec3((xb - xa) * 0.5f, 0.5f, 0.08f), block, &xf);
+                b.box(vec3((xa + xb) * 0.5f, 1.03f, wz), vec3((xb - xa) * 0.5f + 0.02f, 0.04f, 0.11f), vec4(0.6f, 0.59f, 0.56f, 0), &xf);
+            }
+            for (int k = -1; k <= 1; k += 2) b.box(vec3(k < 0 ? gx0 : gx1, 0.65f, wz), vec3(0.15f, 0.65f, 0.15f), block, &xf);  // gate posts
+            b.box(vec3(gx0 - 0.02f, 1.0f, wz - 0.16f), vec3(0.12f, 0.15f, 0.06f), vec4(0.85f, 0.2f, 0.15f, 0), &xf);   // post box
+            b.box(vec3(gx1 + 0.02f, 1.05f, wz - 0.16f), vec3(0.12f, 0.06f, 0.01f), vec4(0.85f, 0.82f, 0.72f, 0), &xf);  // name plate
+            if (rng.f() < 0.5f) {  // a cloud-pruned pine behind the wall
+                vec3 tp = P(-doorX * 0.6f, 0, -hd - 1.1f);
+                b.tube(tp, tp + upv * 1.6f + r * 0.3f, 0.1f, 0.06f, 5, darkWood);
+                for (int k = 0; k < 4; k++)
+                    b.sphere(tp + upv * (1.1f + k * 0.45f) + r * (std::sin(k * 2.1f) * 0.45f) + f * (std::cos(k * 2.1f) * 0.25f), 0.45f - k * 0.06f, 1,
+                             vec4(0.16f, 0.32f, 0.14f, 0), 0.15f, uint32_t(houses * 5 + k));
+            }
+            if (rng.f() < 0.45f) {  // carport beside the house with a kei car in it
+                float sxc = doorX > 0 ? -1.f : 1.f;
+                float cx = sxc * (hw + 1.6f);
+                vec3 cpw = P(cx, 0, -hd + 1.5f);
+                if (roadDistAt(cpw.x, cpw.z) > 2.5f && !inBox(cpw.x, cpw.z, 0.5f)) {
+                    for (int px = -1; px <= 1; px += 2)
+                        for (int pz = -1; pz <= 1; pz += 2) b.box(vec3(cx + px * 1.35f, 1.1f, -hd + 1.5f + pz * 2.3f), vec3(0.05f, 1.1f, 0.05f), alu, &xf);
+                    b.box(vec3(cx, 2.24f, -hd + 1.5f), vec3(1.5f, 0.04f, 2.5f), vec4(0.55f, 0.62f, 0.66f, 0), &xf);
+                    const vec4 kc[] = {{0.95f, 0.95f, 0.94f, 0}, {0.7f, 0.72f, 0.74f, 7}, {0.55f, 0.75f, 0.85f, 0}, {0.92f, 0.7f, 0.75f, 0}, {0.1f, 0.1f, 0.12f, 0}, {0.85f, 0.8f, 0.6f, 0}};
+                    vec4 col = kc[rng.irange(0, 5)];
+                    float kz = -hd + 1.5f;
+                    b.box(vec3(cx, 0.6f, kz), vec3(0.72f, 0.36f, 1.65f), col, &xf);                   // body
+                    b.box(vec3(cx, 1.28f, kz + 0.25f), vec3(0.7f, 0.33f, 1.1f), col, &xf);             // tall boxy cabin
+                    b.box(vec3(cx, 1.28f, kz - 0.86f), vec3(0.66f, 0.28f, 0.03f), glassC, &xf);         // windscreen
+                    for (int s2 = -1; s2 <= 1; s2 += 2) b.box(vec3(cx + s2 * 0.705f, 1.3f, kz + 0.25f), vec3(0.01f, 0.24f, 0.95f), glassC, &xf);
+                    b.box(vec3(cx, 1.3f, kz + 1.355f), vec3(0.6f, 0.24f, 0.01f), glassC, &xf);
+                    for (int s2 = -1; s2 <= 1; s2 += 2) {
+                        b.box(vec3(cx + s2 * 0.5f, 0.68f, kz - 1.66f), vec3(0.14f, 0.07f, 0.01f), vec4(1.f, 0.97f, 0.9f, 3), &xf);
+                        for (int s3 = -1; s3 <= 1; s3 += 2)
+                            b.tube(P(cx + s2 * 0.6f, 0.27f, kz + s3 * 1.1f), P(cx + s2 * 0.76f, 0.27f, kz + s3 * 1.1f), 0.27f, 0.27f, 10, vec4(0.04f, 0.04f, 0.04f, 0));
+                    }
+                    b.box(vec3(cx, 0.6f, kz - 1.67f), vec3(0.2f, 0.06f, 0.01f), vec4(0.95f, 0.85f, 0.2f, 0), &xf);  // yellow kei plate
+                    float ex = std::fabs(r.x) * 1.5f + std::fabs(f.x) * 2.5f, ez = std::fabs(r.z) * 1.5f + std::fabs(f.z) * 2.5f;
+                    boxes.push_back({cpw.x - ex * 0.8f, cpw.z - ez * 0.8f, cpw.x + ex * 0.8f, cpw.z + ez * 0.8f, g + 2.3f});
                 }
             }
         }
@@ -1481,6 +1631,7 @@ void World::buildJapan() {
         float ex = std::fabs(r.x) * hw + std::fabs(f.x) * hd, ez = std::fabs(r.z) * hw + std::fabs(f.z) * hd;
         boxes.push_back({c.x - ex * 0.85f, c.z - ez * 0.85f, c.x + ex * 0.85f, c.z + ez * 0.85f, g + H});
         houses++;
+        lastHouse = c; lastHouseF = f;
         return true;
     };
     auto clearSpot = [&](vec3 c, float rad) {
@@ -1496,7 +1647,8 @@ void World::buildJapan() {
             if (rd.name != road || rd.pts.size() < 10) continue;
             int n = int(rd.pts.size());
             int i0 = int(f0 * (n - 1)), i1 = int(f1 * (n - 1));
-            float along = 0, lastPole = -1e9f;
+            float along = 0, lastPole = -1e9f, lastVend = 0;
+            bool busStop = false;
             vec3 prevPole[2];
             bool havePole = false;
             for (int i = i0; i < i1; i++) {
@@ -1527,13 +1679,88 @@ void World::buildJapan() {
                         prevPole[0] = tops[0]; prevPole[1] = tops[1];
                         havePole = true;
                         poles++;
+                        if (poles % 4 == 1) {  // an orange convex traffic mirror on the other kerb
+                            vec3 mp = p - side * (rd.width * 0.5f + 1.2f);
+                            mp.y = heightAt(mp.x, mp.z) - 0.05f;
+                            if (roadDistAt(mp.x, mp.z) > 0.6f && !inBox(mp.x, mp.z, 0.5f)) {
+                                vec4 org(0.95f, 0.45f, 0.08f, 0);
+                                b.cylinder(mp, 0.05f, 3.1f, 6, org);
+                                vec3 fn = normalize(t * (rng.f() < 0.5f ? 1.f : -1.f) + side * 0.6f);  // looks along the road
+                                vec3 mc = mp + vec3(0, 3.05f, 0) + fn * 0.12f, rt2 = normalize(cross(fn, vec3(0, 1, 0)));
+                                for (int k = 0; k < 16; k++) {
+                                    float a0 = k / 16.f * 6.2832f, a1 = (k + 1) / 16.f * 6.2832f;
+                                    vec3 q0 = mc + (rt2 * std::cos(a0) + vec3(0, std::sin(a0), 0)) * 0.42f, q1 = mc + (rt2 * std::cos(a1) + vec3(0, std::sin(a1), 0)) * 0.42f;
+                                    vec3 i0 = mc + (rt2 * std::cos(a0) + vec3(0, std::sin(a0), 0)) * 0.36f + fn * 0.02f, i1 = mc + (rt2 * std::cos(a1) + vec3(0, std::sin(a1), 0)) * 0.36f + fn * 0.02f;
+                                    b.flatQuad(q0, q1, i1, i0, org); b.flatQuad(i0, i1, q1, q0, org);
+                                    b.flatTri(mc + fn * 0.06f, i0, i1, vec4(0.6f, 0.62f, 0.65f, 4)); b.flatTri(mc + fn * 0.06f, i1, i0, vec4(0.6f, 0.62f, 0.65f, 4));
+                                    b.flatTri(mc - fn * 0.02f, q1, q0, org);
+                                }
+                                pendingTrunks.push_back({mp.x, mp.z, 0.12f});
+                            }
+                        }
                     }
                 }
                 // buildings, both sides, one every 11-16 m
-                if (i % 3 != 0 || rng.f() > density) continue;
+                // roadside life: vending machines, a bus stop, a jizo statue in his red bib
+                if (!farm && along - lastVend > 55.f && rng.f() < 0.5f) {
+                    lastVend = along;
+                    float sg = rng.f() < 0.5f ? -1.f : 1.f;
+                    vec3 q = p + side * (sg * (rd.width * 0.5f + 1.3f));
+                    if (roadDistAt(q.x, q.z) > 0.6f && !inBox(q.x, q.z, 1.2f)) {
+                        q.y = heightAt(q.x, q.z) - 0.05f;
+                        vec3 fn = side * -sg, rt2 = normalize(cross(fn, vec3(0, 1, 0)));
+                        mat4 vx = basis(rt2, vec3(0, 1, 0), -fn, q);
+                        int cnt = rng.irange(2, 4);
+                        const vec4 vmc[] = {{0.92f, 0.92f, 0.93f, 0}, {0.78f, 0.1f, 0.1f, 0}, {0.12f, 0.3f, 0.7f, 0}, {0.15f, 0.55f, 0.3f, 0}};
+                        for (int k = 0; k < cnt; k++) {
+                            float x = (k - (cnt - 1) * 0.5f) * 1.02f;
+                            b.box(vec3(x, 0.95f, 0), vec3(0.49f, 0.95f, 0.38f), vmc[rng.irange(0, 3)], &vx);
+                            b.box(vec3(x, 1.25f, -0.39f), vec3(0.42f, 0.48f, 0.01f), vec4(1.f, 0.96f, 0.86f, 20), &vx);   // lit display of cans
+                            b.box(vec3(x, 1.88f, -0.39f), vec3(0.42f, 0.06f, 0.01f), vec4(0.2f, 0.6f, 1.f, 15), &vx);
+                            b.box(vec3(x, 0.38f, -0.4f), vec3(0.3f, 0.07f, 0.02f), vec4(0.08f, 0.08f, 0.08f, 0), &vx);    // take-out slot
+                        }
+                        b.box(vec3((cnt * 0.5f + 0.25f) * 1.02f, 0.4f, -0.1f), vec3(0.22f, 0.4f, 0.22f), vec4(0.3f, 0.45f, 0.75f, 0), &vx);  // recycling bin
+                        float ex = cnt * 0.55f + 0.5f;
+                        boxes.push_back({q.x - ex, q.z - ex, q.x + ex, q.z + ex, q.y + 1.9f});
+                        rebuildBoxGrid();
+                    }
+                }
+                if (!farm && !busStop && along > 120.f) {
+                    busStop = true;
+                    vec3 q = p + side * (rd.width * 0.5f + 1.1f);
+                    if (roadDistAt(q.x, q.z) > 0.5f && !inBox(q.x, q.z, 1.f)) {
+                        q.y = heightAt(q.x, q.z) - 0.05f;
+                        b.cylinder(q, 0.04f, 2.3f, 6, vec4(0.8f, 0.8f, 0.8f, 7));
+                        b.cylinder(q, 0.22f, 0.12f, 10, vec4(0.5f, 0.5f, 0.5f, 0));
+                        vec3 sc = q + vec3(0, 2.15f, 0);
+                        for (int k = 0; k < 2; k++) {
+                            vec3 fn = k ? t : -t;
+                            signFace(b, sc + fn * 0.02f, fn, 0.32f, 0.16f, SG_STATION, false);
+                        }
+                        vec3 bq = q + side * 1.2f + t * 1.5f;
+                        bq.y = heightAt(bq.x, bq.z);
+                        mat4 bx = basis(t, vec3(0, 1, 0), side, bq);
+                        b.box(vec3(0, 0.45f, 0), vec3(0.9f, 0.04f, 0.22f), vec4(0.55f, 0.4f, 0.25f, 0), &bx);  // bench
+                        for (int k = -1; k <= 1; k += 2) b.box(vec3(k * 0.8f, 0.22f, 0), vec3(0.04f, 0.22f, 0.2f), vec4(0.4f, 0.4f, 0.42f, 7), &bx);
+                        pendingTrunks.push_back({q.x, q.z, 0.1f});
+                    }
+                }
+                if (rng.f() < 0.012f) {  // jizo: little stone figure with a red bib and cap
+                    vec3 q = p + side * ((rng.f() < 0.5f ? -1.f : 1.f) * (rd.width * 0.5f + 1.6f));
+                    if (roadDistAt(q.x, q.z) > 0.8f && !inBox(q.x, q.z, 0.6f)) {
+                        q.y = heightAt(q.x, q.z);
+                        vec4 st(0.6f, 0.59f, 0.55f, 0), red(0.85f, 0.12f, 0.1f, 0);
+                        b.box(q + vec3(0, 0.15f, 0), vec3(0.3f, 0.15f, 0.3f), st);
+                        b.tube(q + vec3(0, 0.3f, 0), q + vec3(0, 0.85f, 0), 0.17f, 0.13f, 8, st);
+                        b.sphere(q + vec3(0, 1.0f, 0), 0.14f, 1, st);
+                        b.cone(q + vec3(0, 0.55f, 0), 0.2f, 0.3f, 8, red);
+                        b.cone(q + vec3(0, 1.08f, 0), 0.15f, 0.12f, 8, red);
+                    }
+                }
+                if (i % 2 != 0 || rng.f() > density) continue;
                 for (int s = -1; s <= 1; s += 2) {
                     if (rng.f() > density) continue;
-                    float w = farm ? rng.range(10.f, 14.f) : rng.range(7.5f, 11.f), d = farm ? rng.range(8.f, 10.f) : rng.range(7.f, 9.5f);
+                    float w = farm ? rng.range(10.f, 14.f) : rng.range(7.f, 10.f), d = farm ? rng.range(8.f, 10.f) : rng.range(7.f, 9.5f);
                     vec3 c = p + side * (s * (rd.width * 0.5f + 2.5f + d * 0.5f));
                     if (!clearSpot(c, std::max(w, d) * 0.6f)) continue;
                     if (inBox(c.x, c.z, 2.f)) continue;
@@ -2247,9 +2474,11 @@ void World::buildJapan() {
                 for (auto& q : placed) far &= std::hypot(q.x - mid.x, q.z - mid.z) > 650.f;
                 if (len > 140.f && far && std::hypot(mid.x - festCenter.x, mid.z - festCenter.z) > 400.f && !urban(mid.x, mid.z, 80.f)) {
                     int cut = std::min(j, i + int((j - i) * std::min(1.f, 420.f / len)));  // at most ~420 m of town
+                    int h0 = houses;
                     town(rd.name.c_str(), i / float(n - 1), cut / float(n - 1), farm ? 0.5f : 0.92f, farm);
                     placed.push_back(mid);
                     towns++;
+                    SDL_Log("Japan: town on %s, %d houses, last at (%.0f, %.0f) facing %.2f", rd.name.c_str(), houses - h0, lastHouse.x, lastHouse.z, std::atan2(-lastHouseF.x, -lastHouseF.z));
                 }
                 i = j;
             }
@@ -2316,7 +2545,7 @@ void World::buildJapan() {
                 height[iz * N + ix] = lerpf(height[iz * N + ix], g, 1.f - smoothstepf(30.f, 55.f, d));
             }
         }
-        vec4 stone(0.55f, 0.53f, 0.49f, 0), white(0.93f, 0.92f, 0.89f, 0), roof(0.24f, 0.28f, 0.32f, 0), dark(0.14f, 0.14f, 0.16f, 0);
+        vec4 stone(0.55f, 0.53f, 0.49f, 0), white(0.93f, 0.92f, 0.89f, 0), roof(0.24f, 0.28f, 0.32f, 23), dark(0.14f, 0.14f, 0.16f, 0);
         // battered stone base: stacked slabs stepping in
         for (int k = 0; k < 6; k++) {
             float s2 = 24.f - k * 1.1f;
@@ -2435,7 +2664,7 @@ void World::buildJapan() {
     auto niomon = [&](vec3 c, vec3 fwd) {
         vec3 rt = normalize(cross(fwd, up));
         c.y = heightAt(c.x, c.z);
-        vec4 red(0.86f, 0.24f, 0.1f, 0), white(0.94f, 0.92f, 0.87f, 0), roofC(0.17f, 0.18f, 0.2f, 0), stone(0.55f, 0.54f, 0.5f, 0), gold(0.85f, 0.65f, 0.2f, 7);
+        vec4 red(0.86f, 0.24f, 0.1f, 0), white(0.94f, 0.92f, 0.87f, 0), roofC(0.17f, 0.18f, 0.2f, 23), stone(0.55f, 0.54f, 0.5f, 0), gold(0.85f, 0.65f, 0.2f, 7);
         mat4 xf = basis(rt, up, fwd, c);
         b.box(vec3(0, -0.2f, 0), vec3(7.4f, 0.5f, 3.6f), stone, &xf);
         for (float x : {-5.6f, -2.7f, 2.7f, 5.6f})
@@ -2472,7 +2701,7 @@ void World::buildJapan() {
         float g0 = heightAt(c.x, c.z);
         levelDisc(c, 15.f, 30.f, g0);
         float g = g0 - 0.2f;
-        vec4 red(0.84f, 0.2f, 0.09f, 0), deep(0.55f, 0.12f, 0.06f, 0), white(0.93f, 0.91f, 0.86f, 0), roofG(0.27f, 0.35f, 0.34f, 0),
+        vec4 red(0.84f, 0.2f, 0.09f, 0), deep(0.55f, 0.12f, 0.06f, 0), white(0.93f, 0.91f, 0.86f, 0), roofG(0.27f, 0.35f, 0.34f, 23),
              gold(0.85f, 0.65f, 0.2f, 7), stone(0.55f, 0.54f, 0.5f, 0);
         b.box(vec3(c.x, g + 0.5f, c.z), vec3(7.5f, 0.6f, 7.5f), stone);
         b.box(vec3(c.x, g + 1.2f, c.z), vec3(6.6f, 0.15f, 6.6f), stone);
