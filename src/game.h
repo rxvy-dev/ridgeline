@@ -364,6 +364,13 @@ private:
     GLuint logoTex = 0;
     void drawLogo(float x, float y, float w, float alpha = 1.f);
     void drawMenuHeader(float x0, float y0, float W, const std::string& section);
+    // festival menu theme: teal backdrop with drifting triangles, the car/driver header, tab bar
+    void drawThemeBackdrop(float alpha);
+    float drawThemeHeader(float x0, float y0, float W, float in);   // returns the bottom edge
+    float drawThemeTabs(float x0, float y0, float W, const char* const* names, int count, int sel, float in);
+    void drawThemePrompts(const std::string& spec);
+    void drawPetals(float alpha, float t);
+    int tabDir = 1;  // which way the tiles slide when the tab changes
     State lastState = ST_TITLE;
     void buildEras();
     std::string eraDate(int era) const;
@@ -391,6 +398,7 @@ private:
     int garageHome = -1;              // garage opened from this estate (-1 = festival hub)
     int gpsEstate = -1;
     int gpsLandmark = -1;
+    float hudPanelW = 250.f;  // width of the top-left HUD panels this frame
     bool ownsEstate(int i) const { return std::find(ownedEstates.begin(), ownedEstates.end(), i) != ownedEstates.end(); }
     void updateHomes();
     bool homeInteract();

@@ -521,10 +521,13 @@ void Game::drawFestivalWorld(const Camera& cam_) {
 void Game::drawFestivalHud() {
     if (festDay < 0) return;
     float u = hud.ui;
-    float x = 18 * u, y = 132 * u, w = 250 * u;
+    float x = 18 * u, y = 132 * u, w = std::max(250 * u, hudPanelW);
     float a = festShow > 0 ? 1.f : 0.72f;
-    hud.rect(x, y, w, 24 * u + 21 * u * 3, vec4(0.03f, 0.03f, 0.04f, 0.62f * a));
-    hud.rect(x, y, 5 * u, 24 * u + 21 * u * 3, P_GOLD);
+    // widen to the longest line so progress numbers never run off the panel
+    for (int k = 0; k < 3; k++) w = std::max(w, hud.textWidth(13 * u, std::string(kPool[festPick[k]].text) + "   00,000/00,000") + 44 * u);
+    float ph = 24 * u + 21 * u * 3 + 20 * u;  // includes the lucky cats line
+    hud.rect(x, y, w, ph, vec4(0.03f, 0.03f, 0.04f, 0.62f * a));
+    hud.rect(x, y, 5 * u, ph, P_GOLD);
     char head[64];
     std::snprintf(head, sizeof(head), "FESTIVAL PLAYLIST   %d/3", __builtin_popcount(unsigned(festDone)));
     hud.text(x + 14 * u, y + 5 * u, 12 * u, head, vec4(1.f, 0.8f, 0.2f, a), 0, false);
@@ -546,7 +549,7 @@ void Game::drawFestivalHud() {
     for (auto h : catHit) got += h;
     char cb[48];
     std::snprintf(cb, sizeof(cb), "LUCKY CATS %d/%zu    STREAK %d", got, cats.size(), streak);
-    hud.text(x + 4 * u, y + 30 * u + 21 * u * 3, 11 * u, cb, vec4(1, 1, 1, 0.55f * a), 0, true);
+    hud.text(x + 14 * u, y + 27 * u + 21 * u * 3, 11 * u, cb, vec4(1, 1, 1, 0.6f * a), 0, false);
 }
 
 void Game::drawCatsOnMinimap(vec2 c, float Rr, std::function<vec2(vec3)> toScreen) {
