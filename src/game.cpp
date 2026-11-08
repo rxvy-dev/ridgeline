@@ -605,6 +605,7 @@ bool Game::load() {
     if (!f) return false;
     std::string line;
     garage.clear();
+    customEvents.clear();  // load() runs twice at startup; without this every saved event doubled each launch
     while (std::getline(f, line)) {
         auto eq = line.find('=');
         if (eq == std::string::npos) continue;
@@ -636,7 +637,17 @@ bool Game::load() {
         else if (k == "xp") xp = std::max(0, std::atoi(v.c_str()));
         else if (k == "level") level = std::max(1, std::atoi(v.c_str()));
         else if (k == "spins") wheelspins = std::max(0, std::atoi(v.c_str()));
-        else if (k == "myevent") { CustomEvent ce; if (decodeEvent(v, ce)) { ce.name = ""; customEvents.push_back(ce); } }
+        else if (k == "myevent") {
+            CustomEvent ce;
+            if (decodeEvent(v, ce)) {
+                ce.name = "";
+                // saves written before the fix hold many copies of the same event: keep one
+                std::string enc = encodeEvent(ce);
+                bool dup = false;
+                for (auto& o : customEvents) if (encodeEvent(o) == enc) { dup = true; break; }
+                if (!dup) customEvents.push_back(ce);
+            }
+        }
         else if (k == "estate") { int e = std::atoi(v.c_str()); if (e >= 0 && e < int(world.estates.size()) && !ownsEstate(e)) ownedEstates.push_back(e); }
         else if (k == "stunt") {
             int si = -1; float bv = 0;
@@ -1872,7 +1883,11 @@ void Game::drawImported(Racer& r, bool glassPass, const Camera& c) {
         s.set("uModel", importedPartMatrix(r, part.role));
         setCosmeticUniforms(s, r, part.role == 0);
         s.set("uColor", mt ? mt->color : vec4(0.6f, 0.6f, 0.6f, 1));
-        s.set("uFlags", mt ? int(mt->flags) : 0);
+        int fl = mt ? int(mt->flags) : 0;
+        // a wheel sharing the body's paint material (some packs do this) would come out body coloured:
+        // wheels get a metallic finish instead
+        if (part.role >= 1 && part.role <= 8 && (fl & (IF_PAINT | 256))) fl = (fl & ~(IF_PAINT | 256)) | IF_CHROME;
+        s.set("uFlags", fl);
         s.set("uEmis", mt ? mt->emis : vec3(0, 0, 0));
         int hb = mt && mt->base >= 0, hn = mt && mt->normal >= 0, he = mt && mt->emissive >= 0;
         s.set("uHasBase", hb);
