@@ -57,16 +57,21 @@ float World::baseHeight(float x, float z) const {
     hOut += north * (230.f + ridge2 * 380.f);
     float inner = 1.f - smoothstepf(1450.f, 1900.f, edge);
     h = lerpf(hOut, hIn, inner);
-    // ---- Fuji: a lone volcanic cone in the north-west, concave flanks, a crater at the top
+    // ---- Fuji: a lone stratovolcano. Long concave skirts, a steepening upper cone, a flat-topped
+    // summit with a crater, and radial gullies scoring the upper flanks (the snow streaks follow them).
     {
-        float fd = std::hypot(x - kFuji.x, z - kFuji.z);
-        if (fd < 2300.f) {
-            float t = clampf(1.f - fd / 2100.f, 0.f, 1.f);
-            float cone = 40.f + 940.f * std::pow(t, 1.65f);
-            cone += fbm(x / 160.f, z / 160.f, 3, 91) * 18.f * t;       // lava ribs down the flanks
-            cone -= (1.f - smoothstepf(70.f, 150.f, fd)) * 55.f;        // crater
-            float k = smoothstepf(2300.f, 1500.f, fd);
-            h = lerpf(h, std::max(h * 0.6f, cone), k);
+        float dx = x - kFuji.x, dz = z - kFuji.z;
+        float fd = std::sqrt(dx * dx + dz * dz);
+        if (fd < kFujiR) {
+            float t = 1.f - fd / kFujiR;
+            float rc = 150.f;  // summit plateau radius
+            float tt = std::min(t, 1.f - rc / kFujiR);
+            float cone = kFujiBase + kFujiH * std::pow(tt / (1.f - rc / kFujiR), 2.2f);
+            cone -= (1.f - smoothstepf(60.f, 125.f, fd)) * 45.f;  // the crater
+            float rib = fujiRib(std::atan2(dz, dx), fd);
+            cone -= 9.f * smoothstepf(0.25f, 0.8f, t) * (1.f - smoothstepf(0.93f, 0.97f, t)) * (0.5f + 0.5f * rib);
+            float k = smoothstepf(kFujiR, kFujiR * 0.62f, fd);
+            h = lerpf(h, std::max(h * (1.f - 0.4f * k), cone), k);
         }
     }
     // ---- valleys through the ridge for the highways
@@ -465,6 +470,7 @@ void World::scatter(uint32_t seed) {
                 continue;
             }
             if (roll > dens) continue;
+            if (std::hypot(x - kFuji.x, z - kFuji.z) < kFujiR && h > kFujiBase + 260.f + fbm(x / 90.f, z / 90.f, 2, 17) * 60.f) continue;  // Fuji's treeline
             float pineP = clampf(0.30f + (h - 50.f) / 140.f + fbm(x / 200.f, z / 200.f, 2, 91) * 0.5f, 0.12f, 0.96f);
             if (rng.f() < pineP) {
                 float sc = rng.range(0.65f, 1.35f);

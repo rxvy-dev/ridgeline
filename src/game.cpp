@@ -2226,6 +2226,7 @@ void Game::renderWorld(const Camera& c, bool showroom) {
             R.setCommon(R.terrain, pc);
             R.terrain.set("uWater", world.waterLevel);
         R.terrain.set("uHalf", World::HALF);
+        R.terrain.set("uFuji", vec4(kFuji.x, kFujiBase, kFuji.z, kFujiR));
         glActiveTexture(GL_TEXTURE0 + U_HEIGHT); glBindTexture(GL_TEXTURE_2D, world.heightTex); glActiveTexture(GL_TEXTURE0);
             for (auto& ch : world.chunks) {
                 float dx = ch.center.x - pp.x, dz = ch.center.z - pp.z;
@@ -2264,6 +2265,7 @@ void Game::renderWorld(const Camera& c, bool showroom) {
         R.setCommon(R.terrain, rc);
         R.terrain.set("uWater", world.waterLevel);
         R.terrain.set("uHalf", World::HALF);
+        R.terrain.set("uFuji", vec4(kFuji.x, kFujiBase, kFuji.z, kFujiR));
         glActiveTexture(GL_TEXTURE0 + U_HEIGHT); glBindTexture(GL_TEXTURE_2D, world.heightTex); glActiveTexture(GL_TEXTURE0);
         float rlim = std::min(drawDist, 1400.f);
         for (auto& ch : world.chunks) {
@@ -2299,6 +2301,7 @@ void Game::renderWorld(const Camera& c, bool showroom) {
     R.setCommon(R.terrain, c);
     R.terrain.set("uWater", world.waterLevel);
         R.terrain.set("uHalf", World::HALF);
+        R.terrain.set("uFuji", vec4(kFuji.x, kFujiBase, kFuji.z, kFujiR));
         glActiveTexture(GL_TEXTURE0 + U_HEIGHT); glBindTexture(GL_TEXTURE_2D, world.heightTex); glActiveTexture(GL_TEXTURE0);
     for (auto& ch : world.chunks) {
         // chunks are 300 m across: judge them by their nearest point and their corners, not the centre,

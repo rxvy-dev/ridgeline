@@ -310,6 +310,7 @@ uniform sampler2D tSand, tLeafGround, tGrassN, tForestN;
 uniform sampler2D tHeight;
 uniform float uHalf;
 uniform float uFarCut;  // far-terrain pass: skip what the detailed chunks already cover
+uniform vec4 uFuji;     // Fuji: centre x, base height, centre z, skirt radius
 out vec4 FragColor;
 // caustics: bright wavy lines of sunlight focused by the surface onto the bed
 float caustic(vec2 p, float t) {
@@ -382,7 +383,7 @@ void main(){
     // landform from the height field: gullies (concave) collect water and loose stones,
     // ridges and spurs (convex) are bare and lighter
     vec2 huv = (p.xz + uHalf) / (2.0 * uHalf);
-    float tx = 1.0 / 2400.0;
+    float tx = 1.0 / 3200.0;
     float h0 = texture(tHeight, huv).r;
     float lap = texture(tHeight, huv + vec2(tx * 3.0, 0)).r + texture(tHeight, huv - vec2(tx * 3.0, 0)).r
               + texture(tHeight, huv + vec2(0, tx * 3.0)).r + texture(tHeight, huv - vec2(0, tx * 3.0)).r - 4.0 * h0;
@@ -403,12 +404,37 @@ void main(){
     c *= 1.0 - gully * 0.22;
     n = normalize(mix(n, rn, r));
 
+    // Fuji: bare red-brown volcanic scoria above the treeline, snow on the upper third streaming
+    // down the radial gullies, a flat white summit
+    float fujiM = 0.0, fujiSnow = 0.0;
+    if (uFuji.w > 0.0) {
+        vec2 fv = p.xz - uFuji.xz;
+        float fd = length(fv);
+        fujiM = 1.0 - smoothstep(uFuji.w * 0.62, uFuji.w * 0.9, fd);
+        if (fujiM > 0.0) {
+            float hrel = p.y - uFuji.y;
+            float ang = atan(fv.y, fv.x);
+            float rib = sin(ang * 34.0 + 2.5 * sin(ang * 7.0 + fd * 0.0021) + 1.7 * sin(ang * 3.0 - fd * 0.0013));
+            float fine = sin(ang * 140.0 + 3.0 * sin(ang * 23.0 + fd * 0.01)) * 0.5 + 0.5;
+            vec3 scoria = mix(vec3(0.20, 0.12, 0.10), vec3(0.33, 0.20, 0.15), vnoise(p.xz * 0.03)) * (0.8 + 0.4 * vnoise(p.xz * 0.35));
+            scoria *= 0.75 + 0.5 * tri(tRock, p, w, rs * 0.7).r;
+            scoria *= 0.9 + 0.15 * rib;  // ridges a touch lighter, gullies darker
+            float bare = smoothstep(220.0, 360.0, hrel + vnoise(p.xz * 0.01) * 60.0);
+            c = mix(c, scoria, bare * fujiM);
+            n = normalize(mix(n, normalize(n + vec3(rn.x - n.x, 0.0, rn.z - n.z) * 0.4), bare * fujiM));
+            // snow: comes lower down the gullies, in fine streaks
+            float start = 610.0 - rib * 80.0 - fine * 45.0 - (vnoise(vec2(ang * 9.0, fd * 0.004)) - 0.5) * 70.0;
+            fujiSnow = smoothstep(start, start + 25.0, hrel) * fujiM;
+            fujiSnow = max(fujiSnow, smoothstep(880.0, 900.0, hrel) * fujiM);  // summit cap
+        }
+    }
     // snow settles where it can: high up, on flat ground and ledges; steep faces shed it
     float snowLine = 255.0 + macro * 70.0 + (vnoise(p.xz * 0.02) - 0.5) * 40.0;
     float sn = smoothstep(snowLine, snowLine + 35.0, p.y) * smoothstep(0.52, 0.82, n.y + ridge * 0.05 - gully * 0.08);
     sn = max(sn, smoothstep(snowLine + 60.0, snowLine + 120.0, p.y) * smoothstep(0.3, 0.55, n.y));
     // albedo kept below 0.9 so lit snow keeps its shading after tone mapping
     vec3 snowC = vec3(0.68, 0.71, 0.77) * (0.88 + 0.12 * vnoise(p.xz * 0.7)) * (0.94 + 0.06 * macro2);
+    sn = mix(sn, fujiSnow, fujiM);  // Fuji has its own snow line
     c = mix(c, snowC, sn);
     // wind-packed ripples and drifts: a little relief so sunlit snow is not a flat sheet
     vec2 sq = p.xz * vec2(0.55, 0.22);

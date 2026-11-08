@@ -23,6 +23,11 @@ struct Box { float x0, z0, x1, z1, top; };  // axis-aligned solid (buildings, co
 // regions outside the original valley
 struct Region { const char* name; float x0, z0, x1, z1; };
 static const vec3 kFuji(-1700.f, 0.f, 3050.f);
+static const float kFujiR = 2800.f, kFujiH = 960.f, kFujiBase = 40.f;
+// radial gully pattern on Fuji (the terrain shader evaluates the same formula for the snow streaks)
+inline float fujiRib(float ang, float fd) {
+    return std::sin(ang * 34.f + 2.5f * std::sin(ang * 7.f + fd * 0.0021f) + 1.7f * std::sin(ang * 3.f - fd * 0.0013f));
+}
 static const Region kCity = {"Tokyo", 1785.f, -870.f, 2715.f, 225.f};
 static const Region kDocks = {"Daikoku Wharf", 150.f, -2420.f, 2300.f, -1950.f};
 
