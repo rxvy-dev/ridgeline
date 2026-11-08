@@ -526,11 +526,15 @@ void Game::drawFestivalHud() {
     // widen to the longest line so progress numbers never run off the panel
     for (int k = 0; k < 3; k++) w = std::max(w, hud.textWidth(13 * u, std::string(kPool[festPick[k]].text) + "   00,000/00,000") + 44 * u);
     float ph = 24 * u + 21 * u * 3 + 20 * u;  // includes the lucky cats line
-    hud.rect(x, y, w, ph, vec4(0.03f, 0.03f, 0.04f, 0.62f * a));
-    hud.rect(x, y, 5 * u, ph, P_GOLD);
+    themePanel(x, y, w, ph, 0.85f + 0.15f * a);
     char head[64];
     std::snprintf(head, sizeof(head), "FESTIVAL PLAYLIST   %d/3", __builtin_popcount(unsigned(festDone)));
-    hud.text(x + 14 * u, y + 5 * u, 12 * u, head, vec4(1.f, 0.8f, 0.2f, a), 0, false);
+    {   // title on a black slanted tab
+        float tw = hud.textWidth(12 * u, head) + 28 * u;
+        hud.quad(vec2(x + 8 * u, y), vec2(x + tw + 8 * u, y), vec2(x + tw, y + 20 * u), vec2(x, y + 20 * u), vec4(0.04f, 0.04f, 0.04f, 0.95f));
+        hud.rect(x, y + 18 * u, tw - 2 * u, 2 * u, vec4(0.98f, 0.86f, 0.2f, 1));
+        hud.text(x + 12 * u, y + 4 * u, 12 * u, head, vec4(0.98f, 0.86f, 0.2f, 1), 0, false);
+    }
     for (int k = 0; k < 3; k++) {
         const Challenge& c = kPool[festPick[k]];
         bool done = festDone & (1 << k);
@@ -541,15 +545,18 @@ void Game::drawFestivalHud() {
         else if (c.type == FS_KM) std::snprintf(buf, sizeof(buf), "%s   %.1f", c.text, festProg[k]);
         else if (c.type == FS_SKILL) std::snprintf(buf, sizeof(buf), "%s   %s", c.text, fmtThousands(int(festProg[k])).c_str());
         else std::snprintf(buf, sizeof(buf), "%s   %d/%d", c.text, int(festProg[k]), int(c.target));
-        hud.rect(x + 14 * u, ry + 4 * u, 9 * u, 9 * u, done ? vec4(0.4f, 1.f, 0.5f, a) : vec4(1, 1, 1, 0.25f * a));
-        hud.text(x + 30 * u, ry, 13 * u, buf, done ? vec4(0.4f, 1.f, 0.5f, a) : vec4(1, 1, 1, 0.85f * a), 0, false);
-        if (!done) hud.rect(x + 30 * u, ry + 17 * u, (w - 44 * u) * clampf(festProg[k] / c.target, 0.f, 1.f), 2 * u, vec4(1.f, 0.25f, 0.55f, a));
+        hud.rect(x + 14 * u, ry + 4 * u, 9 * u, 9 * u, done ? vec4(0.80f, 0.94f, 0.16f, 1) : vec4(0, 0, 0, 0.35f));
+        hud.text(x + 30 * u, ry, 13 * u, buf, done ? vec4(0.80f, 0.94f, 0.16f, 1) : vec4(1, 1, 1, 0.95f), 0, false);
+        if (!done) {
+            hud.rect(x + 30 * u, ry + 17 * u, w - 44 * u, 2 * u, vec4(0, 0, 0, 0.3f));
+            hud.rect(x + 30 * u, ry + 17 * u, (w - 44 * u) * clampf(festProg[k] / c.target, 0.f, 1.f), 2 * u, vec4(0.96f, 0.10f, 0.50f, 1));
+        }
     }
     int got = 0;
     for (auto h : catHit) got += h;
     char cb[48];
     std::snprintf(cb, sizeof(cb), "LUCKY CATS %d/%zu    STREAK %d", got, cats.size(), streak);
-    hud.text(x + 14 * u, y + 27 * u + 21 * u * 3, 11 * u, cb, vec4(1, 1, 1, 0.6f * a), 0, false);
+    hud.text(x + 14 * u, y + 27 * u + 21 * u * 3, 11 * u, cb, vec4(0.8f, 0.92f, 0.9f, 1), 0, false);
 }
 
 void Game::drawCatsOnMinimap(vec2 c, float Rr, std::function<vec2(vec3)> toScreen) {

@@ -140,6 +140,9 @@ void Vehicle::update(float dt, const World& w, const Controls& in) {
         default: break;
     }
     float mu = s.grip * surfMu * kGripScale;
+    // loose ground on a steep mountainside: the tyres lose their bite and the car slides back down
+    // (roads are graded, so only off-road slopes count). 35 degrees starts to slip, 50 is hopeless.
+    if (surface != SURF_ASPHALT) mu *= 1.f - 0.88f * smoothstepf(0.82f, 0.64f, n.y);
 
     float maxSteer = 0.6f / (1.f + v * 0.055f);
     // let the player counter-steer into a slide
@@ -297,6 +300,25 @@ void Vehicle::update(float dt, const World& w, const Controls& in) {
     vel.y -= G * (stuntDur > 0 ? 0.8f : 1.f) * dt;
     vec3 np = pos + vel * dt;
     float hNew = w.heightAt(np.x, np.z) + groundBoost;
+    // a rock face is a wall, not a ramp: off the roads, ground steeper than ~52 degrees that rises
+    // faster than the car moves stops it instead of lifting it up the cliff
+    if (np.y < hNew && w.surfaceAt(np.x, np.z) != SURF_ASPHALT) {
+        float hs = std::hypot(np.x - pos.x, np.z - pos.z);
+        vec3 nn = w.normalAt(np.x, np.z);
+        if (hs > 1e-4f && nn.y < 0.62f && hNew - std::max(hOld, pos.y - 0.3f) > hs * 0.9f) {
+            float gl = std::max(1e-5f, std::hypot(nn.x, nn.z));
+            vec2 g(nn.x / gl, nn.z / gl);                  // points down the slope
+            float into = -(vel.x * g.x + vel.z * g.y);     // speed heading up it
+            if (into > 0) {
+                if (into > 8.f) impact = std::max(impact, into * 0.5f);
+                vel.x += g.x * into * 1.15f;
+                vel.z += g.y * into * 1.15f;
+                vel.x *= 0.92f; vel.z *= 0.92f;
+                np = vec3(pos.x + vel.x * dt, np.y, pos.z + vel.z * dt);
+                hNew = w.heightAt(np.x, np.z) + groundBoost;
+            }
+        }
+    }
     if (np.y < hNew) {
         float follow = (hNew - hOld) / dt;
         if (!grounded && vel.y < follow - 4.f) impact = std::max(impact, follow - vel.y);

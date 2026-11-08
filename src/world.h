@@ -17,7 +17,7 @@ struct Road {
     float length = 0.f;
 };
 
-struct TreeTrunk { float x, z, r; };
+struct TreeTrunk { float x, z, r; float top = 0; };  // top: world height above which a flying car clears it (0 = ground + 6 m)
 struct Box { float x0, z0, x1, z1, top; };  // axis-aligned solid (buildings, containers)
 
 // regions outside the original valley

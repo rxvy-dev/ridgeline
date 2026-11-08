@@ -236,6 +236,7 @@ bool World::collideTrees(vec3& p, float r, vec3& normal) const {
         for (int x = cx - 1; x <= cx + 1; x++) {
             if (x < 0 || z < 0 || x >= tgN || z >= tgN) continue;
             for (auto& t : trunkGrid[z * tgN + x]) {
+                if (t.top != 0 && p.y > t.top) continue;  // flying over it
                 float dx = p.x - t.x, dz = p.z - t.z;
                 float d2 = dx * dx + dz * dz, rr = r + t.r;
                 if (d2 < rr * rr && d2 > 1e-6f) {
@@ -438,7 +439,9 @@ void World::scatter(uint32_t seed) {
     trunkGrid.assign(tgN * tgN, {});
     auto addTrunk = [&](float x, float z, float r) {
         int cx = std::clamp(int((x + HALF) / TGRID), 0, tgN - 1), cz = std::clamp(int((z + HALF) / TGRID), 0, tgN - 1);
-        trunkGrid[cz * tgN + cx].push_back({x, z, r});
+        // rocks are as tall as they are wide; trees block up to their lower branches
+        float tall = r >= 0.6f ? r * 1.3f : 5.5f;
+        trunkGrid[cz * tgN + cx].push_back({x, z, r, heightAt(x, z) + tall});
     };
     // distance to the cross-country path
     auto ccDist = [&](float x, float z) {
@@ -1527,7 +1530,7 @@ void World::buildShrines() {
                 props.cylinder(b, 0.42f, H + 0.3f, 12, red);
                 props.cylinder(b, 0.55f, 0.6f, 12, black);  // base ring
                 int cx = std::clamp(int((b.x + HALF) / TGRID), 0, tgN - 1), cz = std::clamp(int((b.z + HALF) / TGRID), 0, tgN - 1);
-                trunkGrid[cz * tgN + cx].push_back({b.x, b.z, 0.5f});
+                trunkGrid[cz * tgN + cx].push_back({b.x, b.z, 0.5f, b.y + H + 0.6f});
                 if (!lanterns) continue;
                 for (int k = 0; k < 3; k++) sakuraSpots.push_back(b + side * (s2 * (5.f + k * 3.f)) - t * (7.f + k * 6.f));
                 // stone lantern in front of each pillar
@@ -1562,11 +1565,12 @@ void World::buildShrines() {
     torii("Chichibu Road", 0.5f);
 
     // poles, lamps and gates built before scatter() reset the trunk grid
-    auto addTrunk = [&](float x, float z, float r) {
+    auto addTrunk = [&](float x, float z, float r, float top = 0) {
         int cx = std::clamp(int((x + HALF) / TGRID), 0, tgN - 1), cz = std::clamp(int((z + HALF) / TGRID), 0, tgN - 1);
-        trunkGrid[cz * tgN + cx].push_back({x, z, r});
+        // poles, posts, lanterns and trees: solid up to a sensible height, so jumps clear them
+        trunkGrid[cz * tgN + cx].push_back({x, z, r, top > 0 ? top : heightAt(x, z) + (r > 0.6f ? 6.f : 4.5f)});
     };
-    for (auto& t : pendingTrunks) addTrunk(t.x, t.z, t.r);
+    for (auto& t : pendingTrunks) addTrunk(t.x, t.z, t.r, t.top);
     pendingTrunks.clear();
 
     // ---- sakura: cherry trees in full bloom by the shrines, the castle, the pagoda, the towns,
@@ -3110,6 +3114,21 @@ void World::buildJapan() {
             canalPools.push_back({j0, j1 - 1});
             j0 = j1;
         }
+        // where a segment joins two pools, put the weir where both water levels still sit below the
+        // banks (on a steep drop the upper pool must end early, or its water would float over the walls)
+        std::vector<float> weirU(m, 1.f);
+        for (int j = 0; j + 1 < m; j++) {
+            if (water[j] == water[j + 1]) continue;
+            float uw = 0.5f;
+            if (water[j + 1] < water[j]) {           // downhill: the pool behind ends
+                float drop = bank[j] - bank[j + 1];
+                if (drop > 1e-3f) uw = std::min(uw, (bank[j] - water[j] - 0.35f) / drop);
+            } else {                                  // uphill: the pool ahead starts late
+                float rise = bank[j + 1] - bank[j];
+                if (rise > 1e-3f) uw = std::max(uw, 1.f - (bank[j + 1] - water[j + 1] - 0.35f) / rise);
+            }
+            weirU[j] = clampf(uw, 0.f, 1.f);
+        }
         std::vector<vec3> nrm(m);
         for (int j = 0; j < m; j++) {
             vec3 d = cl[std::min(m - 1, j + 1)] - cl[std::max(0, j - 1)];
@@ -3135,7 +3154,11 @@ void World::buildJapan() {
                         float uu = dot(ap, ab) / std::max(dot(ab, ab), 1e-6f), u = clampf(uu, 0.f, 1.f);
                         float dd = length(vec2(a.x + ab.x * u - wx, a.z + ab.y * u - wz));
                         if (dd < best) {
-                            best = dd; bk = lerpf(bank[j], bank[j + 1], u); bd = u < 0.5f ? bed[j] : bed[j + 1];
+                            // the bed follows the pool on this side of the weir; within a cell of the
+                            // weir it takes the deeper one so the ground never pokes through the water
+                            float marg = (CELL * 1.5f) / std::max(length(ab), 1.f);
+                            float bsel = u < weirU[j] - marg ? bed[j] : u > weirU[j] + marg ? bed[j + 1] : std::min(bed[j], bed[j + 1]);
+                            best = dd; bk = lerpf(bank[j], bank[j + 1], u); bd = bsel;
                             endK = (j == 0 && uu < 0.f) || (j + 2 == m && uu > 1.f) ? 0.f : 1.f;
                         }
                     }
@@ -3149,14 +3172,23 @@ void World::buildJapan() {
         for (int j = 0; j + 1 < m; j++) {
             vec3 a = cl[j], e = cl[j + 1];
             // water surface
-            vec3 wa(a.x, water[j], a.z), we(e.x, water[j], e.z);
-            waterQuads.push_back(wa - nrm[j] * (W + 0.1f)); waterQuads.push_back(we - nrm[j + 1] * (W + 0.1f));
-            waterQuads.push_back(we + nrm[j + 1] * (W + 0.1f)); waterQuads.push_back(wa + nrm[j] * (W + 0.1f));
-            if (water[j + 1] != water[j]) {  // a little weir where the next pool starts
+            auto wq = [&](vec3 p0, vec3 n0, vec3 p1, vec3 n1, float y) {
+                p0.y = p1.y = y;
+                waterQuads.push_back(p0 - n0 * (W + 0.1f)); waterQuads.push_back(p1 - n1 * (W + 0.1f));
+                waterQuads.push_back(p1 + n1 * (W + 0.1f)); waterQuads.push_back(p0 + n0 * (W + 0.1f));
+            };
+            if (water[j + 1] == water[j]) wq(a, nrm[j], e, nrm[j + 1], water[j]);
+            else {  // two pools meet in this segment: water either side of a little weir
+                float uw = weirU[j];
+                vec3 c = lerp(a, e, uw), nc = normalize(lerp(nrm[j], nrm[j + 1], uw));
+                if (uw > 0.f) wq(a, nrm[j], c, nc, water[j]);
+                if (uw < 1.f) wq(c, nc, e, nrm[j + 1], water[j + 1]);
                 float lo = std::min(water[j], water[j + 1]), hi = std::max(water[j], water[j + 1]);
-                vec3 l0 = e - nrm[j + 1] * W, l1 = e + nrm[j + 1] * W;
+                vec3 l0 = c - nc * W, l1 = c + nc * W;
                 quad(vec3(l0.x, lo - 0.05f, l0.z), vec3(l1.x, lo - 0.05f, l1.z), vec3(l1.x, hi, l1.z), vec3(l0.x, hi, l0.z), water[j] < water[j + 1] ? -(e - a) : (e - a), foam);
-                b.box(vec3(e.x, hi - 0.1f, e.z), vec3(0.3f, 0.12f, 0.3f), stone);
+                // the sill: a stone lip across the channel at the top of the fall
+                mat4 sx = basis(nc, up, normalize(vec3(nc.z, 0, -nc.x)), vec3(c.x, hi - 0.12f, c.z));
+                b.box(vec3(0, 0, 0), vec3(W, 0.14f, 0.25f), stone, &sx);
             }
             // stone walls and coping on both sides
             for (int k = -1; k <= 1; k += 2) {

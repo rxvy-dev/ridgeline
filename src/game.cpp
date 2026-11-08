@@ -14,7 +14,9 @@
 static const vec4 ACCENT(0.96f, 0.10f, 0.50f, 1.f);
 static const vec4 WHITE(1, 1, 1, 1);
 static const vec4 DIM(1, 1, 1, 0.6f);
-static const vec4 PANEL(0.05f, 0.05f, 0.06f, 0.78f);
+static const vec4 PANEL(0.03f, 0.24f, 0.26f, 0.86f);  // festival teal
+static const vec4 LIME(0.80f, 0.94f, 0.16f, 1.f);
+static const vec4 GOLD(0.98f, 0.86f, 0.2f, 1.f);
 static const char* kBotNames[] = {"Vex", "Juniper", "Halcyon", "Brick", "Nova", "Tamsin", "Ozzy", "Kiri", "Marlow", "Sable", "Dax", "Wren"};
 
 static vec3 stripeFor(vec3 paint) {
@@ -1894,6 +1896,7 @@ void Game::updateCamera(float dt) {
     if (const char* ae = getenv("RL_AERIAL")) {
         float v[6] = {0, 300, 0, 0, 0, 1};
         std::sscanf(ae, "%f,%f,%f,%f,%f,%f", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5]);
+        if (getenv("RL_AERIAL_REL")) { float g = world.heightAt(v[3], v[5]); v[1] += g; v[4] += g; }  // heights above the ground at the target
         cam.pos = vec3(v[0], v[1], v[2]);
         cam.target = vec3(v[3], v[4], v[5]);
         cam.farZ = 9000.f;
@@ -2859,13 +2862,15 @@ void Game::drawSpeedo() {
     auto dir = [](float a) { return vec2(std::cos(a), std::sin(a)); };
 
     // body
-    hud.disc(c, R0 + 10 * u, vec4(0.02f, 0.025f, 0.03f, 0.72f), vec4(0.02f, 0.025f, 0.03f, 0.38f), 64);
-    hud.arc(c, R0 + 8 * u, R0 + 10 * u, 0, 2 * PI, vec4(1, 1, 1, 0.22f), 64);
+    hud.disc(c, R0 + 12 * u, vec4(0.03f, 0.26f, 0.28f, 0.78f), vec4(0.02f, 0.16f, 0.18f, 0.55f), 64);
+    hud.arc(c, R0 + 9 * u, R0 + 12 * u, 0, 2 * PI, vec4(1, 1, 1, 0.28f), 64);
+    // outer progress ring: speed against the car's top speed
+    hud.arc(c, R0 + 13 * u, R0 + 17 * u, a0, lerpf(a0, a1, clampf(car.speedKmh() / std::max(60.f, car.spec->topKmh), 0.f, 1.f)), vec4(LIME.x, LIME.y, LIME.z, 0.9f), 48);
     // redline band
     hud.arc(c, R0 - 9 * u, R0 - 1 * u, ang(redline * 0.97f), a1, vec4(0.95f, 0.12f, 0.08f, 0.85f), 16);
     // live sweep
     float rpmA = ang(car.rpm);
-    hud.arc(c, R0 - 1 * u, R0 + 3 * u, a0, rpmA, car.rpm > redline * 0.93f ? vec4(1, 0.25f, 0.15f, 0.95f) : vec4(1, 1, 1, 0.85f), 40);
+    hud.arc(c, R0 - 1 * u, R0 + 4 * u, a0, rpmA, car.rpm > redline * 0.93f ? vec4(1, 0.25f, 0.15f, 0.95f) : vec4(1, 1, 1, 0.9f), 40);
     // ticks
     for (int i = 0; i <= int(dialMax / 250.f); i++) {
         float rpm = i * 250.f;
@@ -2886,7 +2891,7 @@ void Game::drawSpeedo() {
     vec2 nd = dir(rpmA), np(-nd.y, nd.x);
     vec2 tip = c + nd * (R0 + 4 * u), base = c + nd * (R0 * 0.52f);
     hud.triangle(tip, base + np * (3.5f * u), base - np * (3.5f * u), vec4(0, 0, 0, 0.5f));
-    hud.triangle(tip, base + np * (2.6f * u), base - np * (2.6f * u), vec4(1.f, 0.34f, 0.1f, 1));
+    hud.triangle(tip, base + np * (2.6f * u), base - np * (2.6f * u), vec4(0.96f, 0.10f, 0.50f, 1));
     // speed with dim leading zeros
     std::string sp = speedStr(car.speed());
     while (sp.size() < 3) sp = "0" + sp;
@@ -2898,13 +2903,13 @@ void Game::drawSpeedo() {
     float wl = hud.textWidth(sz, sp.substr(0, lead));
     if (lead) hud.text(sx, sy, sz, sp.substr(0, lead), vec4(1, 1, 1, 0.22f), 0, false);
     hud.text(sx + wl, sy, sz, sp.substr(lead), WHITE, 0, true);
-    hud.text(c.x, c.y + 20 * u, 11 * u, settings.mph ? "MPH" : "KM/H", DIM, 1, false);
+    hud.text(c.x, c.y + 20 * u, 11 * u, settings.mph ? "MPH" : "KM/H", LIME, 1, false);
     // gear (flashes at the shift point)
     std::string g = car.gear < 0 ? "R" : (car.speed() < 0.5f && car.throttle < 0.05f ? "N" : std::to_string(car.gear));
     bool shift = car.rpm > redline * 0.94f && car.gear > 0 && car.gear < 6 && std::fmod(simTime, 0.16f) < 0.08f;
     vec2 gp = c + vec2(0, 56 * u);
-    hud.roundRect(gp.x - 16 * u, gp.y - 16 * u, 32 * u, 32 * u, 5 * u, shift ? vec4(1, 0.15f, 0.1f, 0.95f) : vec4(1, 1, 1, 0.14f));
-    hud.text(gp.x, gp.y - 14 * u, 26 * u, g, WHITE, 1, false);
+    hud.roundRect(gp.x - 17 * u, gp.y - 17 * u, 34 * u, 34 * u, 5 * u, shift ? vec4(1, 0.15f, 0.1f, 0.95f) : vec4(0.92f, 0.92f, 0.92f, 0.95f));
+    hud.text(gp.x, gp.y - 14 * u, 26 * u, g, shift ? WHITE : vec4(0.08f, 0.08f, 0.08f, 1), 1, false);
     // assist lamps
     if (settings.assists) {
         const char* names[3] = {"ABS", "TCS", "SC"};
@@ -2934,7 +2939,7 @@ void Game::drawMinimap() {
         return c + vec2(dot(d, rgt), -dot(d, fwd)) * sc;
     };
     const vec4 GPS(0.78f, 0.38f, 1.f, 1.f);
-    hud.disc(c, Rr + 4 * u, vec4(0.03f, 0.04f, 0.05f, 0.62f), vec4(0.03f, 0.04f, 0.05f, 0.5f), 64);
+    hud.disc(c, Rr + 5 * u, vec4(0.03f, 0.26f, 0.28f, 0.7f), vec4(0.02f, 0.18f, 0.2f, 0.6f), 64);
     hud.clip(c.x, c.y, Rr);
     // terrain underlay
     vec2 corners[4] = {{-1, -1}, {1, -1}, {1, 1}, {-1, 1}};
@@ -3004,7 +3009,8 @@ void Game::drawMinimap() {
         for (int i = 0; i < int(events.size()); i++) pin(events[i].markerPos, eventColor(events[i].type), 5 * u, gpsShown == i);
         pin(world.hubPos, vec4(1.f, 0.25f, 0.55f, 1), 6 * u, gpsShown == -2);
     }
-    hud.arc(c, Rr, Rr + 2.5f * u, 0, 2 * PI, vec4(1, 1, 1, 0.75f), 72);
+    hud.arc(c, Rr, Rr + 3.5f * u, 0, 2 * PI, vec4(1, 1, 1, 0.85f), 72);
+    hud.arc(c, Rr + 3.5f * u, Rr + 6 * u, 0, 2 * PI, vec4(0.02f, 0.18f, 0.2f, 0.8f), 72);
     // player arrow
     vec3 cfw = car.forward();
     vec2 f(dot(cfw, rgt), -dot(cfw, fwd));
@@ -3016,8 +3022,9 @@ void Game::drawMinimap() {
     // north marker
     vec2 nd(dot(vec3(0, 0, 1), rgt), -dot(vec3(0, 0, 1), fwd));
     vec2 np = c + nd * (Rr + 1 * u);
-    hud.circle(np, 10 * u, vec4(0.05f, 0.05f, 0.06f, 0.95f), 16);
-    hud.text(np.x, np.y - 8 * u, 14 * u, "N", WHITE, 1, false);
+    hud.circle(np, 11 * u, vec4(0.05f, 0.05f, 0.06f, 0.95f), 16);
+    hud.circle(np, 9 * u, LIME, 16);
+    hud.text(np.x, np.y - 8 * u, 14 * u, "N", vec4(0.06f, 0.06f, 0.06f, 1), 1, false);
     // destination readout
     std::string label;
     float dist = 0;
@@ -3037,9 +3044,9 @@ void Game::drawMinimap() {
         else std::snprintf(buf, sizeof(buf), "%.1f km", dist / 1000.f);
         float tw = std::max(hud.textWidth(13 * u, label), hud.textWidth(20 * u, buf)) + 30 * u;
         float px = c.x + Rr + 16 * u, py = c.y + Rr - 50 * u;
-        hud.rectH(px, py, tw + 30 * u, 50 * u, vec4(0.03f, 0.03f, 0.05f, 0.78f), vec4(0.03f, 0.03f, 0.05f, 0.0f));
-        hud.rect(px, py, 3 * u, 50 * u, GPS);
-        hud.text(px + 14 * u, py + 6 * u, 13 * u, label, DIM, 0, false);
+        hud.rectH(px, py, tw + 30 * u, 50 * u, vec4(0.03f, 0.26f, 0.28f, 0.88f), vec4(0.03f, 0.26f, 0.28f, 0.0f));
+        hud.rect(px, py, 5 * u, 50 * u, GPS);
+        hud.text(px + 14 * u, py + 6 * u, 13 * u, label, vec4(0.85f, 0.95f, 0.93f, 1), 0, false);
         hud.text(px + 14 * u, py + 22 * u, 20 * u, buf, WHITE, 0, false);
     }
 }
@@ -3117,18 +3124,31 @@ void Game::drawHud() {
         std::string spins = wheelspins > 0 ? std::to_string(wheelspins) + " SPIN" + (wheelspins > 1 ? "S" : "") : "";
         float pw = std::max({250 * u, hud.textWidth(14 * u, carLine) + 34 * u, hud.textWidth(26 * u, crText()) + 34 * u});
         hudPanelW = pw;
-        hud.rect(18 * u, 18 * u, pw, 62 * u, PANEL);
-        hud.rect(18 * u, 18 * u, 5 * u, 62 * u, ACCENT);
-        hud.text(34 * u, 24 * u, 26 * u, crText(), WHITE);
-        hud.text(34 * u, 56 * u, 14 * u, carLine, DIM, 0, false);
-        hud.rect(18 * u, 84 * u, pw, 22 * u, PANEL);
-        hud.text(28 * u, 87 * u, 13 * u, "LVL " + std::to_string(level), WHITE, 0, false);
-        float spinW = spins.empty() ? 0.f : hud.textWidth(13 * u, spins) + 12 * u;
-        float barX = 84 * u, barW = 18 * u + pw - barX - 12 * u - spinW;
-        hud.rect(barX, 93 * u, barW, 4 * u, vec4(1, 1, 1, 0.15f));
-        hud.rect(barX, 93 * u, barW * clampf(xp / float(xpToNext()), 0.f, 1.f), 4 * u, vec4(1.f, 0.25f, 0.55f, 1));
-        if (!spins.empty()) hud.text(18 * u + pw - 10 * u, 87 * u, 13 * u, spins, vec4(1.f, 0.35f, 0.6f, 1), 2, false);
-        hud.text(22 * u, 112 * u, 12 * u, clockText(), vec4(1, 1, 1, 0.7f), 0, true);
+        pw += 26 * u;  // room for the coin
+        hudPanelW = pw;
+        themePanel(18 * u, 18 * u, pw, 62 * u, 1.f, true);
+        {
+            vec2 coin(36 * u, 39 * u);
+            hud.circle(coin, 11 * u, vec4(0.1f, 0.1f, 0.1f, 1), 20);
+            hud.circle(coin, 9 * u, GOLD, 20);
+            hud.text(coin.x, coin.y - 6 * u, 9 * u, "CR", vec4(0.1f, 0.1f, 0.1f, 1), 1, false);
+        }
+        hud.text(54 * u, 24 * u, 26 * u, fmtThousands((long long)(creditsShown + 0.5)), GOLD);
+        hud.text(30 * u, 56 * u, 14 * u, carLine, vec4(0.85f, 0.95f, 0.93f, 1), 0, false);
+        // level chip, XP bar and spins
+        std::string lv = std::to_string(level);
+        float lvw = hud.textWidth(14 * u, lv) + 22 * u;
+        hud.rect(18 * u, 86 * u, lvw, 22 * u, vec4(0.92f, 0.92f, 0.92f, 0.95f));
+        hud.text(18 * u + lvw * 0.5f, 89 * u, 14 * u, lv, vec4(0.1f, 0.1f, 0.1f, 1), 1, false);
+        float spinW = spins.empty() ? 0.f : hud.textWidth(12 * u, spins) + 20 * u;
+        float barX = 18 * u + lvw, barW = pw - lvw - spinW;
+        hud.rect(barX, 86 * u, barW, 22 * u, vec4(0.02f, 0.16f, 0.18f, 0.8f));
+        hud.rect(barX + 6 * u, 95 * u, (barW - 12 * u) * clampf(xp / float(xpToNext()), 0.f, 1.f), 4 * u, vec4(0.96f, 0.10f, 0.50f, 1));
+        if (!spins.empty()) {
+            hud.rect(18 * u + pw - spinW, 86 * u, spinW, 22 * u, vec4(0.96f, 0.10f, 0.50f, 0.95f));
+            hud.text(18 * u + pw - spinW * 0.5f, 90 * u, 12 * u, spins, WHITE, 1, false);
+        }
+        hud.text(22 * u, 114 * u, 12 * u, clockText(), vec4(1, 1, 1, 0.8f), 0, true);
         drawFestivalHud();
         // prompts
         std::string prompt;
@@ -3137,27 +3157,31 @@ void Game::drawHud() {
             char buf[160];
             std::snprintf(buf, sizeof(buf), "%s  -  %s  -  %.1f km", e.name.c_str(), eventTypeName(e.type), e.totalLength() / 1000.f);
             float pw = std::max(hud.textWidth(22 * u, buf), hud.textWidth(16 * u, e.blurb)) + 60 * u;
-            float px = hud.w * 0.5f - pw * 0.5f, py = hud.h - 190 * u;
-            hud.rect(px, py, pw, 92 * u, PANEL);
+            float px = hud.w * 0.5f - pw * 0.5f, py = hud.h - 196 * u;
+            themePanel(px, py, pw, 70 * u);
             hud.rect(px, py, pw, 4 * u, eventColor(e.type));
             hud.text(hud.w * 0.5f, py + 12 * u, 22 * u, buf, WHITE, 1);
-            hud.text(hud.w * 0.5f, py + 42 * u, 16 * u, e.blurb, DIM, 1, false);
-            hud.text(hud.w * 0.5f, py + 64 * u, 16 * u, pad ? "Press (Y) to start" : "Press ENTER to start", ACCENT, 1, false);
+            hud.text(hud.w * 0.5f, py + 42 * u, 16 * u, e.blurb, vec4(0.85f, 0.95f, 0.93f, 1), 1, false);
+            std::string go = pad ? "(Y)  START EVENT" : "ENTER  START EVENT";
+            float gw = hud.textWidth(16 * u, go) + 40 * u, gx = hud.w * 0.5f - gw * 0.5f, gy = py + 76 * u;
+            float pulse = 0.75f + 0.25f * std::sin(R.time * 4.f);
+            hud.quad(vec2(gx + 10 * u, gy), vec2(gx + gw + 10 * u, gy), vec2(gx + gw, gy + 30 * u), vec2(gx, gy + 30 * u), vec4(LIME.x, LIME.y, LIME.z, pulse));
+            hud.text(gx + 5 * u + gw * 0.5f, gy + 6 * u, 16 * u, go, vec4(0.06f, 0.06f, 0.06f, 1), 1, false);
         } else if (nearHome >= 0) {
             drawHomePrompt();
         } else if (nearHub) {
             float pw = 380 * u, px = hud.w * 0.5f - pw * 0.5f, py = hud.h - 160 * u;
-            hud.rect(px, py, pw, 62 * u, PANEL);
-            hud.rect(px, py, pw, 4 * u, vec4(1.f, 0.25f, 0.55f, 1));
+            themePanel(px, py, pw, 62 * u);
+            hud.rect(px, py, pw, 4 * u, vec4(0.96f, 0.10f, 0.50f, 1));
             hud.text(hud.w * 0.5f, py + 10 * u, 20 * u, "Festival Hub", WHITE, 1);
-            hud.text(hud.w * 0.5f, py + 36 * u, 15 * u, pad ? "(Y) Dealership & Garage" : "ENTER  Dealership & Garage", ACCENT, 1, false);
+            hud.text(hud.w * 0.5f, py + 36 * u, 15 * u, pad ? "(Y) Dealership & Garage" : "ENTER  Dealership & Garage", LIME, 1, false);
         }
         if (!opt.noHints && hintT < 14.f)  // controls fade out once you're driving
         {
             const char* hints = pad ? "START menu   BACK map   UP switch car   RB camera   (Y) rewind   R3 photo" : "ESC menu   M map   G switch car   C camera   R reset   BKSP rewind   P photo   H horn";
             float ha = clampf((14.f - hintT) / 2.f, 0.f, 1.f);
             float hwid = hud.prompts(hud.w - 24 * u, 22 * u, 12 * u, hints, 2, ha, true);
-            if (ha > 0.01f) hud.rect(hud.w - 24 * u - hwid - 10 * u, 14 * u, hwid + 20 * u, 30 * u, vec4(0, 0, 0, 0.45f * ha));
+            if (ha > 0.01f) hud.roundRect(hud.w - 24 * u - hwid - 14 * u, 13 * u, hwid + 28 * u, 32 * u, 16 * u, vec4(0.02f, 0.18f, 0.2f, 0.6f * ha));
             hud.prompts(hud.w - 24 * u, 22 * u, 12 * u, hints, 2, ha);
         }
     }
@@ -3179,8 +3203,10 @@ void Game::drawHud() {
         float a = clampf(t.t * 2.f, 0.f, 1.f) * in;
         float tw = hud.textWidth(20 * u, t.text) + 44 * u;
         float x = hud.w * 0.5f - tw * 0.5f, y = ty - (1.f - back) * 24 * u;
-        hud.rect(x, y - 6 * u, tw, 36 * u, vec4(0.02f, 0.02f, 0.03f, 0.72f * a));
-        hud.rect(x, y - 6 * u, 4 * u, 36 * u, vec4(t.col.x, t.col.y, t.col.z, a));
+        hud.rect(x + 4 * u, y - 2 * u, tw, 36 * u, vec4(0, 0, 0, 0.2f * a));
+        hud.rectV(x, y - 6 * u, tw, 36 * u, vec4(0.04f, 0.31f, 0.33f, 0.92f * a), vec4(0.02f, 0.20f, 0.22f, 0.92f * a));
+        hud.rect(x, y - 6 * u, 6 * u, 36 * u, vec4(t.col.x, t.col.y, t.col.z, a));
+        hud.rect(x, y + 27 * u, tw * clampf(t.t / 3.f, 0.f, 1.f), 3 * u, vec4(LIME.x, LIME.y, LIME.z, 0.8f * a));
         vec4 col = vec4(1, 1, 1, a);
         hud.text(hud.w * 0.5f + 2 * u, y, 20 * u, t.text, col, 1, false);
         ty += 44 * u;
@@ -3193,8 +3219,8 @@ void Game::drawRaceHud() {
     float u = hud.ui;
     const EventDef& E = events[raceEvent];
     // position block (drift zones: score and the next target instead)
-    hud.rect(18 * u, 18 * u, 210 * u, 96 * u, PANEL);
-    hud.rect(18 * u, 18 * u, 5 * u, 96 * u, eventColor(E.type));
+    themePanel(18 * u, 18 * u, 210 * u, 96 * u);
+    hud.rect(18 * u, 18 * u, 210 * u, 4 * u, eventColor(E.type));
     if (E.type == EV_DRIFT) {
         int s = int(driftTotal);
         hud.text(34 * u, 22 * u, 34 * u, fmtThousands(s), WHITE);
@@ -3204,7 +3230,7 @@ void Game::drawRaceHud() {
         hud.text(34 * u, 62 * u, 13 * u, nxt, tier == 0 ? ACCENT : DIM, 0, false);
         hud.text(34 * u, 82 * u, 13 * u, "DRIFT SCORE", DIM, 0, false);
     } else {
-        hud.text(34 * u, 20 * u, 46 * u, std::to_string(playerPlace), WHITE);
+        hud.text(34 * u, 20 * u, 46 * u, std::to_string(playerPlace), playerPlace == 1 ? LIME : WHITE);
         float pw = hud.textWidth(46 * u, std::to_string(playerPlace));
         hud.text(36 * u + pw, 28 * u, 20 * u, "/" + std::to_string(racers.size()), DIM, 0, false);
         hud.text(34 * u, 76 * u, 14 * u, "POSITION", DIM, 0, false);
@@ -3229,13 +3255,14 @@ void Game::drawRaceHud() {
         return a->progress > b->progress;
     });
     float sx = hud.w - 248 * u, sy = 18 * u;
-    hud.rect(sx, sy, 230 * u, 14 * u + 26 * u * order.size(), PANEL);
+    themePanel(sx, sy, 230 * u, 14 * u + 26 * u * order.size());
     for (size_t i = 0; i < order.size(); i++) {
         float ry = sy + 8 * u + i * 26 * u;
         bool me = order[i]->isPlayer;
-        if (me) hud.rect(sx, ry - 2 * u, 230 * u, 25 * u, vec4(ACCENT.x, ACCENT.y, ACCENT.z, 0.8f));
-        hud.text(sx + 12 * u, ry, 16 * u, std::to_string(i + 1), WHITE, 0, false);
-        hud.text(sx + 38 * u, ry, 16 * u, order[i]->name, WHITE, 0, false);
+        if (me) { hud.rect(sx, ry - 2 * u, 230 * u, 25 * u, vec4(0.97f, 0.97f, 0.96f, 0.95f)); hud.rect(sx, ry - 2 * u, 5 * u, 25 * u, LIME); }
+        vec4 tc = me ? vec4(0.08f, 0.08f, 0.08f, 1) : WHITE;
+        hud.text(sx + 12 * u, ry, 16 * u, std::to_string(i + 1), tc, 0, false);
+        hud.text(sx + 38 * u, ry, 16 * u, order[i]->name, tc, 0, false);
         std::string gap;
         if (order[i]->finished) gap = fmtTime(order[i]->finishTime);
         else if (!me) {
@@ -3243,7 +3270,7 @@ void Game::drawRaceHud() {
             std::snprintf(b, sizeof(b), "%+.0fm", order[i]->progress - player.progress);
             gap = b;
         }
-        hud.text(sx + 218 * u, ry, 14 * u, gap, DIM, 2, false);
+        hud.text(sx + 218 * u, ry, 14 * u, gap, me ? vec4(0.25f, 0.3f, 0.3f, 1) : vec4(0.8f, 0.92f, 0.9f, 1), 2, false);
     }
     // place tags floating over the rivals (Forza style): colour-coded, fading with distance
     if (E.type != EV_DRIFT) {
@@ -3276,19 +3303,25 @@ void Game::drawRaceHud() {
     // countdown
     if (state == ST_RACE_INTRO) {
         if (stateTime < 2.5f) {
-            hud.rect(0, hud.h * 0.36f, hud.w, 110 * u, vec4(0, 0, 0, 0.45f));
+            float ie = clampf(stateTime / 0.35f, 0.f, 1.f);
+            ie = 1.f - (1.f - ie) * (1.f - ie);
+            hud.rectV(0, hud.h * 0.36f, hud.w * ie, 110 * u, vec4(0.04f, 0.31f, 0.33f, 0.88f), vec4(0.02f, 0.20f, 0.22f, 0.88f));
+            hud.rect(0, hud.h * 0.36f, hud.w * ie, 4 * u, eventColor(E.type));
+            hud.rect(0, hud.h * 0.36f + 106 * u, hud.w * ie, 4 * u, LIME);
             hud.text(hud.w * 0.5f, hud.h * 0.36f + 14 * u, 40 * u, E.name, WHITE, 1);
             char buf[128];
             std::snprintf(buf, sizeof(buf), "%s  -  %.1f km  -  %s", eventTypeName(E.type), E.totalLength() / 1000.f,
                           E.route.closed ? (std::to_string(E.laps) + (E.laps > 1 ? " laps" : " lap")).c_str() : "point to point");
-            hud.text(hud.w * 0.5f, hud.h * 0.36f + 66 * u, 18 * u, buf, DIM, 1, false);
+            hud.text(hud.w * 0.5f, hud.h * 0.36f + 66 * u, 18 * u, buf, vec4(0.85f, 0.95f, 0.93f, 1), 1, false);
         } else {
             int n = int(std::ceil(countdown));
             float f = countdown - std::floor(countdown);
-            hud.text(hud.w * 0.5f, hud.h * 0.32f, (90 + f * 40) * u, std::to_string(std::max(n, 1)), WHITE, 1);
+            float cs = (90 + f * 40) * u;
+            hud.circle(vec2(hud.w * 0.5f, hud.h * 0.32f + cs * 0.55f), cs * 0.85f, vec4(0.03f, 0.26f, 0.28f, 0.75f * f), 48);
+            hud.text(hud.w * 0.5f, hud.h * 0.32f, cs, std::to_string(std::max(n, 1)), WHITE, 1);
         }
     } else if (stateTime < 1.2f) {
-        hud.text(hud.w * 0.5f, hud.h * 0.32f, 96 * u, "GO!", ACCENT, 1);
+        hud.text(hud.w * 0.5f, hud.h * 0.32f, 96 * u * (1.f + 0.2f * std::max(0.f, 0.3f - stateTime)), "GO!", LIME, 1);
     }
     if (player.finished) hud.text(hud.w * 0.5f, hud.h * 0.3f, 60 * u, "FINISHED " + ordinal(playerPlace), WHITE, 1);
     if (offRouteTime > 1.5f) hud.text(hud.w * 0.5f, hud.h * 0.42f, 22 * u, pad ? "Off route! Press (X) to reset" : "Off route! Press R to reset", vec4(1, 0.5f, 0.3f, 1), 1);
