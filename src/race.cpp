@@ -1,3 +1,4 @@
+#include <SDL3/SDL.h>
 #include <cstdio>
 #include <cctype>
 #include <cstring>
@@ -126,6 +127,35 @@ void addBoostPads(EventDef& e, float spacing) {
     }
 }
 
+// Count points along a route a car can't get through: trees, buildings or containers in
+// the way, cliffs too steep to climb, or deep water. Used to check the event layouts.
+int routeObstacles(const World& w, const Route& rt, vec3* firstBad) {
+    int bad = 0;
+    float prevH = 0;
+    for (float d = 0; d < rt.length; d += 4.f) {
+        vec3 p = rt.pointAt(d), t = rt.tangentAt(d), side(-t.z, 0, t.x);
+        float h = w.heightAt(p.x, p.z);
+        bool blocked = false;
+        int clearLanes = 0;
+        for (float o : {-0.28f, 0.f, 0.28f}) {
+            vec3 q = p + side * (o * rt.width);
+            q.y = w.heightAt(q.x, q.z) + 0.5f;
+            vec3 n, q0 = q;
+            if (!w.collideTrees(q, 1.6f, n)) clearLanes++;
+            (void)q0;
+        }
+        if (clearLanes == 0) blocked = true;
+        if (d > 0 && std::fabs(p.y - prevH) / 4.f > 0.62f) blocked = true;  // ~32 degrees
+        if (h < w.waterLevel - 0.5f) blocked = true;
+        prevH = p.y;
+        if (blocked) {
+            if (!bad && firstBad) *firstBad = p;
+            bad++;
+        }
+    }
+    return bad;
+}
+
 std::vector<EventDef> buildEvents(const World& w) {
     std::vector<EventDef> ev;
     auto finish = [&](EventDef& e) {
@@ -226,6 +256,18 @@ std::vector<EventDef> buildEvents(const World& w) {
         for (auto& r : w.roads) if (r.name == n) return &r;
         return nullptr;
     };
+    // the Coast Highway point nearest (x, -1905): where the dock lanes meet it
+    auto hwy = [&](float x) {
+        vec3 best(x, 0, -1905);
+        float bd = 1e18f;
+        for (auto& r : w.roads)
+            if (r.name == "Coast Highway")
+                for (auto& q : r.pts) {
+                    float d = (q.x - x) * (q.x - x) + (q.z + 1905.f) * (q.z + 1905.f);
+                    if (d < bd) { bd = d; best = vec3(q.x, 0, q.z); }
+                }
+        return best;
+    };
     // a route through corner points, corners rounded, heights from the (carved) ground
     auto through = [&](std::vector<vec3> c, bool closed, float width) {
         Route rt;
@@ -299,7 +341,9 @@ std::vector<EventDef> buildEvents(const World& w) {
         e.name = "Docks Circuit";
         e.blurb = "Two laps between the container stacks and the cranes.";
         e.type = EV_CIRCUIT; e.laps = 2;
-        e.route = through({vec3(450, 0, -1905), vec3(450, 0, -2330), vec3(1750, 0, -2330), vec3(1750, 0, -1900)}, true, 12.f);
+        std::vector<vec3> c = {vec3(450, 0, -2330), vec3(1750, 0, -2330)};
+        for (float x : {1750.f, 1500.f, 1250.f, 1000.f, 750.f, 450.f}) c.push_back(hwy(x));  // back along the Coast Highway
+        e.route = through(c, true, 12.f);
         e.prize[0] = 14000; e.prize[1] = 8000; e.prize[2] = 4500;
         finish(e);
     }
@@ -342,9 +386,11 @@ std::vector<EventDef> buildEvents(const World& w) {
     {
         EventDef e;
         e.name = "Docks Drift Arena";
-        e.blurb = "Drift zone: three laps of tight corners between the containers.";
+        e.blurb = "Drift zone: three laps of the dock lanes and the quay.";
         e.type = EV_DRIFT; e.laps = 3;
-        e.route = through({vec3(600, 0, -2000), vec3(600, 0, -2250), vec3(1100, 0, -2250), vec3(1100, 0, -2000)}, true, 14.f);
+        std::vector<vec3> c = {vec3(450, 0, -2330), vec3(1150, 0, -2330)};
+        for (float x : {1150.f, 950.f, 750.f, 450.f}) c.push_back(hwy(x));
+        e.route = through(c, true, 13.f);
         e.opponents = 0;
         driftTargets(e, 1.1f);
         e.prize[0] = 12000; e.prize[1] = 7000; e.prize[2] = 4000;
@@ -394,7 +440,10 @@ std::vector<EventDef> buildEvents(const World& w) {
         e.name = "Harvest Mud Run";
         e.blurb = "Off-road: cut straight across the fields and ditches. Bring something with tall tyres.";
         e.type = EV_CROSS;
-        e.route = crossFrom(*f, 55.f, 45);
+        for (float sw : {55.f, 40.f, 28.f, 18.f, 8.f}) {
+            e.route = crossFrom(*f, sw, 45);
+            if (routeObstacles(w, e.route, nullptr) == 0) break;
+        }
         e.prize[0] = 13000; e.prize[1] = 7500; e.prize[2] = 4000;
         finish(e);
     }
@@ -403,7 +452,10 @@ std::vector<EventDef> buildEvents(const World& w) {
         e.name = "Timberline Cross Country";
         e.blurb = "Off-road: through the forest and over the ridges beside the trail.";
         e.type = EV_CROSS;
-        e.route = crossFrom(trail, 40.f, 40);
+        for (float sw : {40.f, 30.f, 20.f, 12.f, 5.f}) {
+            e.route = crossFrom(trail, sw, 40);
+            if (routeObstacles(w, e.route, nullptr) == 0) break;
+        }
         e.prize[0] = 14000; e.prize[1] = 8000; e.prize[2] = 4500;
         finish(e);
     }
@@ -421,6 +473,20 @@ std::vector<EventDef> buildEvents(const World& w) {
         e.route = reversed(routeFromRoad(loop, s, 0, true));
         e.prize[0] = 16000; e.prize[1] = 9000; e.prize[2] = 5000;
         finish(e);
+    }
+    for (auto& e : ev) {
+        vec3 at;
+        int b = routeObstacles(w, e.route, &at);
+        if (b) {
+            float mg = 0, md = 0;
+            for (float d = 4; d < e.route.length; d += 4.f) {
+                float g = std::fabs(e.route.pointAt(d).y - e.route.pointAt(d - 4.f).y) / 4.f;
+                if (g > mg) { mg = g; md = d; }
+            }
+            vec3 q = e.route.pointAt(md);
+            SDL_Log("  max grade %.2f at %.0f m (%.0f, %.0f) y %.1f, terrain %.1f", mg, md, q.x, q.z, q.y, w.heightAt(q.x, q.z));
+        }
+        if (b) SDL_Log("Event '%s': %d blocked spots (first near %.0f, %.0f)", e.name.c_str(), b, at.x, at.z);
     }
     return ev;
 }

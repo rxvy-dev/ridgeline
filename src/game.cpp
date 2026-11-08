@@ -182,14 +182,32 @@ bool Game::init(const Options& o) {
 
     // helper meshes
     {
+        // contact shadow: a soft rounded rectangle, darkest in the middle under the car
         MeshBuilder b;
-        uint32_t c = b.add(vec3(0, 0, 0), vec3(0, 1, 0), vec4(0, 0, 0, 0.55f));
-        for (int i = 0; i <= 24; i++) {
-            float a = i / 24.f * 2 * PI;
-            b.add(vec3(std::cos(a), 0, std::sin(a)), vec3(0, 1, 0), vec4(0, 0, 0, 0));
-        }
-        for (int i = 0; i < 24; i++) b.tri(c, c + 2 + i, c + 1 + i);
+        const int G = 16;
+        for (int j = 0; j <= G; j++)
+            for (int i = 0; i <= G; i++) {
+                float x = -1.f + 2.f * i / G, z = -1.f + 2.f * j / G;
+                float d = std::pow(std::pow(std::fabs(x), 4.f) + std::pow(std::fabs(z), 4.f), 0.25f);  // squircle
+                float a = 0.72f * (1.f - smoothstepf(0.35f, 1.f, d));
+                b.add(vec3(x, 0, z), vec3(0, 1, 0), vec4(0, 0, 0, a));
+            }
+        for (int j = 0; j < G; j++)
+            for (int i = 0; i < G; i++) {
+                uint32_t a = j * (G + 1) + i;
+                b.tri(a, a + G + 1, a + 1);
+                b.tri(a + 1, a + G + 1, a + G + 2);
+            }
         b.build(blobMesh);
+        // tyre contact: a small dark patch under each wheel
+        MeshBuilder t;
+        uint32_t c = t.add(vec3(0, 0, 0), vec3(0, 1, 0), vec4(0, 0, 0, 0.75f));
+        for (int i = 0; i <= 20; i++) {
+            float a = i / 20.f * 2 * PI;
+            t.add(vec3(std::cos(a), 0, std::sin(a)), vec3(0, 1, 0), vec4(0, 0, 0, 0));
+        }
+        for (int i = 0; i < 20; i++) t.tri(c, c + 2 + i, c + 1 + i);
+        t.build(tyreBlobMesh);
     }
     {
         MeshBuilder b;
@@ -220,6 +238,37 @@ bool Game::init(const Options& o) {
             }
         }
         b.build(boostMesh);
+    }
+    {
+        // countdown lamp: a bright disc with a soft halo, facing -z
+        MeshBuilder b;
+        uint32_t c = b.add(vec3(0, 0, 0), vec3(0, 0, -1), vec4(1, 1, 1, 1));
+        const int S = 24;
+        for (int i = 0; i <= S; i++) {
+            float a = i / float(S) * 2 * PI;
+            b.add(vec3(std::cos(a), std::sin(a), 0), vec3(0, 0, -1), vec4(1, 1, 1, 1));
+            b.add(vec3(std::cos(a), std::sin(a), 0) * 3.0f, vec3(0, 0, -1), vec4(1, 1, 1, 0));
+        }
+        for (int i = 0; i < S; i++) {
+            uint32_t a = c + 1 + i * 2, n = a + 2;
+            b.tri(c, a, n); b.tri(c, n, a);
+            b.tri(a, a + 1, n + 1); b.tri(a, n + 1, n);
+            b.tri(a, n + 1, a + 1); b.tri(a, n, n + 1);
+        }
+        b.build(lampMesh);
+    }
+    {
+        // racing-line chevron, flat on the road, pointing +z
+        MeshBuilder b;
+        vec4 c(1, 1, 1, 1);
+        vec3 up(0, 1, 0);
+        auto q = [&](vec3 p0, vec3 p1, vec3 p2, vec3 p3) {
+            uint32_t i0 = b.add(p0, up, c); b.add(p1, up, c); b.add(p2, up, c); b.add(p3, up, c);
+            b.tri(i0, i0 + 1, i0 + 2); b.tri(i0, i0 + 2, i0 + 3); b.tri(i0, i0 + 2, i0 + 1); b.tri(i0, i0 + 3, i0 + 2);
+        };
+        q(vec3(-0.75f, 0, -0.35f), vec3(-0.75f, 0, -0.05f), vec3(0, 0, 0.45f), vec3(0, 0, 0.15f));
+        q(vec3(0, 0, 0.15f), vec3(0, 0, 0.45f), vec3(0.75f, 0, -0.05f), vec3(0.75f, 0, -0.35f));
+        b.build(lineMesh);
     }
     {
         MeshBuilder b;
@@ -283,7 +332,7 @@ bool Game::init(const Options& o) {
                 e = e + sky.sh[8] * (-0.546274f) + sky.sh[6] * (-0.315392f);
                 upLum = lum(e);
             }
-            float k = upLum > 1e-4f ? lum(dayAtmo.skyAmb) * 1.1f / upLum : 1.f;
+            float k = upLum > 1e-4f ? lum(dayAtmo.skyAmb) * 1.3f / upLum : 1.f;
             for (int i = 0; i < 9; i++) R.skySH[i] = sky.sh[i] * k;
             R.atmo = dayAtmo;
         }
@@ -352,6 +401,29 @@ bool Game::init(const Options& o) {
                 photoPitch = 0.12f;
                 photoDist = player.car.spec->length * 1.7f + 2.5f;
                 photoFov = 0.9f;
+            }
+        }
+        else if (opt.scene == "racestart") {
+            enterFreeRoam(world.hubSpawn, world.hubYaw);
+            startRace(std::clamp(opt.event, 0, int(events.size()) - 1));
+            stateTime = 4.1f;
+            countdown = 3.f - (stateTime - 2.5f);
+        }
+        else if (opt.scene == "racegate") {
+            // race already under way, parked just before the first checkpoint arch
+            enterFreeRoam(world.hubSpawn, world.hubYaw);
+            startRace(std::clamp(opt.event, 0, int(events.size()) - 1));
+            const EventDef& E = events[raceEvent];
+            if (gates.size() > 1) {
+                float d = gates[1].d - 34.f;
+                vec3 p = E.route.pointAt(d), t = E.route.tangentAt(d);
+                player.car.placeAt(p, std::atan2(t.x, t.z), world);
+                camYaw = player.car.yaw;
+                state = ST_RACE;
+                stateTime = 3.f;
+                raceTime = 40.f;
+                trackProgress(player, E);
+                gateIdx = 1;
             }
         }
         else if (opt.scene == "race") { enterFreeRoam(world.hubSpawn, world.hubYaw); autopilot = true; startRace(std::clamp(opt.event, 0, int(events.size()) - 1)); }
@@ -525,7 +597,7 @@ void Game::save() {
       << "\nfullscreen=" << settings.fullscreen << "\nvolume=" << settings.volume << "\ndraw=" << settings.drawDist
       << "\nvsync=" << settings.vsync << "\nassists=" << settings.assists << "\ngrass=" << settings.grass << "\nweather=" << settings.weather << "\nsteerlock=" << settings.steerLock
       << "\ntimemode=" << settings.timeMode << "\nbrightness=" << settings.brightness << "\ncontrast=" << settings.contrast
-      << "\nsaturation=" << settings.saturation << "\nwarmth=" << settings.warmth << "\ncolorblind=" << settings.colorBlind << "\n";
+      << "\nsaturation=" << settings.saturation << "\nwarmth=" << settings.warmth << "\ncolorblind=" << settings.colorBlind << "\nracingline=" << settings.racingLine << "\ncarrefl=" << settings.carReflections << "\n";
 }
 
 bool Game::load() {
@@ -590,6 +662,8 @@ bool Game::load() {
         else if (k == "saturation") settings.saturation = std::clamp(std::atoi(v.c_str()), 0, 200);
         else if (k == "warmth") settings.warmth = std::clamp(std::atoi(v.c_str()), -10, 10);
         else if (k == "colorblind") settings.colorBlind = std::clamp(std::atoi(v.c_str()), 0, 3);
+        else if (k == "racingline") settings.racingLine = std::atoi(v.c_str()) != 0;
+        else if (k == "carrefl") settings.carReflections = std::atoi(v.c_str()) != 0;
     }
     if (garage.empty()) return false;
     current = std::clamp(current, 0, int(garage.size()) - 1);
@@ -731,37 +805,7 @@ void Game::startRace(int ev) {
         r->stuck = 0;
         trackProgress(*r, E);
     }
-    // checkpoint gates
-    {
-        MeshBuilder b;
-        float total = E.totalLength();
-        float L = rt.length;
-        float spacing = 320.f;
-        int n = int(L / spacing);
-        for (int i = 1; i <= n + 1; i++) {
-            float d = i <= n ? i * spacing : (rt.closed ? 0.f : L - 1.f);
-            if (i <= n && L - d < 120.f) continue;
-            bool fin = i == n + 1;
-            vec3 p = rt.pointAt(d), t = rt.tangentAt(d), right(-t.z, 0, t.x);
-            p.y = world.heightAt(p.x, p.z);
-            float hw = rt.width * 0.5f + 1.8f;
-            mat4 xf = basis(right, vec3(0, 1, 0), t, p);
-            vec4 post(0.08f, 0.08f, 0.09f, 0.95f);
-            b.box(vec3(hw, 3.0f, 0), vec3(0.3f, 3.0f, 0.3f), post, &xf);
-            b.box(vec3(-hw, 3.0f, 0), vec3(0.3f, 3.0f, 0.3f), post, &xf);
-            if (fin) {
-                for (int s = 0; s < 10; s++) {
-                    float x0 = -hw + s * (2 * hw / 10.f);
-                    vec4 c = (s % 2) ? vec4(0.05f, 0.05f, 0.05f, 0.95f) : vec4(0.95f, 0.95f, 0.95f, 0.95f);
-                    b.box(vec3(x0 + hw / 10.f, 6.4f, 0), vec3(hw / 10.f, 0.6f, 0.15f), c, &xf);
-                }
-            } else {
-                b.box(vec3(0, 6.4f, 0), vec3(hw, 0.55f, 0.15f), vec4(1.0f, 0.45f, 0.1f, 0.8f), &xf);
-            }
-        }
-        (void)total;
-        b.build(gateMesh);
-    }
+    buildGates(E);
     state = ST_RACE_INTRO;
     stateTime = 0;
     countdown = 3.f;
@@ -810,6 +854,7 @@ void Game::leaveRace() {
     bots.clear();
     raceEvent = -1;
     gateMesh.destroy();
+    clearGates();
     state = ST_FREEROAM;
     stateTime = 0;
     autopilot = autopilot && !opt.scene.empty();
@@ -1308,6 +1353,8 @@ void Game::handleAction(Action a) {
                 case 15: settings.saturation = std::clamp(settings.saturation + d * 5, 0, 200); break;
                 case 16: settings.warmth = std::clamp(settings.warmth + d, -10, 10); break;
                 case 17: settings.colorBlind = (settings.colorBlind + d + 4) % 4; break;
+                case 18: settings.racingLine = !settings.racingLine; break;
+                case 19: settings.carReflections = !settings.carReflections; break;
             }
             audio.beep(990, 0.04f);
             applySettings();
@@ -1338,7 +1385,9 @@ std::vector<std::string> Game::settingsItems() const {
             "Contrast: " + std::to_string(settings.contrast) + "%",
             "Saturation: " + std::to_string(settings.saturation) + "%",
             "Colour temperature: " + std::string(settings.warmth > 0 ? "+" : "") + std::to_string(settings.warmth),
-            std::string("Colour-blind mode: ") + std::array<const char*, 4>{"Off", "Protanopia (red)", "Deuteranopia (green)", "Tritanopia (blue)"}[std::clamp(settings.colorBlind, 0, 3)]};
+            std::string("Colour-blind mode: ") + std::array<const char*, 4>{"Off", "Protanopia (red)", "Deuteranopia (green)", "Tritanopia (blue)"}[std::clamp(settings.colorBlind, 0, 3)],
+            std::string("Racing line: ") + (settings.racingLine ? "On" : "Off"),
+            std::string("Car reflections: ") + (settings.carReflections ? "Live (world)" : "Sky only")};
 }
 
 // ====================================================================== update
@@ -1465,6 +1514,7 @@ void Game::update(float dt) {
         }
         case ST_RACE:
             updateRace(dt);
+            updateGates(dt);
             break;
         case ST_RESULTS: {
             // let everyone coast to a stop
@@ -1806,6 +1856,12 @@ void Game::drawImported(Racer& r, bool glassPass, const Camera& c) {
     ImportedModel& m = *r.model->imp;
     Shader& s = R.car;
     R.setCommon(s, c);
+    {
+        vec3 d = r.car.pos - R.probePos;
+        bool useProbe = R.probeOn && R.probeFrames >= 6 && d.x * d.x + d.z * d.z < 45.f * 45.f && drawCam != &reflCamera;
+        s.set("uProbe", useProbe ? 1 : 0);
+        s.set("uProbeLod", 0.6f);
+    }
     s.set("uGlassPass", glassPass ? 1 : 0);
     s.set("uPaint", r.paint);
     s.set("uBrake", r.car.brake > 0.1f ? 1.f : 0.f);
@@ -1954,6 +2010,7 @@ void Game::renderWorld(const Camera& c, bool showroom) {
             world.hubMesh.draw();
             world.cityMesh.draw();
             world.propsMesh.draw();
+            if (raceEvent >= 0) gateLit.draw();
             for (Racer* r : cars) {
                 if (r->model->imp) {
                     for (auto& part : r->model->imp->parts) {
@@ -1986,6 +2043,13 @@ void Game::renderWorld(const Camera& c, bool showroom) {
             float dx = L.c.x - c.pos.x, dz = L.c.z - c.pos.z;
             if (std::sqrt(dx * dx + dz * dz) < drawDist * 0.8f + L.r) reflOn = true;
         }
+        // near the sea: look for open water around the camera
+        if (!reflOn && c.pos.y < world.waterLevel + 140.f)
+            for (float rr : {50.f, 140.f, 300.f})
+                for (int k = 0; k < 12 && !reflOn; k++) {
+                    float a = k / 12.f * 2.f * PI;
+                    if (world.heightAt(c.pos.x + std::cos(a) * rr, c.pos.z + std::sin(a) * rr) < world.waterLevel - 1.f) reflOn = true;
+                }
         if (c.pos.y < world.waterLevel + 0.3f) reflOn = false;
     }
     // wet roads: mirror the world in a plane at the road height under the car (puddles)
@@ -2001,9 +2065,48 @@ void Game::renderWorld(const Camera& c, bool showroom) {
         reflOn = false;  // the lakes fall back to sky reflections while you're away from them
         wetPlane = world.heightAt(player.car.pos.x, player.car.pos.z);
     }
+    // environment probe: one cube face per frame around the car you're looking at
+    if (R.probeOn && R.probeTex && !thumbActive && settings.carReflections) {
+        vec3 pp = showroom ? c.target + vec3(0, 0.5f, 0) : player.car.pos + vec3(0, 1.1f, 0);
+        vec3 dp = pp - R.probePos;
+        if (dp.x * dp.x + dp.y * dp.y + dp.z * dp.z > 80.f * 80.f) R.probeFrames = 0;  // teleported: rebuild all faces
+        R.probePos = pp;
+        int facesNow = R.probeFrames < 6 ? 6 : 1;
+        for (int k = 0; k < facesNow; k++) {
+            int face = R.probeFrames % 6;
+            Camera pc = R.beginProbeFace(face, pp);
+            drawCam = &pc;
+            R.drawSky(pc);
+            R.setCommon(R.terrain, pc);
+            R.terrain.set("uWater", world.waterLevel);
+        R.terrain.set("uHalf", World::HALF);
+        glActiveTexture(GL_TEXTURE0 + U_HEIGHT); glBindTexture(GL_TEXTURE_2D, world.heightTex); glActiveTexture(GL_TEXTURE0);
+            for (auto& ch : world.chunks) {
+                float dx = ch.center.x - pp.x, dz = ch.center.z - pp.z;
+                if (dx * dx + dz * dz < 700.f * 700.f) ch.mesh.draw();
+            }
+            R.setCommon(R.road, pc);
+            world.roadMesh.draw();
+            R.setCommon(R.object, pc);
+            R.object.set("uPaint", vec3(1, 1, 1));
+            R.object.set("uStripe", vec3(1, 1, 1));
+            R.object.set("uBrake", 0.f);
+            world.hubMesh.draw();
+            world.cityMesh.draw();
+            glDisable(GL_CULL_FACE);
+            if (raceEvent >= 0) gateLit.draw();
+            R.setCommon(R.tree, pc);
+            drawTrees(R.tree, pp, 260.f, 120.f);
+            glEnable(GL_CULL_FACE);
+            R.probeFrames++;
+        }
+        R.endProbe();
+        drawCam = &c;
+    }
     if (reflOn || wetRefl) {
         float Lw = reflOn ? world.waterLevel : wetPlane;
-        Camera rc = c;
+        Camera& rc = reflCamera;
+        rc = c;
         rc.pos.y = 2 * Lw - c.pos.y;
         rc.target.y = 2 * Lw - c.target.y;
         rc.update();
@@ -2014,6 +2117,8 @@ void Game::renderWorld(const Camera& c, bool showroom) {
         R.drawSky(rc);
         R.setCommon(R.terrain, rc);
         R.terrain.set("uWater", world.waterLevel);
+        R.terrain.set("uHalf", World::HALF);
+        glActiveTexture(GL_TEXTURE0 + U_HEIGHT); glBindTexture(GL_TEXTURE_2D, world.heightTex); glActiveTexture(GL_TEXTURE0);
         float rlim = std::min(drawDist, 1400.f);
         for (auto& ch : world.chunks) {
             float dx = ch.center.x - c.pos.x, dz = ch.center.z - c.pos.z;
@@ -2030,6 +2135,7 @@ void Game::renderWorld(const Camera& c, bool showroom) {
         world.cityMesh.draw();
         glDisable(GL_CULL_FACE);
         world.propsMesh.draw();
+        if (raceEvent >= 0) gateLit.draw();
         for (Racer* r : cars) drawCar(*r, R.object);
         R.setCommon(R.tree, rc);
         drawTrees(R.tree, c.pos, rlim * 0.7f, 150.f);
@@ -2046,12 +2152,25 @@ void Game::renderWorld(const Camera& c, bool showroom) {
     // terrain
     R.setCommon(R.terrain, c);
     R.terrain.set("uWater", world.waterLevel);
+        R.terrain.set("uHalf", World::HALF);
+        glActiveTexture(GL_TEXTURE0 + U_HEIGHT); glBindTexture(GL_TEXTURE_2D, world.heightTex); glActiveTexture(GL_TEXTURE0);
     for (auto& ch : world.chunks) {
-        float dx = ch.center.x - c.pos.x, dz = ch.center.z - c.pos.z;
-        float d2 = dx * dx + dz * dz;
+        // chunks are 300 m across: judge them by their nearest point and their corners, not the centre,
+        // or the ground right under a camera looking down can belong to a chunk "behind" it and vanish
+        float nx = clampf(c.pos.x, ch.mesh.bmin.x, ch.mesh.bmax.x) - c.pos.x;
+        float nz = clampf(c.pos.z, ch.mesh.bmin.z, ch.mesh.bmax.z) - c.pos.z;
+        float d2 = nx * nx + nz * nz;
         float lim = drawDist + 110.f;
         if (d2 > lim * lim) continue;
-        if (d2 > 160.f * 160.f && dot(normalize(vec3(dx, 0, dz)), camFwd) < -0.45f) continue;
+        if (d2 > 120.f * 120.f) {
+            bool behind = true;
+            for (int k = 0; k < 4 && behind; k++) {
+                vec3 q((k & 1) ? ch.mesh.bmax.x : ch.mesh.bmin.x, 0, (k & 2) ? ch.mesh.bmax.z : ch.mesh.bmin.z);
+                vec3 dq(q.x - c.pos.x, 0, q.z - c.pos.z);
+                if (dot(normalize(dq), camFwd) > -0.35f) behind = false;
+            }
+            if (behind) continue;
+        }
         ch.mesh.draw();
     }
     // roads
@@ -2080,6 +2199,13 @@ void Game::renderWorld(const Camera& c, bool showroom) {
     glDisable(GL_CULL_FACE);
     world.propsMesh.draw();
     stuntMesh.draw();
+    if (raceEvent >= 0 && !thumbActive) {
+        gateLit.draw();
+        glEnable(GL_POLYGON_OFFSET_FILL);
+        glPolygonOffset(-2.f, -6.f);
+        gatePaint.draw();
+        glDisable(GL_POLYGON_OFFSET_FILL);
+    }
     for (Racer* r : cars) drawCar(*r, R.object);
     drawProps(c, c.pos, drawDist * 0.6f, 110.f, false);
     R.object.use();
@@ -2115,10 +2241,19 @@ void Game::renderWorld(const Camera& c, bool showroom) {
     glActiveTexture(GL_TEXTURE0 + U_REFL);
     glBindTexture(GL_TEXTURE_2D, reflOn ? R.reflTex : 0);
     glActiveTexture(GL_TEXTURE0);
+    // two passes: the bed seen through the water is tinted by what the water absorbs,
+    // then the water's own colour, reflections, sun glitter and foam go on top
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_CULL_FACE);
+    glDepthMask(GL_FALSE);
+    glBlendFunc(GL_ZERO, GL_SRC_COLOR);
+    R.water.set("uPass", 0);
     world.waterMesh.draw();
+    glBlendFunc(GL_ONE, GL_ONE);
+    R.water.set("uPass", 1);
+    world.waterMesh.draw();
+    glDepthMask(GL_TRUE);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_CULL_FACE);
     glDisable(GL_BLEND);
     // car glass (transparent, after everything opaque)
@@ -2150,15 +2285,22 @@ void Game::renderWorld(const Camera& c, bool showroom) {
         R.unlit.set("uTint", vec4(1, 1, 1, a));
         mat4 m = r->car.chassisMatrix();
         m.m[13] -= hgt - 0.05f;
-        R.unlit.set("uModel", m * scale(vec3(r->car.spec->width * 0.68f, 1, r->car.spec->length * 0.6f)));
+        vec3 dims = r->model ? r->model->dims : vec3(r->car.spec->length, r->car.spec->width, 1.3f);
+        R.unlit.set("uModel", m * scale(vec3(dims.y * 0.5f, 1, dims.x * 0.52f)));
         blobMesh.draw();
+        if (r->model && a > 0.3f) {
+            R.unlit.set("uTint", vec4(1, 1, 1, a * 0.85f));
+            for (int k = 0; k < 4; k++) {
+                vec3 wp = r->model->wheelPos[k];
+                R.unlit.set("uModel", m * translate(vec3(wp.x, 0.01f, wp.z)) * scale(vec3(r->model->wheelW * 0.9f, 1, r->model->wheelR * 0.75f)));
+                tyreBlobMesh.draw();
+            }
+            R.unlit.set("uTint", vec4(1, 1, 1, a));
+        }
     }
     glDisable(GL_POLYGON_OFFSET_FILL);
-    if (raceEvent >= 0 && gateMesh.count && !thumbActive) {
-        R.unlit.set("uFog", 1);
-        R.unlit.set("uTint", vec4(1, 1, 1, 1));
-        R.unlit.set("uModel", mat4());
-        gateMesh.draw();
+    if (raceEvent >= 0 && !thumbActive) {
+        drawGateFx();
         const EventDef& RE = events[raceEvent];
         if (!RE.boosts.empty()) {
             glBlendFunc(GL_SRC_ALPHA, GL_ONE);
@@ -2711,7 +2853,7 @@ void Game::drawHud() {
         default: break;
     }
     drawTimeCircuits();
-    if (state == ST_RACE || state == ST_RACE_INTRO) drawRaceHud();
+    if (state == ST_RACE || state == ST_RACE_INTRO) { drawRaceHud(); drawGateHud(); }
     else {
         // credits & car
         hud.rect(18 * u, 18 * u, 250 * u, 62 * u, PANEL);

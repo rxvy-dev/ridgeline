@@ -341,6 +341,7 @@ bool Renderer::init() {
     glGenVertexArrays(1, &emptyVao);
     tex.generate();
     setShadowQuality(4096);
+    initProbe();
     return true;
 }
 
@@ -521,6 +522,8 @@ void Renderer::setCommon(Shader& s, const Camera& cam) {
     s.set("tForestN", int(U_FORESTN));
     s.set("uPhoto", tex.photo ? 1 : 0);
     s.set("tSky", int(U_SKY));
+    s.set("tProbe", int(U_PROBE));
+    s.set("uProbe", 0);
     s.set("uHdri", (useSky && skyTex) ? 1 : 0);
     s.set("uWet", wet);
     s.set("uRain", useSky && skyTex ? rain : 0.f);
@@ -726,4 +729,67 @@ void Renderer::drawRain(const Camera& cam, vec3 wind) {
     glEnable(GL_CULL_FACE);
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
+}
+
+// ------------------------------------------------------------------ environment probe
+void Renderer::initProbe() {
+    if (probeTex) return;
+    glGenTextures(1, &probeTex);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, probeTex);
+    for (int f = 0; f < 6; f++)
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + f, 0, GL_RGB16F, probeSize, probeSize, 0, GL_RGB, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+    glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+    glGenRenderbuffers(1, &probeDepth);
+    glBindRenderbuffer(GL_RENDERBUFFER, probeDepth);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, probeSize, probeSize);
+    glGenFramebuffers(1, &probeFbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, probeFbo);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, probeDepth);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X, probeTex, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glActiveTexture(GL_TEXTURE0 + U_PROBE);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, probeTex);
+    glActiveTexture(GL_TEXTURE0);
+}
+
+Camera Renderer::beginProbeFace(int face, vec3 pos) {
+    static const vec3 dirs[6] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+    static const vec3 ups[6] = {{0, -1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}, {0, -1, 0}, {0, -1, 0}};
+    Camera c;
+    c.pos = pos;
+    c.target = pos + dirs[face];
+    c.fov = PI * 0.5f;
+    c.aspect = 1.f;
+    c.nearZ = 0.3f;
+    c.farZ = 3000.f;
+    c.view = lookAt(pos, pos + dirs[face], ups[face]);
+    c.proj = perspective(c.fov, 1.f, c.nearZ, c.farZ);
+    c.viewProj = c.proj * c.view;
+    glBindFramebuffer(GL_FRAMEBUFFER, probeFbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, probeTex, 0);
+    glViewport(0, 0, probeSize, probeSize);
+    glClearColor(atmo.fogColor.x, atmo.fogColor.y, atmo.fogColor.z, 1);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    tex.bindAll();
+    endShadowPasses();
+    return c;
+}
+
+void Renderer::endProbe() {
+    glBindTexture(GL_TEXTURE_CUBE_MAP, probeTex);
+    glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+    glActiveTexture(GL_TEXTURE0 + U_PROBE);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, probeTex);
+    glActiveTexture(GL_TEXTURE0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }

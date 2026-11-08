@@ -25,6 +25,7 @@ typedef ptrdiff_t GLintptr;
 #define GL_BLEND 0x0BE2
 #define GL_SRC_ALPHA 0x0302
 #define GL_ONE_MINUS_SRC_ALPHA 0x0303
+#define GL_SRC_COLOR 0x0300
 #define GL_ONE 1
 #define GL_ZERO 0
 #define GL_POINTS 0x0000
@@ -54,6 +55,10 @@ typedef ptrdiff_t GLintptr;
 #define GL_TEXTURE_MAG_FILTER 0x2800
 #define GL_TEXTURE_WRAP_S 0x2802
 #define GL_TEXTURE_WRAP_T 0x2803
+#define GL_TEXTURE_WRAP_R 0x8072
+#define GL_TEXTURE_CUBE_MAP 0x8513
+#define GL_TEXTURE_CUBE_MAP_POSITIVE_X 0x8515
+#define GL_TEXTURE_CUBE_MAP_SEAMLESS 0x884F
 #define GL_LINEAR 0x2601
 #define GL_NEAREST 0x2600
 #define GL_LINEAR_MIPMAP_LINEAR 0x2703
@@ -170,6 +175,7 @@ typedef ptrdiff_t GLintptr;
     X(void, glGenRenderbuffers, (GLsizei, GLuint*)) \
     X(void, glBindRenderbuffer, (GLenum, GLuint)) \
     X(void, glRenderbufferStorageMultisample, (GLenum, GLsizei, GLenum, GLsizei, GLsizei)) \
+    X(void, glRenderbufferStorage, (GLenum, GLenum, GLsizei, GLsizei)) \
     X(void, glDeleteRenderbuffers, (GLsizei, const GLuint*)) \
     X(void, glBlitFramebuffer, (GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum)) \
     X(void, glDrawBuffer, (GLenum)) \

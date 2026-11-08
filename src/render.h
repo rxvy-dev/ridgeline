@@ -134,6 +134,16 @@ struct Renderer {
     GLuint msFbo = 0, msColor = 0, msDepth = 0;
     GLuint bloomFbo[2] = {0, 0}, bloomTex[2] = {0, 0};
     GLuint reflFbo = 0, reflTex = 0, reflDepth = 0;
+    // environment probe: a small cubemap captured around the player's car so the paint,
+    // chrome and glass reflect the real world (trees, road, buildings) instead of just sky
+    GLuint probeTex = 0, probeFbo = 0, probeDepth = 0;
+    int probeSize = 128;
+    vec3 probePos;
+    int probeFrames = 0;   // faces rendered since the probe moved somewhere new
+    bool probeOn = true;
+    void initProbe();
+    Camera beginProbeFace(int face, vec3 pos);
+    void endProbe();
     GLuint aoFbo = 0, aoTex = 0;
     int aw = 0, ah = 0;
     bool useAO = true;

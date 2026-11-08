@@ -27,6 +27,9 @@ uniform float uRain;      // rain (overcast) amount 0..1
 uniform float uHdriW;     // how much of the HDRI sky shows (1 by day, 0 at sunset / night)
 uniform float uNight;     // 0 day .. 1 night
 uniform vec4 uHL;         // player headlights: position, on (w)
+uniform samplerCube tProbe;  // environment captured around the player's car
+uniform int uProbe;          // 1 while drawing a car near the probe
+uniform float uProbeLod;
 uniform vec3 uHLDir;
 vec3 procSky(vec3 d){
     float t = clamp(d.y, 0.0, 1.0);
@@ -104,6 +107,7 @@ vec3 skyColor(vec3 d){
 }
 // environment used for reflections (sky above, tree line at the horizon, ground below)
 vec3 envColor(vec3 R){
+    if (uProbe == 1) return textureLod(tProbe, R, uProbeLod).rgb;
     if (R.y > 0.0) {
         vec3 s = uHdri == 1 ? hdri(R, 1.5) : skyColor(R);
         float az = atan(R.x, R.z);
@@ -141,7 +145,12 @@ vec3 applyFog(vec3 col, vec3 wp){
     return mix(col, fc, clamp(f, 0.0, 1.0));
 }
 vec3 gradAmb(vec3 n){ return mix(uGroundAmb, uSkyAmb, n.y * 0.5 + 0.5); }
-vec3 ambient(vec3 n){ return uHdri == 1 ? mix(gradAmb(n), shEval(n), uHdriW) : gradAmb(n); }
+vec3 ambient(vec3 n){
+    vec3 a = uHdri == 1 ? mix(gradAmb(n), shEval(n), uHdriW) : gradAmb(n);
+    // light bounced off the sunlit ground fills sides and undersides (car flanks, cliffs, trunks)
+    a += uSunColor * vec3(0.95, 0.85, 0.7) * max(uSunDir.y, 0.0) * 0.07 * (0.5 - 0.5 * n.y);
+    return a;
+}
 vec3 lighting(vec3 albedo, vec3 n, float shadow){
     float ndl = max(dot(n, uSunDir), 0.0);
     albedo *= 1.0 - 0.3 * uWet * smoothstep(0.4, 0.9, n.y);  // wet ground soaks up light
@@ -298,7 +307,19 @@ in vec3 vPos; in vec3 vNrm; in vec4 vCol; in vec3 vObj;
 uniform float uWater;
 uniform sampler2D tGrass, tDirt, tRock, tRockN;
 uniform sampler2D tSand, tLeafGround, tGrassN, tForestN;
+uniform sampler2D tHeight;
+uniform float uHalf;
 out vec4 FragColor;
+// caustics: bright wavy lines of sunlight focused by the surface onto the bed
+float caustic(vec2 p, float t) {
+    float c = 0.0;
+    for (int i = 0; i < 2; i++) {
+        vec2 q = p * (0.55 + 0.4 * float(i)) + vec2(t * 0.35, t * 0.22) * (i == 0 ? 1.0 : -1.3);
+        float n1 = vnoise(q), n2 = vnoise(q * 1.9 + 3.7);
+        c += pow(1.0 - abs(n1 + n2 - 1.0), 8.0);
+    }
+    return c;
+}
 vec3 tri(sampler2D t, vec3 p, vec3 w, float s){
     return texture(t, p.zy * s).rgb * w.x + texture(t, p.xz * s).rgb * w.y + texture(t, p.xy * s).rgb * w.z;
 }
@@ -356,17 +377,64 @@ void main(){
     vec3 ny = texture(tRockN, p.xz * rs).xyz * 2.0 - 1.0;
     vec3 nz = texture(tRockN, p.xy * rs).xyz * 2.0 - 1.0;
     vec3 rn = normalize(n + (vec3(0.0, nx.y, nx.x) * w.x + vec3(ny.x, 0.0, ny.y) * w.y + vec3(nz.x, nz.y, 0.0) * w.z) * 0.9);
-    float r = smoothstep(0.30, 0.46, slope + (macro3 - 0.5) * 0.12);
+    // landform from the height field: gullies (concave) collect water and loose stones,
+    // ridges and spurs (convex) are bare and lighter
+    vec2 huv = (p.xz + uHalf) / (2.0 * uHalf);
+    float tx = 1.0 / 2400.0;
+    float h0 = texture(tHeight, huv).r;
+    float lap = texture(tHeight, huv + vec2(tx * 3.0, 0)).r + texture(tHeight, huv - vec2(tx * 3.0, 0)).r
+              + texture(tHeight, huv + vec2(0, tx * 3.0)).r + texture(tHeight, huv - vec2(0, tx * 3.0)).r - 4.0 * h0;
+    float gully = smoothstep(0.25, 1.6, lap) * smoothstep(0.08, 0.3, slope);
+    float ridge = smoothstep(0.25, 1.6, -lap);
+
+    // rock: horizontal strata, warm and cool bands, scree fans below the cliffs
+    float warp = vnoise(p.xz * 0.04) * 4.0 + vnoise(p.xz * 0.011) * 9.0;
+    float strata = sin(p.y * 0.85 + macro * 9.0 + warp) * 0.65 + sin(p.y * 2.3 + warp * 1.7) * 0.35;
+    rock *= mix(vec3(0.88, 0.86, 0.84), vec3(1.05, 1.02, 0.97), smoothstep(-0.5, 0.7, strata));
+    rock *= mix(vec3(1.02, 0.98, 0.93), vec3(0.92, 0.96, 1.02), smoothstep(0.3, 0.7, macro2));
+    rock *= 0.9 + 0.22 * ridge;
+    float r = smoothstep(0.30, 0.46, slope + (macro3 - 0.5) * 0.12 + ridge * 0.06);
+    vec3 scree = tri(tRock, p * 3.1, w, rs) * vec3(0.78, 0.76, 0.73);
+    float sc = smoothstep(0.16, 0.3, slope) * (1.0 - r) * smoothstep(0.45, 0.75, macro3 + gully * 0.5) * smoothstep(60.0, 140.0, p.y);
+    c = mix(c, scree, sc);
     c = mix(c, rock, r);
+    c *= 1.0 - gully * 0.22;
     n = normalize(mix(n, rn, r));
 
-    float sn = smoothstep(285.0, 330.0, p.y + macro * 50.0) * (1.0 - r * 0.6);
-    c = mix(c, vec3(0.92, 0.94, 0.98), sn);
+    // snow settles where it can: high up, on flat ground and ledges; steep faces shed it
+    float snowLine = 255.0 + macro * 70.0 + (vnoise(p.xz * 0.02) - 0.5) * 40.0;
+    float sn = smoothstep(snowLine, snowLine + 35.0, p.y) * smoothstep(0.52, 0.82, n.y + ridge * 0.05 - gully * 0.08);
+    sn = max(sn, smoothstep(snowLine + 60.0, snowLine + 120.0, p.y) * smoothstep(0.3, 0.55, n.y));
+    // albedo kept below 0.9 so lit snow keeps its shading after tone mapping
+    vec3 snowC = vec3(0.68, 0.71, 0.77) * (0.88 + 0.12 * vnoise(p.xz * 0.7)) * (0.94 + 0.06 * macro2);
+    c = mix(c, snowC, sn);
+    // wind-packed ripples and drifts: a little relief so sunlit snow is not a flat sheet
+    vec2 sq = p.xz * vec2(0.55, 0.22);
+    float s0 = vnoise(sq), sx = vnoise(sq + vec2(0.12, 0.0)), sz = vnoise(sq + vec2(0.0, 0.12));
+    float d0 = vnoise(p.xz * 0.06);
+    vec3 snN = normalize(n + vec3(s0 - sx, 0.0, s0 - sz) * 3.0 + vec3(d0 - vnoise(p.xz * 0.06 + vec2(0.3, 0.0)), 0.0, d0 - vnoise(p.xz * 0.06 + vec2(0.0, 0.3))) * 1.5);
+    n = normalize(mix(n, snN, sn * (1.0 - smoothstep(80.0, 400.0, dist))));
+
+    // beaches: sand, a darker wet band the waves wash over, and the lake/sea bed below
+    float hw = p.y - uWater;
     vec3 shore = uPhoto == 1 ? texture(tSand, p.xz / 4.0).rgb * vec3(0.72, 0.68, 0.62) : vec3(0.70, 0.64, 0.48) * (0.85 + 0.3 * macro3);
     c = mix(c, shore, 1.0 - smoothstep(uWater + 0.4, uWater + 2.4, p.y + macro3));
+    float swash = 0.35 + 0.25 * sin(uTime * 0.7 + p.x * 0.031 + p.z * 0.023 + vnoise(p.xz * 0.2) * 3.0);
+    float wetSand = (1.0 - smoothstep(swash, swash + 0.6, hw)) * step(-0.5, hw);
+    float under = smoothstep(0.0, 0.8, -hw);
+    c *= mix(1.0, 0.62, max(wetSand, under * 0.7));
 
     float sh = shadowFactor(p, normalize(vNrm));
     vec3 col = lighting(c, n, sh);
+    vec3 V = normalize(uCamPos - p);
+    vec3 Hh = normalize(V + uSunDir);
+    float ndh = max(dot(n, Hh), 0.0);
+    col += uSunColor * pow(ndh, 80.0) * 0.45 * wetSand * sh;                    // wet sand shine
+    col += uSunColor * pow(ndh, 400.0) * 1.2 * sn * step(0.93, vnoise(p.xz * 6.0)) * sh;  // snow sparkle
+    if (hw < 0.0) {
+        float d = -hw;
+        col += c * uSunColor * caustic(p.xz, uTime) * 0.35 * exp(-d * 0.3) * smoothstep(0.0, 0.4, d) * sh * max(uSunDir.y, 0.0);
+    }
     FragColor = vec4(applyFog(col, p), 1.0);
 }
 )";
@@ -560,6 +628,12 @@ void main(){
     else if (mat == 8) { albedo = vec3(0.045, 0.045, 0.05) * vCol.rgb; spec = 0.08; gloss = 12.0; }
     else if (mat == 9) { albedo = vec3(0.035, 0.036, 0.04); spec = 0.25; gloss = 30.0; refl = 0.04; }
     else if (mat == 18) { albedo = carbonWeave(vObj); spec = 0.45; gloss = 60.0; coat = 1.0; sharp = 1.0; }
+    else if (mat == 19) { albedo = vCol.rgb; spec = 0.55; gloss = 34.0; coat = 0.35; }       // inflatable vinyl
+    else if (mat == 20) {                                                                   // steady emissive (signs, lamps)
+        FragColor = vec4(applyFog(vCol.rgb * 2.6, vPos), 1.0);
+        return;
+    }
+    else if (mat == 21) { albedo = vCol.rgb; spec = 0.12; gloss = 20.0; }                  // road paint / banners
     else if (mat == 10) { albedo = vec3(0.30, 0.31, 0.33) * (1.0 + uHeadlights); coat = 1.0; sharp = 1.0; refl = 0.35; }
     else if (mat == 11) { albedo = vec3(0.65, 0.07, 0.05); spec = 0.5; gloss = 50.0; }
     else if (mat == 12) { albedo = vec3(0.86, 0.86, 0.82); spec = 0.2; }
@@ -952,65 +1026,108 @@ in vec3 vPos; in vec3 vNrm; in vec4 vCol; in vec3 vObj;
 uniform sampler2D tHeight, tRefl;
 uniform mat4 uReflVP;
 uniform int uHasRefl;
+uniform int uPass;          // 0: transmittance (multiplied onto the lake bed), 1: light added on top
 uniform float uHalf, uWaterLevel;
 out vec4 FragColor;
-vec2 waveGrad(vec2 p, float t){
-    vec2 g = vec2(0.0);
-    // a few directional swells plus noise ripples
-    vec2 d1 = normalize(vec2(0.8, 0.6)), d2 = normalize(vec2(-0.5, 0.86)), d3 = normalize(vec2(0.2, -1.0));
-    g += d1 * cos(dot(p, d1) * 0.35 + t * 1.1) * 0.06;
-    g += d2 * cos(dot(p, d2) * 0.62 + t * 1.6) * 0.04;
-    g += d3 * cos(dot(p, d3) * 1.3 + t * 2.3) * 0.025;
-    g.x += (vnoise(p * 0.9 + vec2(t * 0.5, 0.0)) - 0.5) * 0.10 + (vnoise(p * 3.1 - t * 0.9) - 0.5) * 0.05;
-    g.y += (vnoise(p * 0.9 + vec2(4.0, t * 0.45)) - 0.5) * 0.10 + (vnoise(p * 2.9 + vec2(t * 0.8, 2.0)) - 0.5) * 0.05;
-    return g;
+// sharp-crested travelling waves: h = A * exp(sin(phase) - 1); returns gradient (xy) and height (z)
+vec3 waves(vec2 p, float t, float amp) {
+    vec3 acc = vec3(0.0);
+    float a = 0.30 * amp, k = 0.16, w = 0.9;
+    vec2 dir = normalize(vec2(0.82, 0.57));
+    for (int i = 0; i < 7; i++) {
+        float ph = dot(dir, p) * k + t * w + float(i) * 1.7;
+        float e = exp(sin(ph) - 1.0);
+        acc.z += a * e;
+        acc.xy += a * e * cos(ph) * k * dir;
+        // next octave: shorter, faster, turned, smaller
+        float ang = 1.13 + float(i) * 0.71;
+        dir = normalize(vec2(dir.x * cos(ang) - dir.y * sin(ang), dir.x * sin(ang) + dir.y * cos(ang)));
+        a *= 0.62; k *= 1.68; w *= 1.31;
+    }
+    // capillary ripples on top
+    vec2 q = p * 2.3 + vec2(t * 0.6, -t * 0.45);
+    acc.x += (vnoise(q) - 0.5) * 0.09 * amp + (vnoise(q * 2.7 + 9.0) - 0.5) * 0.05;
+    acc.y += (vnoise(q + vec2(5.2, 1.3)) - 0.5) * 0.09 * amp + (vnoise(q * 2.7 + vec2(1.0, 7.0)) - 0.5) * 0.05;
+    return acc;
+}
+vec4 fogTerms(vec3 wp) {   // fog colour (rgb) and amount (a), as applyFog computes them
+    vec3 v = wp - uCamPos; float dist = length(v); vec3 dir = v / max(dist, 0.001);
+    float hf = exp(-max(wp.y - 15.0, 0.0) * 0.005);
+    float f = 1.0 - exp(-dist * uFogDensity * (0.5 + 0.9 * hf));
+    float s = pow(max(dot(dir, uSunDir), 0.0), 5.0);
+    vec3 fogBase = uFogColor;
+    if (uHdri == 1) {
+        vec3 hz = hdri(normalize(vec3(dir.x, max(dir.y, 0.03) + 0.05, dir.z)), 6.0);
+        fogBase = mix(uFogColor, hz * vec3(0.92, 0.96, 1.04), 0.75);
+    }
+    vec3 fc = mix(fogBase, uSunColor * vec3(0.85, 0.7, 0.5) + vec3(0.1) * (1.0 - uNight), s * (uHdri == 1 ? 0.3 : 0.55));
+    return vec4(fc, clamp(f, 0.0, 1.0));
 }
 void main(){
+    if (vPos.y < uClipY) discard;
     vec2 p = vPos.xz; float t = uTime;
     float ground = texture(tHeight, (p + uHalf) / (2.0 * uHalf)).r;
     float depth = uWaterLevel - ground;
     if (depth < -0.05) discard;
-    vec2 g = waveGrad(p, t);
-    float calm = smoothstep(0.0, 1.5, depth);
-    vec3 n = normalize(vec3(-g.x * calm, 1.0, -g.y * calm));
-    vec3 V = normalize(uCamPos - vPos);
     float dist = length(uCamPos - vPos);
-    n = normalize(mix(n, vec3(0, 1, 0), smoothstep(150.0, 900.0, dist) * 0.6));
+    // open, deep water gets the big swell; shallows and small lakes stay calmer
+    float amp = mix(0.35, 1.0, smoothstep(1.5, 14.0, depth)) * (1.0 + uRain * 0.6);
+    vec3 wv = waves(p, t, amp);
+    float calm = smoothstep(0.0, 1.2, depth);
+    vec3 n = normalize(vec3(-wv.x * calm, 1.0, -wv.y * calm));
+    n = normalize(mix(n, vec3(0, 1, 0), smoothstep(120.0, 1100.0, dist) * 0.75));
+    if (uRain > 0.05) {  // drops pocking the surface
+        vec2 rp = rainRipples(p) * uRain * 1.4;
+        n = normalize(n + vec3(rp.x, 0.0, rp.y));
+    }
+    vec3 V = normalize(uCamPos - vPos);
     float ndv = max(dot(n, V), 0.0);
-    float fres = 0.025 + 0.975 * pow(1.0 - ndv, 5.0);
+    float F = clamp(0.02 + 0.98 * pow(1.0 - ndv, 5.0), 0.0, 1.0);
     vec3 R = reflect(-V, n);
+    R.y = abs(R.y);
     vec3 refl = envColor(R);
     if (uHasRefl == 1) {
         vec4 cp = uReflVP * vec4(vPos, 1.0);
-        vec2 ruv = cp.xy / cp.w * 0.5 + 0.5 + n.xz * 0.035;
+        vec2 ruv = cp.xy / cp.w * 0.5 + 0.5 + n.xz * 0.045;
         vec3 pr = texture(tRefl, clamp(ruv, 0.002, 0.998)).rgb;
         float edge = smoothstep(0.0, 0.04, ruv.x) * smoothstep(1.0, 0.96, ruv.x) * smoothstep(1.0, 0.95, ruv.y);
         refl = mix(refl, pr, edge);
     }
-    // water body: turquoise shallows to deep blue-green, lit by sky and sun
-    float k = 1.0 - exp(-depth * 0.28);
-    vec3 shallow = vec3(0.10, 0.30, 0.27), deepC = vec3(0.012, 0.055, 0.075);
-    vec3 body = mix(shallow, deepC, k) * (uSkyAmb * 1.1 + uSunColor * 0.45 * max(uSunDir.y, 0.0));
     float sh = shadowFactor(vPos, vec3(0, 1, 0));
-    body *= 0.6 + 0.4 * sh;
-    // sun-lit scattering in wave crests
-    float sss = pow(max(dot(-V, uSunDir) * 0.5 + 0.5, 0.0), 4.0) * max(g.x + g.y, 0.0) * 4.0;
-    body += vec3(0.05, 0.16, 0.13) * sss * sh;
-    vec3 col = mix(body, refl, clamp(fres * 1.05, 0.0, 1.0));
+    // light travelling through the water: red goes first, then green; what's left is blue
+    vec3 absorb = vec3(0.42, 0.075, 0.045);
+    float path = depth * (1.0 + 1.6 * (1.0 - ndv));          // grazing views see through more water
+    vec3 T = exp(-absorb * path);
+    T *= 1.0 - smoothstep(80.0, 420.0, dist);                // distant water: no bed visible
+    // in-scattered colour of the water itself (what you see where it's deep)
+    vec3 scatter = vec3(0.010, 0.050, 0.060) * (uSkyAmb * 1.2 + uSunColor * 0.5 * max(uSunDir.y, 0.0) * (0.6 + 0.4 * sh));
+    // sunlight through the crests
+    float crest = clamp(wv.z * 2.2 - 0.25, 0.0, 1.0);
+    float back = pow(max(dot(-V, uSunDir) * 0.5 + 0.5, 0.0), 3.0);
+    scatter += vec3(0.03, 0.16, 0.13) * crest * back * sh * max(uSunDir.y + 0.2, 0.0);
+    // foam: breaking lines rolling in onto the shore, plus whitecaps on the open sea
+    float shoreBand = 1.0 - smoothstep(0.05, 1.4, depth);
+    float roll = sin(depth * 4.5 - t * 1.6 + vnoise(p * 0.12) * 5.0);
+    float streak = vnoise(p * vec2(1.1, 3.3) + vec2(t * 0.15, 0.0)) * 0.55 + vnoise(p * 4.7 - t * 0.4) * 0.45;
+    float foam = smoothstep(0.55, 0.9, roll) * smoothstep(0.35, 0.7, streak) * shoreBand;
+    foam += smoothstep(0.08, 0.0, depth) * smoothstep(0.3, 0.6, streak) * 0.8;  // the swash edge
+    float caps = smoothstep(0.62, 0.8, wv.z * amp * 1.6 + streak * 0.35) * smoothstep(6.0, 20.0, depth) * (0.25 + uRain * 0.5);
+    foam = clamp(foam + caps, 0.0, 1.0) * (1.0 - smoothstep(250.0, 700.0, dist) * 0.7);
+    vec3 foamC = vec3(0.86, 0.9, 0.92) * (ambient(vec3(0.0, 1.0, 0.0)) + uSunColor * max(uSunDir.y, 0.0) * 0.7 * sh);
+    vec4 fog = fogTerms(vPos);
+    if (uPass == 0) {
+        vec3 keep = T * (1.0 - F) * (1.0 - foam) * (1.0 - fog.a);
+        FragColor = vec4(keep, 1.0);
+        return;
+    }
     vec3 H = normalize(V + uSunDir);
     float ndh = max(dot(n, H), 0.0);
-    col += uSunColor * (pow(ndh, 600.0) * 6.0 + pow(ndh, 80.0) * 0.25) * sh;
-    // shoreline foam lapping in and out
-    float wave = sin(depth * 6.0 - t * 1.8 + vnoise(p * 0.3) * 4.0) * 0.5 + 0.5;
-    float foamN = vnoise(p * 1.8 + vec2(t * 0.3, -t * 0.2)) * 0.6 + vnoise(p * 5.0 - t * 0.5) * 0.4;
-    float shore = 1.0 - smoothstep(0.0, 0.9, depth);
-    float foam = smoothstep(0.45, 0.7, foamN * (0.6 + 0.6 * wave) + shore * 0.55) * smoothstep(0.0, 0.25, shore + 0.05) * (shore > 0.0 ? 1.0 : 0.0);
-    foam *= 1.0 - smoothstep(0.6, 1.4, depth);
-    col = mix(col, vec3(0.88, 0.92, 0.93) * (uSkyAmb + uSunColor * 0.6 * sh), foam * 0.85);
-    // transparency in the shallows so the lake bed shows through
-    float alpha = clamp(max(1.0 - exp(-depth * 1.4), fres) + foam, 0.0, 1.0);
-    alpha = max(alpha, smoothstep(60.0, 300.0, dist));
-    FragColor = vec4(applyFog(col, vPos), alpha);
+    // sun glitter: a broad sheen plus pin-point sparkles on the facets
+    float spark = step(0.86, vnoise(p * 9.0 + t * 1.3)) * pow(ndh, 90.0) * 6.0;
+    vec3 sun = uSunColor * (pow(ndh, 700.0) * 9.0 + pow(ndh, 90.0) * 0.35 + spark) * sh * (1.0 - uRain * 0.8);
+    vec3 col = scatter * (1.0 - T) * (1.0 - F) + refl * F + sun;
+    col = mix(col, foamC, foam);
+    FragColor = vec4(col * (1.0 - fog.a) + fog.rgb * fog.a, 1.0);
 }
 )";
 

@@ -282,6 +282,41 @@ void World::computeRoadHeights() {
             blur(6);
             for (int i = 0; i < m; i++) hs[i] = lerpf(hs[i], target[i], w[i]);
         }
+        // never steeper than a real road: relax neighbouring points towards each other until
+        // no step is steeper than the limit (converges, and keeps loops closed)
+        const float gmax = r.surface == SURF_ASPHALT ? 0.13f : 0.18f;
+        std::vector<float> lim(m, 0.f);
+        for (int i = 0; i < m; i++) {
+            int j = r.closed ? (i + 1) % m : std::min(i + 1, m - 1);
+            lim[i] = gmax * std::hypot(r.pts[j].x - r.pts[i].x, r.pts[j].z - r.pts[i].z);
+        }
+        // points tied to a junction with an earlier road stay put
+        std::vector<char> pin(m);
+        for (int i = 0; i < m; i++) pin[i] = w[i] > 0.6f;
+        if (!r.closed) {
+            // open roads: sweep forwards and back (propagates long climbs quickly)
+            for (int pass = 0; pass < 4; pass++) {
+                for (int i = 1; i < m; i++) if (!pin[i]) hs[i] = clampf(hs[i], hs[i - 1] - lim[i - 1], hs[i - 1] + lim[i - 1]);
+                for (int i = m - 2; i >= 0; i--) if (!pin[i]) hs[i] = clampf(hs[i], hs[i + 1] - lim[i], hs[i + 1] + lim[i]);
+            }
+        }
+        for (int it = 0; it < 600; it++) {
+            bool changed = false;
+            int last = r.closed ? m : m - 1;
+            for (int i = 0; i < last; i++) {
+                int j = (i + 1) % m;
+                float d = hs[j] - hs[i];
+                float ex = std::fabs(d) - lim[i];
+                if (ex > 0.001f && !(pin[i] && pin[j])) {
+                    float sgn = d > 0 ? 1.f : -1.f;
+                    float ki = pin[i] ? 0.f : pin[j] ? 1.f : 0.5f;
+                    hs[j] -= ex * (1.f - ki) * sgn;
+                    hs[i] += ex * ki * sgn;
+                    changed = true;
+                }
+            }
+            if (!changed) break;
+        }
         for (int i = 0; i < m; i++) r.pts[i].y = std::max(hs[i], waterLevel + 1.6f);
     }
 }
@@ -578,8 +613,18 @@ void World::generate(uint32_t seed) {
     }
     // docks: the quay road and spurs up to the Coast Highway
     addRoad("Quay Road", {vec3(260, 0, -2330), vec3(800, 0, -2330), vec3(1400, 0, -2330), vec3(2000, 0, -2330), vec3(2240, 0, -2330)}, false, 13.f, SURF_ASPHALT);
-    for (float x : {450.f, 1150.f, 1750.f, 2200.f})
-        addRoad("Dock Lane", {vec3(x, 0, -1905), vec3(x, 0, -2100), vec3(x, 0, -2320)}, false, 11.f, SURF_ASPHALT);
+    for (float x : {450.f, 1150.f, 1750.f, 2200.f}) {
+        // start each lane right on the Coast Highway so it joins it (no step at the junction)
+        vec3 top(x, 0, -1905);
+        float bd = 1e18f;
+        for (auto& rd : roads)
+            if (rd.name == "Coast Highway")
+                for (auto& q : rd.pts) {
+                    float d = (q.x - x) * (q.x - x) + (q.z + 1905.f) * (q.z + 1905.f);
+                    if (d < bd) { bd = d; top = vec3(q.x, 0, q.z); }
+                }
+        addRoad("Dock Lane", {top, vec3(x, 0, top.z - 40.f), vec3(x, 0, -2100), vec3(x, 0, -2320)}, false, 11.f, SURF_ASPHALT);
+    }
     // Akagi Touge: hairpins from the Summit Loop up into the northern mountains
     {
         vec3 top = summit[3];
@@ -636,6 +681,7 @@ void World::generate(uint32_t seed) {
             }
             height[iz * N + ix] = h;
         }
+    erode(seed);
     carveTerrain();
     for (auto& c : crossCountry) c.y = heightAt(c.x, c.z);
     hubSpawn.y = heightAt(hubSpawn.x, hubSpawn.z);

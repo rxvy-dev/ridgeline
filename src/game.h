@@ -14,6 +14,15 @@
 enum State { ST_TITLE, ST_FREEROAM, ST_PAUSE, ST_MAP, ST_DEALER, ST_GARAGE, ST_SETTINGS, ST_RACE_INTRO, ST_RACE, ST_RESULTS, ST_PHOTO, ST_WHEELSPIN, ST_UPGRADE, ST_SWITCH, ST_CUSTOM, ST_EVENTLAB, ST_MYEVENTS };
 enum Action { A_NONE, A_UP, A_DOWN, A_LEFT, A_RIGHT, A_CONFIRM, A_BACK, A_PAUSE, A_CAMERA, A_RESET, A_MAP, A_INTERACT, A_TOGGLE, A_SELL, A_PHOTO, A_UPGRADE, A_HIDE, A_SWITCH };
 
+// race furniture placed along the route (gates.cpp)
+struct Gate {
+    float d = 0;             // distance along the route
+    bool finish = false, start = false;
+    vec3 p, t;
+    float hw = 0;
+    vec3 lamps[5];           // countdown lamps (start gantry)
+};
+
 struct OwnedCar {
     int spec; int paint; bool stripes;
     int up[3] = {0, 0, 0};  // upgrades: engine, weight, tyres
@@ -52,7 +61,9 @@ struct Settings {
     int timeMode = 0;     // 0 day/night cycle, 1 morning, 2 sunset, 3 night, 4 noon
     int brightness = 100, contrast = 100, saturation = 100, warmth = 0;  // display colour (percent / -10..10)
     int colorBlind = 0;   // 0 off, 1 protanopia, 2 deuteranopia, 3 tritanopia
-    int steerLock = 2;  // cockpit wheel rotation lock to lock: 0 180, 1 360, 2 540, 3 900 degrees
+    int steerLock = 2;
+    int racingLine = 1;   // Forza-style driving line in races
+    bool carReflections = true;  // cars reflect the world around them (environment probe)  // cockpit wheel rotation lock to lock: 0 180, 1 360, 2 540, 3 900 degrees
 };
 
 struct Toast { std::string text; vec4 col; float t; };
@@ -100,7 +111,7 @@ private:
     std::vector<CarModel> models;
     std::vector<struct ImportedModel*> importedModels;
     std::vector<EventDef> events;
-    Mesh blobMesh, beaconMesh, ringMesh, gateMesh, boostMesh;
+    Mesh blobMesh, tyreBlobMesh, beaconMesh, ringMesh, gateMesh, boostMesh;
 
     // player / progression
     Racer player;
@@ -202,6 +213,23 @@ private:
     // weather
     float wxRain = 0, wxTarget = 0, wxWet = 0, wxTimer = 180;
     void updateWeather(float dt);
+    // race furniture (gates.cpp)
+    std::vector<Gate> gates;
+    std::vector<float> gateFlash;
+    std::vector<Mesh> gateGlow;
+    Mesh gateLit, gatePaint, lampMesh, lineMesh;
+    int gateIdx = 0;
+    std::string gateBanner;
+    float gateBannerT = 0;
+    Camera reflCamera;  // mirrored camera of the planar reflection pass
+    float groundAtRoute(const Route& rt, float d, vec3 p) const;
+    void buildGates(const EventDef& E);
+    void clearGates();
+    float gateAbs(int n) const;
+    void updateGates(float dt);
+    void drawGateFx();
+    void drawRacingLine(const EventDef& E);
+    void drawGateHud();
     float todHours = 10.5f;  // time of day
     Atmosphere timeOfDayAtmo(float h, float& hdriW, float& night) const;
     void updateTimeOfDay(float dt);

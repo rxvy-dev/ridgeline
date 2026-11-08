@@ -44,6 +44,7 @@ struct EventDef {
 
 std::vector<EventDef> buildEvents(const World& w);
 void addBoostPads(EventDef& e, float spacing);
+int routeObstacles(const World& w, const Route& rt, vec3* firstBad);
 
 // EventLab: player-made events on any road, shareable as a short text code.
 struct CustomEvent {

@@ -68,6 +68,7 @@ struct World {
     bool urban(float x, float z, float pad = 0.f) const;
     std::vector<Estate> estates;
     void placeEstates();
+    void erode(uint32_t seed);  // hydraulic erosion of the mountains (erosion.cpp)
     void buildEstates();
     bool estatePaved(float x, float z, float pad) const;
     bool nearEstate(float x, float z, float r) const;

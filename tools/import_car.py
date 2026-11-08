@@ -442,7 +442,9 @@ def classify(mat, names):
         f |= F_PAINT
     if re.search(r"glass|window|windscreen|windshield", n) and not re.search(r"light", n):
         f |= F_GLASS
-    if re.search(r"light|lamp", n):
+    # a material is a lamp if its own name says so, or every part using it does
+    lamp = re.compile(r"light|lamp", re.I)
+    if lamp.search(mat.name) or (names and all(lamp.search(x) for x in names)):
         f |= F_LIGHT
     if re.search(r"chrome|alumin|metal|exhaust|rim", n):
         f |= F_CHROME
@@ -712,6 +714,19 @@ def main():
         if a.no_glass and re.search(a.no_glass, m.name, re.I):
             flags &= ~(F_GLASS | F_BLEND)
         base = tex_id(m.tex.get("base"), m.tex.get("opacity"), big=bool(flags & F_PAINT))
+        col = list(m.color)
+        if base >= 0 and max(col[:3]) < 0.02:
+            col[:3] = [1.0, 1.0, 1.0]  # a texture with a black tint is an exporter slip: show the texture
+        if base < 0 and not flags & (F_PAINT | F_GLASS | F_LIGHT) and min(col[:3]) > 0.75 and max(col[:3]) - min(col[:3]) < 0.02:
+            # untextured parts left at the exporter's default grey: guess a colour from the name
+            nm = (m.name + " " + " ".join(names)).lower()
+            guess = None
+            if re.search(r"carbon", nm): guess = (0.05, 0.05, 0.055)
+            elif re.search(r"black|rubber|borracha|tyre|tire|occlusion|electronic|plastic|seat|alcantara|net|belt|floor|dash", nm): guess = (0.045, 0.045, 0.05)
+            elif re.search(r"metal|mechanic|exhaust|exalt|disc|brake|suspension|engine|radiator|chassis|steel", nm): guess = (0.32, 0.32, 0.33)
+            elif re.search(r"^int_|interior|cabin", nm): guess = (0.07, 0.07, 0.075)
+            if guess: col[:3] = list(guess)
+        m.color = col
         nrm = tex_id(m.tex.get("normal"))
         emi = tex_id(m.tex.get("emissive"))
         # a paint texture that is mostly grey/white can be tinted; a coloured livery cannot
