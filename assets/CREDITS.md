@@ -15,3 +15,8 @@ All assets in this folder are from [Poly Haven](https://polyhaven.com) and are *
 - [boulder_01](https://polyhaven.com/a/boulder_01) (model, used as rock)
 - [fern_02](https://polyhaven.com/a/fern_02) (model, used as plant)
 - [shrub_01](https://polyhaven.com/a/shrub_01) (model, used as plant)
+
+## Signboard lettering
+
+`signs/signs.png` is rendered by `tools/make_signs.py` with [Noto Sans CJK JP](https://github.com/notofonts/noto-cjk) and
+Noto Serif CJK JP (SIL Open Font License 1.1, see `fonts/OFL.txt`).

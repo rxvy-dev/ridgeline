@@ -2,6 +2,7 @@
 // container stacks, gantry cranes, warehouses and a container ship.
 // Material ids (object shader): 0 plain, 7 steel, 14 facade, 15 neon/lamp, 16 corrugated, 17 glass tower.
 #include "world.h"
+#include "signs.h"
 #include <SDL3/SDL.h>
 #include <algorithm>
 #include <cmath>
@@ -42,6 +43,23 @@ void World::buildUrban(uint32_t seed) {
                 if (roadDistAt(x, z) < 1.0f) return false;
         return true;
     };
+    // a vertical sign blade: lettering on both faces (n and -n), a tall one stacked from several cells
+    const vec4 kSignFrame(0.07f, 0.07f, 0.08f, 0);
+    auto vsign = [&](vec3 c, vec3 n, float off, float hh, vec4 nc) {
+        (void)nc;
+        bool neon = rng.f() < 0.6f;
+        int base = neon ? SV_NEON0 : SV_SHOP0, cnt = neon ? SV_NEON_N : SV_SHOP_N;
+        int cell = base + rng.irange(0, cnt - 1);
+        const float hw = 0.62f;
+        int segs = std::max(1, int(hh * 2.f / (hw * 2.f * 4.f) + 0.5f));
+        float sh = hh / segs;
+        for (int k = 0; k < segs; k++) {
+            vec3 ck = c + vec3(0, -hh + sh * (2 * k + 1), 0);
+            int ce = base + (cell - base + k) % cnt;
+            signFace(city, ck + n * off, n, hw, sh * 0.98f, ce, true, neon ? 1.f : 0.3f);
+            signFace(city, ck - n * off, -n, hw, sh * 0.98f, ce, true, neon ? 1.f : 0.3f);
+        }
+    };
     // a building: shaft, parapet, rooftop clutter, a lit shop floor and signs on its street face
     // face: 0 = -z, 1 = +z, 2 = -x, 3 = +x (the side that faces the street)
     auto building = [&](float x0, float z0, float x1, float z1, float H, int face, float down) {
@@ -71,8 +89,24 @@ void World::buildUrban(uint32_t seed) {
             // rooftop billboard on some of the mid-rise ones
             if (H > 20.f && rng.f() < 0.25f) {
                 vec4 nc = kNeon[rng.irange(0, 5)];
-                if (face < 2) { float z = face == 0 ? z0 + 0.6f : z1 - 0.6f; block(city, vec3(x0 + 1, hi.y + 1.5f, z - 0.2f), vec3(x1 - 1, hi.y + 1.5f + std::min(8.f, (x1 - x0) * 0.4f), z + 0.2f), nc); }
-                else { float x = face == 2 ? x0 + 0.6f : x1 - 0.6f; block(city, vec3(x - 0.2f, hi.y + 1.5f, z0 + 1), vec3(x + 0.2f, hi.y + 1.5f + std::min(8.f, (z1 - z0) * 0.4f), z1 - 1), nc); }
+                (void)nc;
+                // lettered neon billboard on a steel frame, readable from both sides
+                bool neonB = rng.f() < 0.65f;
+                int cell = neonB ? SH_NEON0 + rng.irange(0, SH_NEON_N - 1) : SH_SHOP0 + rng.irange(0, SH_SHOP_N - 1);
+                vec4 board = signBoard(cell, false);
+                if (face < 2) {
+                    float z = face == 0 ? z0 + 0.6f : z1 - 0.6f, bh = std::min(8.f, (x1 - x0) * 0.4f);
+                    block(city, vec3(x0 + 1, hi.y + 1.5f, z - 0.2f), vec3(x1 - 1, hi.y + 1.5f + bh, z + 0.2f), board);
+                    vec3 c((x0 + x1) * 0.5f, hi.y + 1.5f + bh * 0.5f, z);
+                    signFitted(city, c + vec3(0, 0, -0.215f), vec3(0, 0, -1), (x1 - x0 - 2) * 0.48f, bh * 0.48f, cell, false, neonB ? 1.f : 0.3f);
+                    signFitted(city, c + vec3(0, 0, 0.215f), vec3(0, 0, 1), (x1 - x0 - 2) * 0.48f, bh * 0.48f, cell, false, neonB ? 1.f : 0.3f);
+                } else {
+                    float x = face == 2 ? x0 + 0.6f : x1 - 0.6f, bh = std::min(8.f, (z1 - z0) * 0.4f);
+                    block(city, vec3(x - 0.2f, hi.y + 1.5f, z0 + 1), vec3(x + 0.2f, hi.y + 1.5f + bh, z1 - 1), board);
+                    vec3 c(x, hi.y + 1.5f + bh * 0.5f, (z0 + z1) * 0.5f);
+                    signFitted(city, c + vec3(-0.215f, 0, 0), vec3(-1, 0, 0), (z1 - z0 - 2) * 0.48f, bh * 0.48f, cell, false, neonB ? 1.f : 0.3f);
+                    signFitted(city, c + vec3(0.215f, 0, 0), vec3(1, 0, 0), (z1 - z0 - 2) * 0.48f, bh * 0.48f, cell, false, neonB ? 1.f : 0.3f);
+                }
                 signs++;
             }
         }
@@ -86,12 +120,14 @@ void World::buildUrban(uint32_t seed) {
                 float z = face == 0 ? z0 : z1, out = face == 0 ? -1.f : 1.f;
                 if (k == 0) block(city, vec3(x0 + 0.5f, g + 0.4f, std::min(z, z + out * 0.12f)), vec3(x1 - 0.5f, g + 3.2f, std::max(z, z + out * 0.12f)), shop);
                 float x = rng.range(x0 + 1.f, x1 - 1.f);
-                block(city, vec3(x - 0.12f, y0, std::min(z + out * 0.2f, z + out * 1.5f)), vec3(x + 0.12f, y0 + sh, std::max(z + out * 0.2f, z + out * 1.5f)), nc);
+                block(city, vec3(x - 0.12f, y0, std::min(z + out * 0.2f, z + out * 1.5f)), vec3(x + 0.12f, y0 + sh, std::max(z + out * 0.2f, z + out * 1.5f)), kSignFrame);
+                vsign(vec3(x, y0 + sh * 0.5f, z + out * 0.85f), vec3(1, 0, 0), 0.125f, sh * 0.5f, nc);
             } else {
                 float x = face == 2 ? x0 : x1, out = face == 2 ? -1.f : 1.f;
                 if (k == 0) block(city, vec3(std::min(x, x + out * 0.12f), g + 0.4f, z0 + 0.5f), vec3(std::max(x, x + out * 0.12f), g + 3.2f, z1 - 0.5f), shop);
                 float z = rng.range(z0 + 1.f, z1 - 1.f);
-                block(city, vec3(std::min(x + out * 0.2f, x + out * 1.5f), y0, z - 0.12f), vec3(std::max(x + out * 0.2f, x + out * 1.5f), y0 + sh, z + 0.12f), nc);
+                block(city, vec3(std::min(x + out * 0.2f, x + out * 1.5f), y0, z - 0.12f), vec3(std::max(x + out * 0.2f, x + out * 1.5f), y0 + sh, z + 0.12f), kSignFrame);
+                vsign(vec3(x + out * 0.85f, y0 + sh * 0.5f, z), vec3(0, 0, 1), 0.125f, sh * 0.5f, nc);
             }
             signs++;
         }

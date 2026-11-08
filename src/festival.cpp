@@ -2,6 +2,7 @@
 // wheelspin), a day streak bonus, lucky-cat boards hidden across the island to smash, and a
 // livelier festival site with a big wheel lit up at night.
 #include "game.h"
+#include "signs.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -191,6 +192,10 @@ void Game::buildFestival() {
                     for (int j = 1; j < 5; j++) b.box(lerp(q[k], top, j / 5.f) + vec3(0, 0.08f, 0), vec3(0.09f, 0.09f, 0.09f), bulbs[(j + k) % 3]);
                 }
                 b.box(vec3(0, 1.2f, -s - 0.02f), vec3(s * 0.6f, 0.9f, 0.03f), vec4(1.f, 0.85f, 0.6f, 20), &xf);  // lit opening
+                {   // stall banner over the opening: takoyaki, yakisoba, kakigori...
+                    int cell = fr.f() < 0.7f ? SH_FEST0 + fr.irange(0, SH_FEST_N - 1) : SH_SHOP0 + fr.irange(0, SH_SHOP_N - 1);
+                    signBoardBox(b, xf.transformPoint(vec3(0, H - 0.3f, -s - 0.1f)), -N, std::min(s * 0.8f, 3.2f), 0.4f, 0.05f, cell, false, false, 0.2f);
+                }
                 solid(c, s, s, c.y + H + s * 0.75f);
                 tents++;
             }
@@ -210,8 +215,34 @@ void Game::buildFestival() {
             for (int p = -2; p <= 2; p++) b.box(vec3(p * 16.f, 7.5f, 6.f), vec3(0.3f, 4.f, 0.3f), steel, &xf);
             mat4 rf = xf * translate(vec3(0, 11.2f, 0.f)) * rotateX(0.12f);
             b.box(vec3(0, 0, 0), vec3(35, 0.2f, 8.f), white, &rf);                              // roof
-            b.box(vec3(0, 11.f, -7.9f), vec3(30, 0.9f, 0.1f), vec4(1.f, 0.25f, 0.6f, 20), &xf);   // LED banner
+            b.box(vec3(0, 11.f, -7.9f), vec3(30, 0.9f, 0.1f), vec4(0.06f, 0.04f, 0.08f, 0), &xf);   // LED banner
+            for (int j = 0; j < 4; j++)
+                signFitted(b, xf.transformPoint(vec3(-22.5f + j * 15.f, 11.f, -8.02f)), -N, 7.f, 0.85f, j % 2 ? SH_WELCOME : SH_FESTIVAL, false, 1.f);
             solid(hc, 35, 8, hc.y + 12.f);
+        }
+        // the entrance arch over the avenue, and nobori flags down both sides of it
+        {
+            vec3 c = at(0, -56);
+            mat4 xf = basis(Rt, vec3(0, 1, 0), N, c);
+            const vec4 red(0.82f, 0.12f, 0.08f, 0);
+            for (int k = -1; k <= 1; k += 2) {
+                b.box(vec3(k * 11.5f, 4.6f, 0), vec3(0.45f, 4.6f, 0.45f), red, &xf);
+                b.box(vec3(k * 11.5f, 0.4f, 0), vec3(0.65f, 0.4f, 0.65f), vec4(0.1f, 0.1f, 0.1f, 0), &xf);
+            }
+            b.box(vec3(0, 9.5f, 0), vec3(13.5f, 0.35f, 0.5f), vec4(0.08f, 0.08f, 0.09f, 0), &xf);
+            b.box(vec3(0, 7.6f, 0), vec3(9.6f, 2.0f, 0.18f), signBoard(SH_FESTIVAL, false), &xf);
+            signFitted(b, xf.transformPoint(vec3(0, 7.6f, -0.2f)), -N, 9.4f, 1.9f, SH_FESTIVAL, false, 0.4f);
+            signFitted(b, xf.transformPoint(vec3(0, 7.6f, 0.2f)), N, 9.4f, 1.9f, SH_WELCOME, false, 0.4f);
+            for (int k = -1; k <= 1; k += 2) solid(xf.transformPoint(vec3(k * 11.5f, 0, 0)), 0.6f, 0.6f, c.y + 9.5f);
+            for (float n = -44.f; n < 98.f; n += 7.f)
+                for (int sd = -1; sd <= 1; sd += 2) {
+                    vec3 q = at(sd * 12.2f, n);
+                    b.cylinder(q, 0.035f, 4.2f, 5, vec4(0.85f, 0.85f, 0.86f, 7));
+                    int cell = SV_SHOP0 + fr.irange(0, SV_SHOP_N - 1);
+                    vec3 cc = q + vec3(0, 2.75f, 0) + N * 0.36f;
+                    signFace(b, cc + Rt * 0.01f, Rt, 0.34f, 1.3f, cell, true);
+                    signFace(b, cc - Rt * 0.01f, -Rt, 0.34f, 1.3f, cell, true);
+                }
         }
         // drop tower and a swing ride
         {

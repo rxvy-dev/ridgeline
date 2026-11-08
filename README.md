@@ -20,10 +20,13 @@ Written in C++17 with **SDL3** and OpenGL 3.3. No engine and no downloaded asset
 - **Open world: Japan.** An 8 × 8 km island (64 km², bigger than San Andreas) with about 61 km of roads you can leave whenever you want:
   - **Mount Fuji** in the north-west: long skirts, a flat crater summit, snow streaming down its gullies, the **Fuji Skyline** ring road round it and switchbacks up from the lake below,
   - the **Japanese Alps** with the **Akagi Touge** and **Irohazaka** hairpins, the **Haruna Loop** and the **Usui Pass**,
-  - **Tokyo**: narrow buildings shoulder to shoulder along every street, back alleys, the Shinjuku towers, stacked neon signs, **Tokyo Tower** and a Shibuya scramble crossing,
+  - **Honcho-dori**, a Fujiyoshida shopping street running dead straight up at Fuji: shop houses shoulder to shoulder, vertical signboards, bell lantern lamps, a tangle of poles and wires and a great bronze torii at its foot,
+  - **Tokyo**: a small low-rise neighbourhood with back alleys, stacked neon signs, poles and wires, **Tokyo Tower** and a Shibuya scramble crossing,
+  - little towns along the roads, a white castle, a five-storey pagoda, bamboo groves, rice paddies and a Fushimi Inari tunnel of torii,
   - **Daikoku Wharf**: container stacks, gantry cranes, warehouses and a container ship,
   - the **Wangan Highway** round the coast, the **Sea of Japan Road** up the west coast, the **Hakone Turnpike** ring in the valley, rice-country dirt lanes in the west,
-  - cherry blossom through the lowlands, torii gates and stone lanterns at the mountain roads, pines and autumn maples everywhere else.
+  - cherry trees in full bloom round the shrines, the castle, the pagoda and the lakes, pines and autumn maples everywhere else,
+  - real Japanese writing everywhere: shop signs, neon, festival stalls, shrine plaques, blue road signs, 止まれ painted on the road (atlas made by `tools/make_signs.py`).
 - **20+ race events** with AI drivers: circuits, sprints, touge, a downhill, drift zones, dirt scrambles and cross-country.
 - **Asphalt-style stunt ramps** on the road races: hit one and the car launches into a barrel roll, a double roll or a flat 360, with a moment of slow motion. Cars pitch with their arc in the air and land on their wheels.
 - **Festival Playlist**: three new challenges every day (win races, hit ramps, bank skill points, top speed...) for credits and XP, two Wheelspins for finishing all three, and a growing bonus for playing on consecutive days.

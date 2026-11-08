@@ -618,6 +618,7 @@ uniform float uHeadlights;
 uniform int uGlassPass;
 uniform int uBody;
 uniform sampler2D tFlakes;
+uniform sampler2D tSigns;
 out vec4 FragColor;
 void main(){
     vec3 n = normalize(vNrm);
@@ -681,6 +682,14 @@ void main(){
         return;
     }
     else if (mat == 21) { albedo = vCol.rgb; spec = 0.12; gloss = 20.0; }                  // road paint / banners
+    else if (mat == 22) {                                                                   // lettered signboards (atlas)
+        vec4 sgA = texture(tSigns, vCol.rg);
+        if (sgA.a < 0.5) discard;
+        vec3 sg = sgA.rgb;
+        if (vCol.b > 0.0) { FragColor = vec4(applyFog(sg * (1.1 + 1.9 * vCol.b) * mix(0.8, 1.25, uNight), vPos), 1.0); return; }
+        albedo = sg; spec = 0.18; gloss = 28.0;
+        col0 = sg * mix(0.08, 0.55, uNight);  // boards are lit after dark
+    }
     else if (mat == 10) { albedo = vec3(0.30, 0.31, 0.33) * (1.0 + uHeadlights); coat = 1.0; sharp = 1.0; refl = 0.35; }
     else if (mat == 11) { albedo = vec3(0.65, 0.07, 0.05); spec = 0.5; gloss = 50.0; }
     else if (mat == 12) { albedo = vec3(0.86, 0.86, 0.82); spec = 0.2; }

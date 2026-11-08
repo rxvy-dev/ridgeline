@@ -489,6 +489,7 @@ void Textures::generate() {
 // photo textures from assets/textures replace the generated ones they match
 void Textures::loadPhoto() {
     auto get = [](const char* name) { return loadTextureFile(findAsset(std::string("textures/") + name), 2048); };
+    signs = loadTextureFile(findAsset("signs/signs.png"), 4096);
     if (GLuint t = get("grass_diff.jpg")) { grass = t; photo = true; }
     if (GLuint t = get("grass_nor.jpg")) grassN = t;
     if (GLuint t = get("forest_diff.jpg")) dirt = t;
@@ -506,7 +507,8 @@ void Textures::bindAll() const {
     const std::pair<int, GLuint> b[] = {{U_GRASS, grass}, {U_DIRT, dirt}, {U_ROCK, rock}, {U_ROCKN, rockN}, {U_ASPHALT, asphalt},
                                         {U_ASPHALTN, asphaltN}, {U_BARK, bark}, {U_PINE, pine}, {U_LEAVES, leaves}, {U_BLADES, blades}, {U_FLAKES, flakes},
                                         {U_SAND, sand ? sand : dirt}, {U_LEAFGROUND, leafGround ? leafGround : dirt},
-                                        {U_GRAVEL, gravel ? gravel : dirt}, {U_GRASSN, grassN ? grassN : rockN}, {U_FORESTN, forestN ? forestN : rockN}};
+                                        {U_GRAVEL, gravel ? gravel : dirt}, {U_GRASSN, grassN ? grassN : rockN}, {U_FORESTN, forestN ? forestN : rockN},
+                                        {U_SIGNS, signs ? signs : flakes}};
     for (auto& p : b) {
         glActiveTexture(GL_TEXTURE0 + p.first);
         glBindTexture(GL_TEXTURE_2D, p.second);

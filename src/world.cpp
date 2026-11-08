@@ -1,4 +1,5 @@
 #include "world.h"
+#include "signs.h"
 #include <SDL3/SDL.h>
 #include <algorithm>
 #include <cstring>
@@ -1301,7 +1302,9 @@ void World::buildShrines() {
                 mat4 tip = xf * translate(vec3(s2 * (half + 1.9f), H + 0.75f, 0)) * rotateZ(s2 * -0.28f);
                 props.box(vec3(0, 0, 0), vec3(0.6f, 0.16f, 0.55f), black, &tip);
             }
-            props.box(vec3(0, H - 0.75f, 0), vec3(0.35f, 0.55f, 0.18f), black, &xf);  // gakuzuka (name plaque)
+            props.box(vec3(0, H - 0.8f, 0), vec3(0.3f, 0.62f, 0.18f), black, &xf);  // gakuzuka (name plaque)
+            for (int s2 = -1; s2 <= 1; s2 += 2)
+                signFitted(props, xf.transformPoint(vec3(0, H - 0.8f, s2 * 0.19f)), t * (float)s2, 0.22f, 0.56f, lanterns ? SV_SENGEN : SV_INARI, true);
         }
     };
     // Fushimi Inari: a tunnel of hundreds of vermilion gates along the forest trail
@@ -1364,7 +1367,6 @@ void World::buildJapan() {
     int houses = 0, poles = 0;
     const vec4 roofCols[] = {{0.20f, 0.23f, 0.28f, 0}, {0.17f, 0.18f, 0.20f, 0}, {0.30f, 0.20f, 0.16f, 0}, {0.24f, 0.30f, 0.34f, 0}};
     const vec4 wallCols[] = {{0.88f, 0.86f, 0.80f, 0}, {0.80f, 0.77f, 0.70f, 0}, {0.30f, 0.22f, 0.16f, 0}, {0.72f, 0.70f, 0.66f, 0}, {0.62f, 0.56f, 0.48f, 0}};
-    const vec4 neon[] = {{1.f, 0.2f, 0.25f, 15}, {0.2f, 0.85f, 1.f, 15}, {1.f, 0.85f, 0.2f, 15}, {0.4f, 1.f, 0.5f, 15}};
     auto hipRoof = [&](vec3 c, vec3 f, vec3 r, float hw, float hd, float y, float H, vec4 col) {
         // eaves overhang the walls; ridge runs along the longer side
         float o = 0.75f;
@@ -1438,7 +1440,13 @@ void World::buildJapan() {
             vec4 awc = rng.f() < 0.5f ? vec4(0.15f, 0.25f, 0.55f, 21) : vec4(0.7f, 0.12f, 0.1f, 21);
             b.box(vec3(0, 0, 0), vec3(hw * 0.9f, 0.04f, 0.75f), awc, &aw);
             float sx = rng.range(-hw + 0.6f, hw - 0.6f);
-            b.box(vec3(sx, 4.2f + (floors - 1) * 1.5f, -hd - 0.5f), vec3(0.08f, 1.3f + floors * 0.4f, 0.45f), neon[rng.irange(0, 3)], &xf);
+            {
+                float sh = 1.3f + floors * 0.4f;
+                vec3 sc = xf.transformPoint(vec3(sx, 4.2f + (floors - 1) * 1.5f, -hd - 0.5f));
+                signBoardBox(b, sc, r, 0.45f, sh, 0.08f, SV_SHOP0 + rng.irange(0, SV_SHOP_N - 1), true, true);
+                signBoardBox(b, xf.transformPoint(vec3(0, 2.95f, -hd - 0.06f)), -f, std::min(hw * 0.8f, 2.4f), 0.3f, 0.04f,
+                             SH_SHOP0 + rng.irange(0, SH_SHOP_N - 1), false, false);
+            }
             if (rng.f() < 0.45f) {  // a pair of vending machines by the door
                 for (int k = 0; k < 2; k++) {
                     vec3 vm(hw + 0.9f + k * 1.05f, 0.95f, -hd + 0.5f);
@@ -1645,7 +1653,6 @@ void World::buildJapan() {
         const vec4 walls[] = {{0.84f, 0.82f, 0.76f, 0}, {0.70f, 0.68f, 0.64f, 0}, {0.56f, 0.51f, 0.46f, 0}, {0.88f, 0.87f, 0.85f, 0},
                               {0.46f, 0.41f, 0.37f, 0}, {0.72f, 0.64f, 0.52f, 0}, {0.62f, 0.66f, 0.66f, 0}};
         const vec4 tins[] = {{0.55f, 0.20f, 0.14f, 0}, {0.22f, 0.36f, 0.38f, 0}, {0.30f, 0.30f, 0.32f, 0}, {0.45f, 0.30f, 0.22f, 0}};
-        const vec4 signBg[] = {{0.97f, 0.96f, 0.92f, 20}, {1.f, 0.88f, 0.3f, 20}, {0.95f, 0.95f, 0.95f, 20}, {0.85f, 0.15f, 0.12f, 20}, {0.15f, 0.3f, 0.7f, 20}};
         int shops = 0;
         for (int s = -1; s <= 1; s += 2) {
             float along = 0, nextAt = 0;
@@ -1678,7 +1685,10 @@ void World::buildJapan() {
                     for (int k = -1; k <= 1; k++) b.box(vec3(k * 0.42f, 2.05f, -hd - 0.12f), vec3(0.19f, 0.42f, 0.015f), nc, &xf);  // noren
                 }
                 // fascia signboard across the top of the shop front
-                b.box(vec3(0, fh - 0.35f, -hd - 0.1f), vec3(hw * 0.95f, 0.42f, 0.07f), signBg[rng.irange(0, 4)], &xf);
+                {
+                    vec3 fc = xf.transformPoint(vec3(0, fh - 0.35f, -hd - 0.1f));
+                    signBoardBox(b, fc, -f, hw * 0.95f, 0.42f, 0.07f, SH_SHOP0 + rng.irange(0, SH_SHOP_N - 1), false, false);
+                }
                 // upper floors: window bands with frames, some with a balcony rail
                 for (int fl = 1; fl < floors; fl++) {
                     float wy = fl * fh + 1.55f;
@@ -1718,10 +1728,65 @@ void World::buildJapan() {
                 if (rng.f() < 0.7f) {
                     float sx = (rng.f() < 0.5f ? -1.f : 1.f) * (hw - 0.35f);
                     float top = H - 0.2f, bot = fh + 0.15f;
-                    vec4 bg = signBg[rng.irange(0, 4)];
-                    b.box(vec3(sx, (top + bot) * 0.5f, -hd - 0.62f), vec3(0.09f, (top - bot) * 0.5f, 0.5f), bg, &xf);
+                    int cell = SV_SHOP0 + rng.irange(0, SV_SHOP_N - 1);
                     b.box(vec3(sx, (top + bot) * 0.5f, -hd - 0.62f), vec3(0.07f, (top - bot) * 0.5f + 0.06f, 0.56f), vec4(0.12f, 0.12f, 0.13f, 7), &xf);
+                    vec3 sc = xf.transformPoint(vec3(sx, (top + bot) * 0.5f, -hd - 0.62f));
+                    signBoardBox(b, sc, r, 0.5f, (top - bot) * 0.5f, 0.09f, cell, true, true);
                     b.box(vec3(sx, top - 0.3f, -hd - 0.06f), vec3(0.05f, 0.05f, 0.1f), vec4(0.3f, 0.3f, 0.3f, 7), &xf);
+                }
+                // nobori: a cloth banner on a pole by the door
+                if (rng.f() < 0.3f) {
+                    vec3 q = xf.transformPoint(vec3((rng.f() < 0.5f ? -1.f : 1.f) * (hw - 0.4f), 0, -hd - 0.9f));
+                    b.cylinder(q, 0.025f, 3.0f, 5, vec4(0.85f, 0.85f, 0.85f, 7));
+                    b.tube(q + up * 2.85f, q + up * 2.85f + t * 0.62f, 0.015f, 0.015f, 3, vec4(0.85f, 0.85f, 0.85f, 7));
+                    int cell = SV_SHOP0 + rng.irange(0, SV_SHOP_N - 1);
+                    vec3 cc = q + up * 1.75f + t * 0.31f;
+                    signFace(b, cc + f * 0.01f, -f, 0.29f, 1.1f, cell, true);
+                    signFace(b, cc - f * 0.01f, f, 0.29f, 1.1f, cell, true);
+                }
+                // pavement clutter: vending machines, potted plants, a parked bicycle
+                if (rng.f() < 0.3f) {
+                    vec4 vmCol[] = {{0.9f, 0.9f, 0.92f, 0}, {0.75f, 0.1f, 0.1f, 0}, {0.1f, 0.3f, 0.7f, 0}};
+                    float x0 = (rng.f() < 0.5f ? -1.f : 1.f) * (hw - 0.6f);
+                    int cnt = rng.irange(1, 3);
+                    for (int k = 0; k < cnt; k++) {
+                        float x = x0 - (x0 > 0 ? 1.f : -1.f) * k * 1.0f;
+                        vec4 vc = vmCol[rng.irange(0, 2)];
+                        b.box(vec3(x, 0.95f, -hd - 0.42f), vec3(0.48f, 0.95f, 0.4f), vc, &xf);
+                        b.box(vec3(x, 1.2f, -hd - 0.83f), vec3(0.4f, 0.5f, 0.01f), vec4(1.f, 0.96f, 0.86f, 20), &xf);
+                        b.box(vec3(x, 0.45f, -hd - 0.83f), vec3(0.3f, 0.08f, 0.01f), vec4(0.1f, 0.1f, 0.1f, 0), &xf);
+                    }
+                }
+                if (rng.f() < 0.3f)
+                    for (int k = 0; k < 3; k++) {
+                        vec3 q = xf.transformPoint(vec3(-hw * 0.5f + k * 0.55f, 0, -hd - 0.3f));
+                        b.cylinder(q, 0.2f, 0.42f, 8, vec4(0.55f, 0.3f, 0.2f, 0));
+                        b.sphere(q + up * 0.7f, 0.33f, 1, vec4(0.2f, 0.42f, 0.16f, 0), 0.1f, uint32_t(i * 7 + k));
+                    }
+                if (rng.f() < 0.15f) {
+                    vec4 frame(rng.f() < 0.5f ? 0.7f : 0.1f, 0.15f, rng.f() < 0.5f ? 0.15f : 0.6f, 0), tyre(0.05f, 0.05f, 0.05f, 0);
+                    float bx = rng.range(-hw + 1.f, hw - 1.f);
+                    vec3 w0 = xf.transformPoint(vec3(bx - 0.52f, 0.34f, -hd - 0.5f)), w1 = xf.transformPoint(vec3(bx + 0.52f, 0.34f, -hd - 0.5f));
+                    for (vec3 wc : {w0, w1})
+                        for (int k = 0; k < 10; k++) {
+                            float a0 = k / 10.f * 6.2832f, a1 = (k + 1) / 10.f * 6.2832f;
+                            b.tube(wc + (r * std::cos(a0) + up * std::sin(a0)) * 0.33f, wc + (r * std::cos(a1) + up * std::sin(a1)) * 0.33f, 0.025f, 0.025f, 3, tyre);
+                        }
+                    vec3 seat = xf.transformPoint(vec3(bx - 0.2f, 0.9f, -hd - 0.5f)), bar = xf.transformPoint(vec3(bx + 0.42f, 1.0f, -hd - 0.5f));
+                    b.tube(w0, seat, 0.025f, 0.025f, 3, frame);
+                    b.tube(seat, w1 * 0.5f + bar * 0.5f, 0.025f, 0.025f, 3, frame);
+                    b.tube(w1, bar, 0.025f, 0.025f, 3, frame);
+                    b.tube(w0, xf.transformPoint(vec3(bx, 0.34f, -hd - 0.5f)), 0.025f, 0.025f, 3, frame);
+                    b.tube(xf.transformPoint(vec3(bx, 0.34f, -hd - 0.5f)), seat, 0.025f, 0.025f, 3, frame);
+                    b.box(seat + up * 0.04f, vec3(0.12f, 0.03f, 0.08f), tyre);
+                    b.tube(bar - r * 0.0f + xf.transformPoint(vec3(0, 0, 0.25f)) - xf.transformPoint(vec3(0, 0, 0)), bar - xf.transformPoint(vec3(0, 0, 0.25f)) + xf.transformPoint(vec3(0, 0, 0)), 0.02f, 0.02f, 3, tyre);
+                }
+                if (shops == 40) {  // a red post box on the pavement
+                    vec3 q = xf.transformPoint(vec3(0, 0, -hd - 1.6f));
+                    b.cylinder(q, 0.28f, 1.15f, 12, vec4(0.85f, 0.1f, 0.08f, 0));
+                    b.cylinder(q + up * 1.15f, 0.32f, 0.1f, 12, vec4(0.85f, 0.1f, 0.08f, 0));
+                    b.box(q + up * 0.85f - f * 0.27f, vec3(0.12f, 0.03f, 0.01f), vec4(0.1f, 0.1f, 0.1f, 0));
+                    pendingTrunks.push_back({q.x, q.z, 0.3f});
                 }
                 float ex = std::fabs(r.x) * hw + std::fabs(f.x) * hd, ez = std::fabs(r.z) * hw + std::fabs(f.z) * hd;
                 boxes.push_back({c.x - ex * 0.95f, c.z - ez * 0.95f, c.x + ex * 0.95f, c.z + ez * 0.95f, g + H});
@@ -1787,9 +1852,35 @@ void World::buildJapan() {
                 mat4 tip = xf * translate(vec3(s2 * (half + 2.5f), H + 1.0f, 0)) * rotateZ(s2 * -0.3f);
                 b.box(vec3(0, 0, 0), vec3(0.8f, 0.22f, 0.7f), dark, &tip);
             }
-            b.box(vec3(0, H - 1.05f, 0), vec3(0.6f, 0.75f, 0.25f), dark, &xf);  // plaque
+            b.box(vec3(0, H - 1.1f, 0), vec3(0.42f, 1.15f, 0.25f), dark, &xf);  // plaque: Sengen shrine
+            for (int s2 = -1; s2 <= 1; s2 += 2)
+                signFitted(b, xf.transformPoint(vec3(0, H - 1.1f, s2 * 0.27f)), t * (float)s2, 0.32f, 1.05f, SV_SENGEN, true);
             for (int s2 = -1; s2 <= 1; s2 += 2)
                 for (int k = 0; k < 3; k++) sakuraSpots.push_back(p + side * (s2 * (half + 6.f + k * 7.f)) - t * (6.f + k * 5.f));
+        }
+        // the shopping-street arch near the top: "本町通り商店街" on the way up, "welcome" on the way down
+        {
+            int i = i1 - 14;
+            vec3 p = rd.pts[i], t = rd.tan[i], side(-t.z, 0, t.x);
+            float half = hwR + 1.7f;
+            vec4 steelC(0.72f, 0.73f, 0.75f, 7);
+            for (int s2 = -1; s2 <= 1; s2 += 2) {
+                vec3 q = p + side * (s2 * half);
+                q.y = heightAt(q.x, q.z) - 0.2f;
+                b.cylinder(q, 0.22f, 8.6f, 10, steelC);
+                pendingTrunks.push_back({q.x, q.z, 0.3f});
+            }
+            vec3 sc = p + up * 6.9f;
+            mat4 xf = basis(side, up, t, sc);
+            b.box(vec3(0, 1.55f, 0), vec3(half + 0.3f, 0.12f, 0.2f), steelC, &xf);
+            b.box(vec3(0, -1.55f, 0), vec3(half + 0.3f, 0.12f, 0.2f), steelC, &xf);
+            b.box(vec3(0, 0, 0), vec3(5.2f, 1.4f, 0.14f), signBoard(SH_HONCHO, false), &xf);
+            signFitted(b, sc - t * 0.16f, -t, 5.1f, 1.3f, SH_HONCHO, false, 0.15f);
+            signFitted(b, sc + t * 0.16f, t, 5.1f, 1.3f, SH_WELCOME, false, 0.15f);
+            for (int k = -3; k <= 3; k++) {  // a row of lanterns along the arch's lower beam
+                vec3 l = xf.transformPoint(vec3(k * 1.5f, -2.0f, 0));
+                b.sphere(l, 0.3f, 1, vec4(1.f, 0.25f, 0.12f, 15));
+            }
         }
         rebuildBoxGrid();
         SDL_Log("Japan: Honcho-dori, %d shop houses (%.0f,%.0f)-(%.0f,%.0f)", shops, rd.pts[i0].x, rd.pts[i0].z, rd.pts[i1].x, rd.pts[i1].z);
@@ -1831,6 +1922,130 @@ void World::buildJapan() {
         }
     }
     rebuildBoxGrid();
+
+    // ---------------------------------------------------------------- road signs
+    // blue guide boards (and green ones for the toll roads), yellow warnings on the mountain passes,
+    // gantries over the Wangan, and 止まれ painted where a road ends at another
+    {
+        Rng gr(77);
+        int guides = 0, warns = 0, marks = 0;
+        auto has = [](const std::string& a, const char* b) { return a.find(b) != std::string::npos; };
+        auto board = [&](vec3 q, vec3 face, float hw, float hh, float y, int cell, bool twoPosts) {
+            q.y = heightAt(q.x, q.z) - 0.1f;
+            vec3 rt = normalize(cross(-face, up));
+            vec4 post(0.62f, 0.63f, 0.65f, 7);
+            if (twoPosts)
+                for (int k = -1; k <= 1; k += 2) {
+                    vec3 pp = q + rt * (k * hw * 0.62f);
+                    pp.y = heightAt(pp.x, pp.z) - 0.1f;
+                    b.cylinder(pp, 0.07f, y + hh - (pp.y - q.y), 6, post);
+                    pendingTrunks.push_back({pp.x, pp.z, 0.12f});
+                }
+            else {
+                b.cylinder(q, 0.05f, y + hh * 0.6f, 6, post);
+                pendingTrunks.push_back({q.x, q.z, 0.1f});
+            }
+            vec3 c = q + up * y - face * 0.06f;
+            mat4 xf = basis(rt, up, face, c);
+            b.box(vec3(0, 0, -0.03f), vec3(hw + 0.04f, hh + 0.04f, 0.025f), vec4(0.55f, 0.56f, 0.58f, 7), &xf);  // back plate
+            signFace(b, c + face * 0.002f, face, hw, hh, cell, false);
+        };
+        for (auto& rd : roads) {
+            int n = int(rd.pts.size());
+            if (n < 40) continue;
+            bool street = has(rd.name, "-dori") || has(rd.name, "Street") || rd.name == "Omotesando";
+            float hwR = rd.width * 0.5f;
+            // which board this road gets
+            std::vector<int> cells;
+            if (rd.name == "Fuji Road") cells = {SG_WELCOMEFUJI, SG_FUJIYOSHIDA, SG_FUJI, SG_5TH};
+            else if (rd.name == "Fuji Skyline") cells = {SG_SKYLINE, SG_5TH};
+            else if (rd.name == "Irohazaka") cells = {SG_IROHA};
+            else if (rd.name == "Sea of Japan Road") cells = {SG_SEA, SG_FUJI};
+            else if (has(rd.name, "Chichibu") || has(rd.name, "Haruna")) cells = {SG_CHICHIBU, SG_FUJI};
+            else if (has(rd.name, "Touge") || has(rd.name, "Pass")) cells = {SG_TOUGE, SG_FUJI};
+            else if (has(rd.name, "Daikoku")) cells = {SG_DAIKOKU, SG_TOKYO};
+            else if (has(rd.name, "Wangan")) cells = {};
+            else cells = {SG_FUJI, SG_TOKYO, SG_FUJIYOSHIDA};
+            bool pass = has(rd.name, "Touge") || has(rd.name, "Pass") || rd.name == "Irohazaka" || has(rd.name, "Haruna") || rd.name == "Fuji Skyline" ||
+                        rd.name == "Fuji Road" || has(rd.name, "Okutama") || has(rd.name, "Chichibu");
+            float along = 0, nextG = gr.range(250.f, 450.f), nextW = gr.range(150.f, 300.f), nextGantry = 400.f;
+            int gi = 0;
+            for (int i = 0; i + 1 < n; i++) {
+                along += length(rd.pts[i + 1] - rd.pts[i]);
+                vec3 p = rd.pts[i], t = rd.tan[i], side(-t.z, 0, t.x);  // side is the driver's right
+                if (street || urban(p.x, p.z, 10.f)) continue;
+                if (!cells.empty() && along > nextG && i > 10 && i + 10 < n) {
+                    nextG = along + gr.range(750.f, 1000.f);
+                    bool back = gi % 2;  // alternate directions, always on the driver's left (Japan drives on the left)
+                    vec3 fwd = back ? -t : t, right = back ? -side : side;
+                    vec3 q = p - right * (hwR + 2.6f);
+                    if (roadDistAt(q.x, q.z) > 1.8f && !inBox(q.x, q.z, 1.5f) && std::fabs(heightAt(q.x, q.z) - p.y) < 2.5f) {
+                        board(q, -fwd, 2.1f, 1.05f, 3.4f, cells[gi % cells.size()], true);
+                        guides++;
+                    }
+                    gi++;
+                }
+                if (pass && along > nextW && i > 6 && i + 6 < n) {
+                    nextW = along + gr.range(380.f, 620.f);
+                    bool back = gr.f() < 0.5f;
+                    vec3 fwd = back ? -t : t, right = back ? -side : side;
+                    vec3 q = p - right * (hwR + 1.4f);
+                    if (roadDistAt(q.x, q.z) > 0.9f && !inBox(q.x, q.z, 1.f)) {
+                        board(q, -fwd, 0.62f, 0.31f, 2.1f, SG_ROCKS + gr.irange(0, 2), false);
+                        warns++;
+                    }
+                }
+                if (has(rd.name, "Wangan") && along > nextGantry && i > 10 && i + 10 < n) {
+                    nextGantry = along + 1100.f;
+                    // overhead gantry: posts beyond both shoulders, boards over the lanes
+                    float half = hwR + 2.2f;
+                    vec4 steelC(0.66f, 0.67f, 0.69f, 7);
+                    bool ok = true;
+                    for (int k = -1; k <= 1; k += 2) { vec3 q = p + side * (k * half); ok &= roadDistAt(q.x, q.z) > 1.2f && !inBox(q.x, q.z, 1.f); }
+                    if (!ok) continue;
+                    for (int k = -1; k <= 1; k += 2) {
+                        vec3 q = p + side * (k * half);
+                        q.y = heightAt(q.x, q.z) - 0.2f;
+                        b.cylinder(q, 0.28f, 9.2f + (p.y - q.y), 8, steelC);
+                        pendingTrunks.push_back({q.x, q.z, 0.35f});
+                    }
+                    mat4 xf = basis(side, up, t, p + up * 9.f);
+                    b.box(vec3(0, 0, 0), vec3(half, 0.22f, 0.22f), steelC, &xf);
+                    b.box(vec3(0, -0.7f, 0), vec3(half, 0.12f, 0.12f), steelC, &xf);
+                    int fwdCells[2] = {SG_TOKYO, SG_DAIKOKU}, backCells[2] = {SG_FUJI, SG_SEA};
+                    for (int k = 0; k < 2; k++) {
+                        float off = (k ? 1.f : -1.f) * hwR * 0.5f;
+                        vec3 c = p + side * off + up * 7.6f;
+                        b.box(vec3(off, -1.4f, 0), vec3(2.55f, 1.3f, 0.08f), signBoard(fwdCells[k], false), &xf);
+                        signFace(b, c - t * 0.1f, -t, 2.5f, 1.25f, fwdCells[k], false);
+                        signFace(b, c + t * 0.1f, t, 2.5f, 1.25f, backCells[k], false);
+                    }
+                    guides++;
+                }
+            }
+            // 止まれ and a stop line where this road ends at another one
+            if (!rd.closed && !street)
+                for (int e = 0; e < 2; e++) {
+                    vec3 pe = rd.pts[e ? n - 1 : 0];
+                    bool joins = false;
+                    for (auto& o : roads) {
+                        if (&o == &rd || joins) continue;
+                        for (size_t k = 0; k < o.pts.size(); k += 2)
+                            if (std::fabs(o.pts[k].x - pe.x) < 14.f && std::fabs(o.pts[k].z - pe.z) < 14.f) { joins = true; break; }
+                    }
+                    if (!joins) continue;
+                    int i = e ? n - 1 - 7 : 7, is = e ? n - 1 - 4 : 4;
+                    vec3 fwd = e ? rd.tan[i] : -rd.tan[i];
+                    vec3 right = normalize(cross(fwd, up));
+                    vec3 lane = -right * (hwR * 0.5f);
+                    roadMarking(b, rd.pts[i] + lane + up * 0.06f, fwd, std::min(hwR * 0.45f, 1.7f), 2.4f, SG_TOMARE);
+                    mat4 sx = basis(right, up, fwd, rd.pts[is] + lane + up * 0.06f);
+                    b.box(vec3(0, 0, 0), vec3(hwR * 0.48f, 0.015f, 0.22f), vec4(0.92f, 0.92f, 0.9f, 0), &sx);
+                    marks++;
+                }
+        }
+        SDL_Log("Japan: %d guide signs, %d warning signs, %d stop markings", guides, warns, marks);
+    }
 
     // towns go wherever a road runs through level ground for a while (not in cuttings or on
     // embankments), spaced out across the island; farm roads get scattered farmhouses

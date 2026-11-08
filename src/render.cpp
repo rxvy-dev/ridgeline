@@ -509,6 +509,7 @@ void Renderer::setCommon(Shader& s, const Camera& cam) {
     s.set("tHeight", int(U_HEIGHT));
     s.set("tRoadDist", int(U_ROADDIST));
     s.set("tFlakes", int(U_FLAKES));
+    s.set("tSigns", int(U_SIGNS));
     s.set("uGlassPass", 0);
     s.set("tBase", int(U_CARBASE));
     s.set("tNormal", int(U_CARNORMAL));
