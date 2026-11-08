@@ -1255,6 +1255,25 @@ void World::buildMapTexture() {
             o[2] = uint8_t(clampf(c.z, 0, 1) * 255);
             o[3] = 255;
         }
+    // the canal: a long ribbon of water with paler stone banks either side
+    for (int pass = 0; pass < 2; pass++) {
+        vec3 col = pass ? vec3(0.26f, 0.50f, 0.62f) : vec3(0.78f, 0.76f, 0.70f);
+        float rad = pass ? 3.0f : 4.2f;  // drawn wider than life so it reads on the map
+        for (size_t k = 0; k + 1 < canalPath.size(); k++)
+            for (float u = 0; u < 1.f; u += 0.25f) {
+                vec3 p = lerp(canalPath[k], canalPath[k + 1], u);
+                int cx = int((p.x + HALF) / mpp), cy = int((HALF - p.z) / mpp);
+                int ir = int(std::ceil(rad));
+                for (int dy = -ir; dy <= ir; dy++)
+                    for (int dx = -ir; dx <= ir; dx++) {
+                        if (dx * dx + dy * dy > rad * rad) continue;
+                        int x = cx + dx, y = cy + dy;
+                        if (x < 0 || y < 0 || x >= MAP_RES || y >= MAP_RES) continue;
+                        uint8_t* o = &img[(y * MAP_RES + x) * 4];
+                        o[0] = uint8_t(col.x * 255); o[1] = uint8_t(col.y * 255); o[2] = uint8_t(col.z * 255);
+                    }
+            }
+    }
     for (auto& r : roads) {
         vec3 col = r.surface == SURF_DIRT ? vec3(0.80f, 0.64f, 0.44f) : vec3(0.96f, 0.95f, 0.92f);
         float rad = std::max(1.2f, r.width * 0.5f / mpp + 0.4f);
@@ -2809,9 +2828,13 @@ void World::buildJapan() {
     // arched bridge and two covered riverboats. It goes on the flattest stretch of open lowland near
     // the town that no road crosses.
     for (int once = 0; once < 1; once++) {
-        const float W = 4.6f, LEN = 360.f;
+        const float W = 4.6f;
+        float LEN = 0.f;
         float bestCost = 1e9f;
         vec3 bestA, bestD;
+        for (float tryLen : {850.f, 650.f, 480.f, 360.f}) {
+        if (bestCost < 1e8f) break;
+        LEN = tryLen;
         for (float cx = -3200.f; cx <= 2600.f; cx += 80.f)
             for (float cz = -2100.f; cz <= 2300.f; cz += 80.f) {
                 if (cx < -1250.f && cz < 520.f && cx > -3350.f && cz > -1450.f) continue;  // rice paddy country
@@ -2820,8 +2843,8 @@ void World::buildJapan() {
                     vec3 d(std::cos(ang), 0, std::sin(ang)), a0 = vec3(cx, 0, cz) - d * (LEN * 0.5f);
                     float lo = 1e9f, hi = -1e9f;
                     bool ok = true;
-                    for (int k = 0; k <= 30 && ok; k++) {
-                        vec3 q = a0 + d * (LEN * k / 30.f);
+                    for (int k = 0; k <= 40 && ok; k++) {
+                        vec3 q = a0 + d * (LEN * k / 40.f);
                         float hh = heightAt(q.x, q.z);
                         lo = std::min(lo, hh); hi = std::max(hi, hh);
                         ok = hh > waterLevel + 4.f && hh < 140.f && roadDistAt(q.x, q.z) > 18.f && !urban(q.x, q.z, 40.f) && !inBox(q.x, q.z, 12.f) &&
@@ -2829,16 +2852,19 @@ void World::buildJapan() {
                         for (auto& cg : clearings) ok = ok && std::hypot(q.x - cg.x, q.z - cg.z) > cg.y + 10.f;
                     }
                     if (!ok) continue;
+                    if (hi - lo > 9.f) continue;
                     float cost = (hi - lo) + std::hypot(cx + 1650.f, cz - 650.f) / 500.f;
                     if (cost < bestCost) { bestCost = cost; bestA = a0; bestD = d; }
                 }
             }
+        }
         if (bestCost > 1e8f) { SDL_Log("Japan: no room for the canal"); break; }
         std::vector<vec3> cl;
         std::vector<float> bank;
         float lo = 1e9f;
-        for (int k = 0; k <= 30; k++) {
-            vec3 q = bestA + bestD * (LEN * k / 30.f);
+        int NS = int(LEN / 12.f);
+        for (int k = 0; k <= NS; k++) {
+            vec3 q = bestA + bestD * (LEN * k / NS);
             // a gentle meander
             q = q + vec3(-bestD.z, 0, bestD.x) * (std::sin(k * 0.35f) * 6.f);
             cl.push_back(q);
@@ -2966,7 +2992,7 @@ void World::buildJapan() {
             { MeshBuilder rb; buildRiverboat(rb, false); b.append(rb, bx); }
             person(bx.transformPoint(vec3(0, 0.58f, -3.9f)) + up * 0.0f, std::atan2(d.x, d.z), 2, false);
         }
-        SDL_Log("Japan: canal, %d sections, middle (%.0f, %.0f) side %.0f", m, cl[m / 2].x, cl[m / 2].z, sg);
+        SDL_Log("Japan: canal, %.0f m, %d sections, middle (%.0f, %.0f)", LEN, m, cl[m / 2].x, cl[m / 2].z);
         break;
     }
 

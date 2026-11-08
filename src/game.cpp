@@ -3394,6 +3394,14 @@ void Game::drawMap() {
         }
     }
     auto toMap = [&](vec3 w) { return vec2(mx + (w.x + World::HALF) / (2 * World::HALF) * S, my + (World::HALF - w.z) / (2 * World::HALF) * S); };
+    // the sakura canal: a long ribbon of water with its stone banks, and its name
+    if (world.canalPath.size() > 1) {
+        const auto& cp = world.canalPath;
+        for (size_t k = 1; k < cp.size(); k++) hud.line(toMap(cp[k - 1]), toMap(cp[k]), 9.f * u, vec4(0.78f, 0.76f, 0.70f, 0.95f));
+        for (size_t k = 1; k < cp.size(); k++) hud.line(toMap(cp[k - 1]), toMap(cp[k]), 5.f * u, vec4(0.25f, 0.55f, 0.75f, 1.f));
+        vec2 lab = toMap(cp[cp.size() / 2]);
+        hud.text(lab.x, lab.y + 8 * u, 13 * u, "Sakura Canal", vec4(0.75f, 0.9f, 1.f, 0.95f), 1, false);
+    }
     for (size_t i = 1; i < gps.path.size(); i++) hud.line(toMap(gps.path[i - 1]), toMap(gps.path[i]), 4 * u, vec4(0.78f, 0.38f, 1.f, 0.95f));
     for (int i = 0; i < int(events.size()); i++) {
         vec2 q = toMap(events[i].markerPos);
