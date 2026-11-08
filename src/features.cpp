@@ -311,6 +311,11 @@ void Game::drawPopup() {
     }
     hud.text(cx, y + 24 * u, 15 * u, popup.name, wa::A(wa::INK2, a), 1, false);
     hud.text(cx, y + 48 * u, 32 * u, popup.value, wa::A(wa::INK, a), 1, false);
+    {   // a seal stamped onto the card just after it lands
+        float age = 4.5f - popup.t, st = wa::ease((age - 0.3f) / 0.16f);
+        if (st > 0) hanko(vec2(x + w - 34 * u, y + h - 30 * u), 46 * u * (1.6f - 0.6f * st), popup.title == "LEVEL UP" ? "段" : popup.title == "WHEELSPIN" ? "福" : "速",
+                          wa::VERM, 0.18f, st * a);
+    }
     if (popup.title == "SPEED TRAP" || popup.title == "SPEED ZONE") {
         for (int i = 0; i < 3; i++) {
             vec2 c(cx + (i - 1) * 34 * u, y + 104 * u);
@@ -440,7 +445,12 @@ void Game::drawChain() {
     // the skill chain: one small slip under the top of the screen - the score, the multiplier on a
     // little seal, the latest skill and a brush line for the time left
     using namespace wa;
-    if (chainScore < 1.f) return;
+    static float shownT = -10, multT = -10, lastMult = 1;
+    static bool shown = false;
+    if (chainScore < 1.f) { shown = false; return; }
+    if (!shown) { shown = true; shownT = R.time; }
+    if (chainMult > lastMult + 0.01f) multT = R.time;
+    lastMult = chainMult;
     float u = hud.ui;
     float pulse = 1.f + std::max(0.f, chainFlash) * 0.25f;
     float t = clampf(1.f - chainTimer / 2.2f, 0.f, 1.f);
@@ -450,9 +460,11 @@ void Game::drawChain() {
     std::string last = chainSkills.empty() ? "" : chainSkills.back().first + " +" + fmtThousands(chainSkills.back().second);
     float sw = hud.textWidth(22 * u, sc), lw = hud.textWidth(12 * u, last);
     float w = std::max(sw, lw) + 96 * u, h = 52 * u;
-    float x = hud.w * 0.5f - w * 0.5f, y = 18 * u;
-    card(x, y, w, h, 0.95f, false, 131);
-    hanko(vec2(x + 24 * u, y + h * 0.5f), 30 * u, "技", VERM, -0.1f, 1.f);
+    float drop = ease((R.time - shownT) / 0.3f);
+    float x = hud.w * 0.5f - w * 0.5f, y = 18 * u - (1.f - drop) * 70 * u;   // drops in from above
+    card(x, y, w, h, 0.95f * drop, false, 131);
+    float thump = 1.f + 0.5f * (1.f - ease((R.time - multT) / 0.25f));        // the seal thumps when the multiplier climbs
+    hanko(vec2(x + 24 * u, y + h * 0.5f), 30 * u * thump, "技", VERM, -0.1f + 0.2f * (thump - 1.f), drop);
     hud.text(x + 46 * u, y + 5 * u, 22 * u * pulse, sc, INK, 0, false);
     hud.text(x + w - 10 * u, y + 9 * u, 14 * u, m, VERM, 2, false);
     if (!last.empty()) hud.text(x + 46 * u, y + 31 * u, 12 * u, last, MUTED, 0, false);

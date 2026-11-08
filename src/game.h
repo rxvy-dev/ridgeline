@@ -385,7 +385,9 @@ private:
     vec4 washiEventColor(int type) const;
     std::string kanjiFor(const std::string& s) const;
     std::string washiSide;
-    long backdropFrame = -1;  // frame the paper backdrop was last drawn (full-screen menu)  // vertical kanji down the left edge of full-screen menus
+    long backdropFrame = -1;
+    float backdropOpenT = 0;
+    float inkLetters(float x, float y, float px, const std::string& s, vec4 col, float t);  // frame the paper backdrop was last drawn (full-screen menu)  // vertical kanji down the left edge of full-screen menus
     GLuint captureCutout(const Camera& c, Racer& r, float aspect);
     void themeRow(float x, float y, float w, float h, bool sel, float a = 1.f);         // list row with a sliding highlight
     int custStripRow = -1;

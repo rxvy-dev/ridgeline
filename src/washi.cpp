@@ -118,6 +118,24 @@ void Game::vtext(float x, float y, float px, const std::string& s, vec4 col) {
     }
 }
 
+// Letters brushed on one after another: each drops a little and darkens in, like ink soaking in.
+float Game::inkLetters(float x, float y, float px, const std::string& s, vec4 col, float t) {
+    float cx = x;
+    size_t i = 0;
+    int k = 0;
+    while (i < s.size()) {
+        size_t j = i + 1;
+        while (j < s.size() && (static_cast<unsigned char>(s[j]) & 0xC0) == 0x80) j++;
+        std::string ch = s.substr(i, j - i);
+        float e = ease((t - k * 0.045f) / 0.28f);
+        if (ch != " ") hud.text(cx, y - (1.f - e) * px * 0.35f, px, ch, A(col, e), 0, false);
+        cx += hud.textWidth(px, ch);
+        i = j;
+        k++;
+    }
+    return cx - x;
+}
+
 // A card laid on the paper: lighter stock, an ink border and a hard offset shadow like a woodblock print.
 void Game::card(float x, float y, float w, float h, float a, bool sel, int seed) {
     float u = hud.ui, off = (sel ? 8.f : 5.f) * u;
@@ -179,7 +197,9 @@ void Game::kitsune(float x, float y, float s, float a) {
 void Game::drawThemeBackdrop(float alpha) {
     if (alpha <= 0.01f) return;
     float u = hud.ui, T = R.time;
+    if (backdropFrame < frameNo - 1) backdropOpenT = R.time;  // wasn't on screen last frame: it just opened
     backdropFrame = frameNo;
+    float open = ease((R.time - backdropOpenT) / 0.45f);
     paper(0, 0, hud.w, hud.h, alpha, 11, PAPER);
     hud.rectV(0, hud.h * 0.55f, hud.w, hud.h * 0.45f, A(PAPER2, 0.f), A(PAPER2, 0.7f * alpha));
     // the sun and Fuji in a wash of thin ink, drifting very slowly
@@ -203,10 +223,14 @@ void Game::drawThemeBackdrop(float alpha) {
     }
     // the ink column down the left edge, with the section in vertical kanji
     float cw = 58 * u;
-    hud.rect(0, 0, cw, hud.h, A(COLUMN, alpha));
-    hud.rect(cw, 0, 2 * u, hud.h, A(VERM, alpha));
-    if (!washiSide.empty()) vtext(cw * 0.5f, 40 * u, 30 * u, washiSide, A(COLTEXT, alpha));
-    hanko(vec2(cw * 0.5f, hud.h - 60 * u), 34 * u, "峠", A(VERM, 1.f), -0.08f, alpha);
+    hud.rect(0, 0, cw, hud.h * open, A(COLUMN, alpha));
+    hud.rect(cw, 0, 2 * u, hud.h * open, A(VERM, alpha));
+    if (!washiSide.empty()) vtext(cw * 0.5f, 40 * u - (1.f - ease((R.time - backdropOpenT - 0.2f) / 0.3f)) * 20 * u, 30 * u, washiSide,
+                                  A(COLTEXT, alpha * ease((R.time - backdropOpenT - 0.2f) / 0.3f)));
+    {   // the seal is pressed in last: it lands big and settles
+        float st = ease((R.time - backdropOpenT - 0.35f) / 0.2f);
+        hanko(vec2(cw * 0.5f, hud.h - 60 * u), 34 * u * (1.5f - 0.5f * st), "峠", A(VERM, 1.f), -0.08f, alpha * st);
+    }
     drawPetals(alpha * 0.6f, T);
 }
 
@@ -337,11 +361,16 @@ void Game::drawMenuToasts(float ty) {
         float age = 3.f - t.t;
         float in = clampf(age / 0.25f, 0.f, 1.f);
         float a = clampf(t.t * 2.f, 0.f, 1.f) * in;
-        float tw = hud.textWidth(19 * u, t.text) + 60 * u;
-        float x = hud.w * 0.5f - tw * 0.5f, y = ty - (1.f - ease(in)) * 18 * u;
+        float full = hud.textWidth(19 * u, t.text) + 60 * u;
+        float unroll = ease(age / 0.32f), leave = 1.f - clampf(t.t * 2.f, 0.f, 1.f);
+        float tw = std::max(40 * u, full * unroll);
+        float x = hud.w * 0.5f - tw * 0.5f, y = ty - leave * 26 * u;
         card(x, y - 6 * u, tw, 38 * u, a, false, 61);
-        hud.rect(x + 2 * u, y - 4 * u, 8 * u, 34 * u, A(VERM, a));
-        hud.text(hud.w * 0.5f + 4 * u, y + 2 * u, 19 * u, t.text, A(INK, a), 1, false);
+        hud.rect(x - 4 * u, y - 9 * u, 8 * u, 44 * u, A(INK, a));            // the scroll's rods
+        hud.rect(x + tw - 4 * u, y - 9 * u, 8 * u, 44 * u, A(INK, a));
+        hud.rect(x + 6 * u, y - 4 * u, 6 * u, 34 * u, A(VERM, a));
+        float ta = a * ease((age - 0.18f) / 0.2f);
+        hud.text(hud.w * 0.5f + 4 * u, y + 2 * u, 19 * u, t.text, A(INK, ta), 1, false);
         ty += 48 * u;
     }
 }
@@ -368,7 +397,7 @@ void Game::drawMenuHeader(float x0, float y0, float W, const std::string& sectio
     hud.rect(sx - 16 * u, dy + y0 + 2 * u, 2 * u, 40 * u, A(INK, 0.4f * in));
     std::string k = kanjiFor(section);
     hud.text(sx, dy + y0 + 4 * u, 22 * u, k, A(VERM, in), 0, false);
-    hud.text(sx + hud.textWidth(22 * u, k) + 10 * u, dy + y0 + 2 * u, 28 * u, section, A(INK, in), 0, false);
+    inkLetters(sx + hud.textWidth(22 * u, k) + 10 * u, dy + y0 + 2 * u, 28 * u, section, INK, stateTime - 0.1f);
     // the driver
     float rx = x0 + W;
     std::string cr = fmtThousands((long long)(creditsShown + 0.5));

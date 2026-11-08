@@ -2944,7 +2944,14 @@ void Game::drawSpeedo() {
     // speed against top speed, painted round the rim in ink
     hud.arc(c, R0 + 4 * u, R0 + 8 * u, a0, lerpf(a0, a1, clampf(car.speedKmh() / std::max(60.f, car.spec->topKmh), 0.f, 1.f)), A(INK2, 0.8f), 48);
     hud.arc(c, R0 - 10 * u, R0 - 2 * u, ang(redline * 0.97f), a1, VERM, 16);
-    float rpmA = ang(car.rpm);
+    static float needle = 0, needleV = 0, lastT = 0;
+    float ndt = clampf(R.time - lastT, 0.f, 0.05f);
+    lastT = R.time;
+    for (int k = 0; k < 4; k++) {   // a needle on a spring: overshoots a touch on hard revs, then settles
+        needleV += ((car.rpm - needle) * 260.f - needleV * 22.f) * ndt * 0.25f;
+        needle += needleV * ndt * 0.25f;
+    }
+    float rpmA = ang(std::max(0.f, needle));
     for (int i = 0; i <= int(dialMax / 250.f); i++) {
         float rpm = i * 250.f;
         float a = ang(rpm);
@@ -2976,8 +2983,12 @@ void Game::drawSpeedo() {
     std::string g = car.gear < 0 ? "R" : (car.speed() < 0.5f && car.throttle < 0.05f ? "N" : std::to_string(car.gear));
     bool shift = car.rpm > redline * 0.94f && car.gear > 0 && car.gear < 6 && std::fmod(simTime, 0.16f) < 0.08f;
     vec2 gp = c + vec2(0, 56 * u);
-    hud.rect(gp.x - 17 * u, gp.y - 17 * u, 34 * u, 34 * u, shift ? VERM : INK);
-    hud.text(gp.x, gp.y - 14 * u, 26 * u, g, PAPER, 1, false);
+    static std::string lastGear;
+    static float gearT = -10;
+    if (g != lastGear) { lastGear = g; gearT = R.time; }
+    float gk = 1.f + 0.35f * (1.f - ease((R.time - gearT) / 0.25f));   // pops big, settles
+    hud.rect(gp.x - 17 * u * gk, gp.y - 17 * u * gk, 34 * u * gk, 34 * u * gk, shift ? VERM : INK);
+    hud.text(gp.x, gp.y - 14 * u * gk, 26 * u * gk, g, PAPER, 1, false);
     // assist lamps
     if (settings.assists) {
         const char* names[3] = {"ABS", "TCS", "SC"};
@@ -4265,7 +4276,7 @@ void Game::drawTitle() {
         float ty = hud.h - 230 * u, tx = 70 * u - (1.f - a) * 60 * u;
         float tw = hud.textWidth(64 * u, "R I D G E L I N E") + 60 * u;
         card(tx, ty, tw, 112 * u, a, false, 9);
-        hud.text(tx + 30 * u, ty + 14 * u, 64 * u, "R I D G E L I N E", A(INK, a), 0, false);
+        inkLetters(tx + 30 * u, ty + 14 * u, 64 * u, "R I D G E L I N E", A(INK, a), stateTime - 0.5f);
         hud.text(tx + 32 * u, ty + 84 * u, 15 * u, "OPEN-WORLD FESTIVAL RACING", A(VERM, a), 0, false);
         hanko(vec2(tx + tw - 4 * u, ty + 8 * u), 64 * u, "走", VERM, 0.14f, ease((stateTime - 0.9f) / 0.3f) * a);
         // press start: a swipe of ink, breathing
@@ -4295,7 +4306,7 @@ void Game::drawTitle() {
         vtext(29 * u, 40 * u, 30 * u, "峠", A(COLTEXT, me));
         hanko(vec2(29 * u, hud.h - 60 * u), 34 * u, "走", VERM, -0.08f, me);
         float x0 = 100 * u;
-        hud.text(x0, 50 * u, 38 * u, "R I D G E L I N E", A(INK, me), 0, false);
+        inkLetters(x0, 50 * u, 38 * u, "R I D G E L I N E", A(INK, me), titleMenuT - 0.1f);
         brush(vec2(x0 - 6 * u, 104 * u), vec2(x0 + 360 * u, 106 * u), 7 * u, A(INK, me), 6, me);
         hud.text(x0, 118 * u, 14 * u, "OPEN-WORLD FESTIVAL RACING", A(VERM, me), 0, false);
         static const char* const kLabel[5] = {"Continue", "My Garage", "Autoshow", "Settings", "Quit"};
