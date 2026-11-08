@@ -2,6 +2,7 @@
 // weather), test it, save it to My Events, and share it as a short code that other
 // players paste in. No server: the code is the whole event.
 #include "game.h"
+#include "washi.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -132,14 +133,15 @@ void Game::drawRouteMap(float mx, float my, float S, const Route* rt, vec4 col) 
     float u = hud.ui;
     vec2 p[4] = {{mx, my}, {mx + S, my}, {mx + S, my + S}, {mx, my + S}};
     vec2 uv[4] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
-    hud.rect(mx + 8 * u, my + 10 * u, S, S, vec4(0, 0, 0, 0.5f));
-    hud.mapQuad(p, uv, vec4(0.78f, 0.8f, 0.8f, 1));
+    hud.rect(mx + 8 * u, my + 8 * u, S, S, wa::A(wa::INK, 0.9f));
+    hud.rect(mx, my, S, S, wa::PAPER);
+    hud.mapQuad(p, uv, vec4(0.93f, 0.84f, 0.68f, 0.85f));
     auto toM = [&](vec3 w) { return vec2(mx + (w.x + World::HALF) / (2 * World::HALF) * S, my + (World::HALF - w.z) / (2 * World::HALF) * S); };
     for (const Road& rd : world.roads)
-        for (size_t k = 4; k < rd.pts.size(); k += 4) hud.line(toM(rd.pts[k - 4]), toM(rd.pts[k]), 2.f * u, vec4(1, 1, 1, 0.55f));
+        for (size_t k = 4; k < rd.pts.size(); k += 4) hud.line(toM(rd.pts[k - 4]), toM(rd.pts[k]), 2.f * u, wa::A(wa::INK, 0.55f));
     if (rt && rt->pts.size() > 2) {
         for (size_t k = 2; k < rt->pts.size(); k += 2) {
-            hud.line(toM(rt->pts[k - 2]), toM(rt->pts[k]), 7.f * u, vec4(0, 0, 0, 0.6f));
+            hud.line(toM(rt->pts[k - 2]), toM(rt->pts[k]), 7.f * u, wa::A(wa::PAPER, 0.8f));
             hud.line(toM(rt->pts[k - 2]), toM(rt->pts[k]), 4.f * u, col);
         }
         if (rt->closed) hud.line(toM(rt->pts.back()), toM(rt->pts[0]), 4.f * u, col);
@@ -147,26 +149,27 @@ void Game::drawRouteMap(float mx, float my, float S, const Route* rt, vec4 col) 
         for (float d = rt->length * 0.1f; d < rt->length; d += rt->length * 0.2f) {
             vec3 a3 = rt->pointAt(d), t3 = rt->tangentAt(d);
             vec2 q = toM(a3), f(t3.x, -t3.z), r(-f.y, f.x);
-            hud.triangle(q + f * (8 * u), q - f * (5 * u) + r * (6 * u), q - f * (5 * u) - r * (6 * u), vec4(1, 1, 1, 1));
+            hud.triangle(q + f * (8 * u), q - f * (5 * u) + r * (6 * u), q - f * (5 * u) - r * (6 * u), wa::PAPER);
         }
         vec2 s0 = toM(rt->pts[0]);
-        hud.circle(s0, 9 * u, vec4(0, 0, 0, 1), 16);
-        hud.circle(s0, 7 * u, vec4(0.4f, 1, 0.5f, 1), 16);
+        hud.circle(s0, 9 * u, wa::INK, 16);
+        hud.circle(s0, 7 * u, wa::MOSS, 16);
         if (!rt->closed) {
             vec2 s1 = toM(rt->pts.back());
-            hud.rect(s1.x - 7 * u, s1.y - 7 * u, 14 * u, 14 * u, vec4(0, 0, 0, 1));
+            hud.rect(s1.x - 7 * u, s1.y - 7 * u, 14 * u, 14 * u, wa::INK);
             for (int i = 0; i < 4; i++) hud.rect(s1.x - 6 * u + (i % 2) * 6 * u, s1.y - 6 * u + (i / 2) * 6 * u, 6 * u, 6 * u, (i == 0 || i == 3) ? L_WHITE : vec4(0.1f, 0.1f, 0.1f, 1));
         }
     }
     vec2 pp = toM(player.car.pos);
-    hud.circle(pp, 6 * u, vec4(0, 0, 0, 1), 12);
+    hud.circle(pp, 6 * u, wa::INK, 12);
     hud.circle(pp, 4 * u, L_WHITE, 12);
 }
 
 void Game::drawEventLab() {
     float u = hud.ui;
-    drawThemeBackdrop(0.95f);
-    float x0 = 48 * u;
+    washiSide = "創作";
+    drawThemeBackdrop(1.f);
+    float x0 = 100 * u;
     drawMenuHeader(x0, 30 * u, hud.w - 2 * x0, "EVENTLAB");
     const CustomEvent& c = labEv;
     bool closed = c.road >= 0 && c.road < int(world.roads.size()) && world.roads[c.road].closed;
@@ -178,15 +181,15 @@ void Game::drawEventLab() {
         bool sel = i == labSel;
         bool action = i >= LR_TEST;
         themeRow(px, ry, pw, rh - 5 * u, sel);
-        if (action && !sel) hud.rect(px, ry, 4 * u, rh - 5 * u, vec4(0.96f, 0.10f, 0.50f, 1));
+        if (action && !sel) hud.rect(px - 10 * u, ry + (rh - 5 * u) * 0.3f, 5 * u, (rh - 5 * u) * 0.4f, wa::VERM);
         float ty = ry + (rh - 5 * u) * 0.5f - 9 * u;
         if (action) {
-            hud.text(px + 20 * u, ty, 17 * u, kLabRows[i], sel ? L_WHITE : vec4(1, 1, 1, 0.8f), 0, false);
+            hud.text(px + 20 * u, ty, 17 * u, kLabRows[i], sel ? wa::PAPER : wa::INK, 0, false);
             continue;
         }
         std::string label = kLabRows[i];
         if (i == LR_LENGTH) label = closed ? "LAPS" : "LENGTH";
-        hud.text(px + 20 * u, ty + 2 * u, 12 * u, label, L_DIM, 0, false);
+        hud.text(px + 20 * u, ty + 2 * u, 12 * u, label, sel ? wa::GOLD : wa::VERM, 0, false);
         std::string val;
         switch (i) {
             case LR_ROAD: {
@@ -201,26 +204,26 @@ void Game::drawEventLab() {
             case LR_CLASS: val = kClassNames[c.cls]; break;
             case LR_WEATHER: val = c.wet ? "Rain" : "Dry"; break;
         }
-        hud.textFit(px + 190 * u, ty - 1 * u, 18 * u, val, L_WHITE, 0, pw - 250 * u);
+        hud.textFit(px + 190 * u, ty - 1 * u, 18 * u, val, sel ? wa::PAPER : wa::INK, 0, pw - 250 * u);
         if (sel) {
-            hud.text(px + pw - 52 * u, ty - 2 * u, 20 * u, "<", vec4(0.80f, 0.94f, 0.16f, 1), 1, false);
-            hud.text(px + pw - 22 * u, ty - 2 * u, 20 * u, ">", vec4(0.80f, 0.94f, 0.16f, 1), 1, false);
+            hud.text(px + pw - 52 * u, ty - 2 * u, 20 * u, "<", wa::GOLD, 1, false);
+            hud.text(px + pw - 22 * u, ty - 2 * u, 20 * u, ">", wa::GOLD, 1, false);
         }
     }
     // preview
     float S = std::min(hud.h - 250 * u, hud.w - pw - x0 * 3);
     float mx = hud.w - S - x0, my = 128 * u;
     themePanel(mx - 10 * u, my - 10 * u, S + 20 * u, S + 76 * u, 1.f, true);
-    drawRouteMap(mx, my, S, labOk ? &labPreview.route : nullptr, L_CYAN);
+    drawRouteMap(mx, my, S, labOk ? &labPreview.route : nullptr, wa::VERM);
     float iy = my + S + 14 * u;
     if (labOk) {
         char buf[200];
         std::snprintf(buf, sizeof(buf), "%s   |   %.1f km   |   1st prize CR %s", labPreview.name.c_str(), labPreview.totalLength() / 1000.f,
                       fmtThousands(labPreview.prize[0]).c_str());
-        hud.textFit(mx, iy, 16 * u, buf, L_WHITE, 0, S, false);
-        hud.text(mx, iy + 24 * u, 14 * u, "Share code:  " + encodeEvent(c), L_CYAN, 0, false);
+        hud.textFit(mx, iy, 16 * u, buf, wa::INK, 0, S, false);
+        hud.text(mx, iy + 24 * u, 14 * u, "Share code:  " + encodeEvent(c), wa::INDIGO, 0, false);
     } else {
-        hud.text(mx, iy, 16 * u, "Route too short from here - move the start or shorten it", vec4(1, 0.45f, 0.4f, 1), 0, false);
+        hud.text(mx, iy, 16 * u, "Route too short from here - move the start or shorten it", wa::VERM, 0, false);
     }
     drawThemePrompts(pad ? "D-pad up/down choose   left/right change   (A) select   (B) back" : "UP/DOWN choose   LEFT/RIGHT change   ENTER select   ESC back");
     drawMenuToasts(hud.h * 0.74f);
@@ -263,14 +266,15 @@ void Game::myEventsInput(Action a) {
 
 void Game::drawMyEvents() {
     float u = hud.ui;
-    drawThemeBackdrop(0.95f);
-    float x0 = 48 * u;
+    washiSide = "記録";
+    drawThemeBackdrop(1.f);
+    float x0 = 100 * u;
     drawMenuHeader(x0, 30 * u, hud.w - 2 * x0, "MY EVENTS");
     int n = int(customEvents.size());
     float pw = 560 * u, px = x0, py = 128 * u, rh = 58 * u;
     if (n == 0) {
-        hud.text(px, py + 10 * u, 22 * u, "No saved events yet", L_WHITE, 0, false);
-        hud.text(px, py + 44 * u, 15 * u, "Build one in EventLab, or copy a friend's share code and use Import Event.", L_DIM, 0, false);
+        hud.text(px, py + 10 * u, 22 * u, "No saved events yet", wa::INK, 0, false);
+        hud.text(px, py + 44 * u, 15 * u, "Build one in EventLab, or copy a friend's share code and use Import Event.", wa::MUTED, 0, false);
         drawThemePrompts(pad ? "(A) open EventLab   (B) back" : "ENTER open EventLab   ESC back");
         return;
     }
@@ -283,20 +287,20 @@ void Game::drawMyEvents() {
         float ry = py + (i - first) * rh;
         bool sel = i == subSel;
         themeRow(px, ry, pw, rh - 6 * u, sel);
-        hud.textFit(px + 20 * u, ry + 8 * u, 18 * u, autoEventName(world, customEvents[i]), L_WHITE, 0, pw - 40 * u);
+        hud.textFit(px + 20 * u, ry + 8 * u, 18 * u, autoEventName(world, customEvents[i]), sel ? wa::PAPER : wa::INK, 0, pw - 40 * u);
         std::string meta = encodeEvent(customEvents[i]);
         if (sellConfirm == i) meta = "Press again to delete";
-        hud.text(px + 20 * u, ry + 32 * u, 12 * u, meta, sellConfirm == i ? vec4(1, 0.45f, 0.4f, 1) : L_DIM, 0, false);
+        hud.text(px + 20 * u, ry + 32 * u, 12 * u, meta, sellConfirm == i ? wa::VERM : (sel ? wa::PAPER2 : wa::MUTED), 0, false);
     }
     float S = std::min(hud.h - 250 * u, hud.w - pw - x0 * 3);
     float mx = hud.w - S - x0;
     themePanel(mx - 10 * u, py - 10 * u, S + 20 * u, S + 76 * u, 1.f, true);
-    drawRouteMap(mx, py, S, selEv ? &selEv->route : nullptr, L_CYAN);
+    drawRouteMap(mx, py, S, selEv ? &selEv->route : nullptr, wa::VERM);
     if (selEv) {
         char buf[200];
         std::snprintf(buf, sizeof(buf), "%.1f km   |   1st prize CR %s", selEv->totalLength() / 1000.f, fmtThousands(selEv->prize[0]).c_str());
-        hud.text(mx, py + S + 14 * u, 16 * u, buf, L_WHITE, 0, false);
-        hud.textFit(mx, py + S + 38 * u, 14 * u, selEv->blurb, L_DIM, 0, S, false);
+        hud.text(mx, py + S + 14 * u, 16 * u, buf, wa::INK, 0, false);
+        hud.textFit(mx, py + S + 38 * u, 14 * u, selEv->blurb, wa::MUTED, 0, S, false);
     }
     drawThemePrompts(pad ? "(A) race   (X) copy code   (Y) edit   LB delete   (B) back" : "ENTER race   X copy share code   E edit   V delete   ESC back");
     drawMenuToasts(hud.h * 0.74f);

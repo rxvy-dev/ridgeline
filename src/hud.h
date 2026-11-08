@@ -30,6 +30,10 @@ struct Hud {
     float text(float x, float y, float px, const std::string& s, vec4 col, int align = 0, bool shadow = true);
     float textWidth(float px, const std::string& s) const;
     int fontFor(float px) const;
+    // prompt styling (key caps and their labels); the menus restyle these
+    vec4 capFill = vec4(1, 1, 1, 0.92f), capText = vec4(0.06f, 0.06f, 0.08f, 1), labelCol = vec4(1, 1, 1, 0.88f);
+    float capRound = 0.22f;
+    bool labelShadow = true;
     int forceFont = -1;  // -1 = pick by size
     void mapQuad(vec2 p[4], vec2 uv[4], vec4 tint);
     // textured image from any GL texture (drawn immediately, keeps batch order)

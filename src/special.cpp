@@ -2,6 +2,7 @@
 // cat (unlocked with a code typed into the hidden box in the Autoshow) and the
 // quick car switcher.
 #include "game.h"
+#include "washi.h"
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -299,15 +300,15 @@ void Game::openSwitcher() {
 
 void Game::drawSwitcher() {
     float u = hud.ui;
-    hud.rectV(0, hud.h - 330 * u, hud.w, 330 * u, vec4(0.07f, 0.34f, 0.32f, 0), vec4(0.07f, 0.34f, 0.32f, 0.92f));
+    hud.rectV(0, hud.h - 330 * u, hud.w, 330 * u, wa::A(wa::PAPER, 0), wa::A(wa::PAPER, 0.92f));
     const CarSpec& s = kCars[garage[std::clamp(subSel, 0, int(garage.size()) - 1)].spec];
     float t = clampf(stateTime / 0.3f, 0.f, 1.f), in = 1.f - (1.f - t) * (1.f - t);
     float tx = 48 * u - (1.f - in) * 60 * u, ty = hud.h - 312 * u;
     float tw = hud.textWidth(16 * u, "QUICK SWITCH") + 36 * u;
-    hud.quad(vec2(tx + 10 * u, ty), vec2(tx + tw + 10 * u, ty), vec2(tx + tw, ty + 30 * u), vec2(tx, ty + 30 * u), vec4(0.04f, 0.04f, 0.04f, 0.95f * in));
-    hud.text(tx + 5 * u + tw * 0.5f, ty + 6 * u, 16 * u, "QUICK SWITCH", vec4(1, 1, 1, in), 1, false);
-    hud.rect(tx + 4 * u, ty + 27 * u, (tw - 8 * u) * in, 3 * u, vec4(0.80f, 0.94f, 0.16f, in));
-    hud.text(tx + tw + 24 * u, ty - 4 * u, 30 * u, carName(s), vec4(1, 1, 1, in));
+    hud.rect(tx, ty, tw, 30 * u, wa::A(wa::INK, in));
+    hud.text(tx + tw * 0.5f, ty + 6 * u, 16 * u, "QUICK SWITCH", wa::A(wa::PAPER, in), 1, false);
+    hud.rect(tx + 4 * u, ty + 27 * u, (tw - 8 * u) * in, 3 * u, wa::A(wa::VERM, in));
+    hud.text(tx + tw + 24 * u, ty - 4 * u, 30 * u, carName(s), wa::A(wa::INK, in), 0, false);
     drawCarCards(true, hud.h - 236 * u, 160 * u);
     drawThemePrompts(pad ? "LEFT/RIGHT choose   (A) drive   (B) cancel" : "LEFT/RIGHT choose   ENTER drive   G / ESC cancel");
 }

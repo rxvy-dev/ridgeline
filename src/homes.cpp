@@ -55,12 +55,12 @@ void Game::drawHomePrompt() {
                           : std::string(pad ? "(Y) Buy for CR " : "ENTER  Buy for CR ") + fmtThousands(e.price);
     float pw = std::max({hud.textWidth(22 * u, title), hud.textWidth(15 * u, sub), hud.textWidth(14 * u, e.blurb)}) + 70 * u;
     float px = hud.w * 0.5f - pw * 0.5f, py = hud.h - 196 * u;
-    hud.rect(px, py, pw, 96 * u, H_PANEL);
-    hud.rect(px, py, pw, 4 * u, own ? H_HOME : H_SALE);
-    hud.text(hud.w * 0.5f, py + 12 * u, 11 * u, own ? "YOUR HOUSE" : "HOUSE FOR SALE", own ? H_HOME : H_SALE, 1, false);
-    hud.text(hud.w * 0.5f, py + 26 * u, 22 * u, title, H_WHITE, 1);
-    hud.text(hud.w * 0.5f, py + 54 * u, 14 * u, e.blurb, H_DIM, 1, false);
-    vec4 sc = own || credits >= e.price ? H_ACCENT : vec4(1, 0.45f, 0.4f, 1);
+    card(px, py, pw, 96 * u, 1.f, false, 151);
+    hud.rect(px + 2 * u, py + 2 * u, 10 * u, 92 * u, own ? vec4(0.18f, 0.27f, 0.45f, 1) : vec4(0.80f, 0.60f, 0.18f, 1));
+    hud.text(hud.w * 0.5f, py + 12 * u, 11 * u, own ? "YOUR HOUSE" : "HOUSE FOR SALE", own ? vec4(0.18f, 0.27f, 0.45f, 1) : vec4(0.80f, 0.60f, 0.18f, 1), 1, false);
+    hud.text(hud.w * 0.5f, py + 26 * u, 22 * u, title, vec4(0.102f, 0.090f, 0.078f, 1), 1, false);
+    hud.text(hud.w * 0.5f, py + 54 * u, 14 * u, e.blurb, vec4(0.45f, 0.41f, 0.36f, 1), 1, false);
+    vec4 sc = own || credits >= e.price ? vec4(0.102f, 0.090f, 0.078f, 1) : vec4(0.784f, 0.196f, 0.165f, 1);
     hud.text(hud.w * 0.5f, py + 72 * u, 15 * u, sub, sc, 1, false);
 }
 

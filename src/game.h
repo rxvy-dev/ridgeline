@@ -371,6 +371,19 @@ private:
     void drawThemePrompts(const std::string& spec, float x = -1.f);
     void themePanel(float x, float y, float w, float h, float a = 1.f, bool lit = false);  // festival teal card
     void drawMenuToasts(float y);
+    // washi and ink kit (washi.cpp)
+    void paper(float x, float y, float w, float h, float a = 1.f, int seed = 0, vec4 tone = vec4(0.949f, 0.925f, 0.875f, 1));
+    void inkBox(float x, float y, float w, float h, float th, vec4 col);
+    void brush(vec2 a, vec2 b, float wid, vec4 col, int seed, float prog = 1.f);
+    void brushSwipe(float x, float y, float w, float h, vec4 col, int seed, float prog = 1.f);
+    void enso(vec2 c, float r, float wid, vec4 col, float prog, int seed);
+    void hanko(vec2 c, float s, const std::string& k, vec4 col, float rot, float a);
+    void vtext(float x, float y, float px, const std::string& s, vec4 col);
+    void card(float x, float y, float w, float h, float a, bool sel, int seed = 0);
+    void kitsune(float x, float y, float s, float a);
+    vec4 washiEventColor(int type) const;
+    std::string kanjiFor(const std::string& s) const;
+    std::string washiSide;  // vertical kanji down the left edge of full-screen menus
     GLuint captureCutout(const Camera& c, Racer& r, float aspect);
     void themeRow(float x, float y, float w, float h, bool sel, float a = 1.f);         // list row with a sliding highlight
     int custStripRow = -1;

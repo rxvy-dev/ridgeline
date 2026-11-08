@@ -126,13 +126,39 @@ void Hud::arc(vec2 c, float r0, float r1, float a0, float a1, vec4 col, int seg)
     }
 }
 
-// big text uses the condensed italic display face, small text the clean body face
+// big text uses the brush serif display face, small text the clean body face
 int Hud::fontFor(float px) const { return forceFont >= 0 ? forceFont : (px >= 19.5f * ui ? 1 : 0); }
+
+// UTF-8: ASCII comes from the chosen face, the few Japanese characters the menus use from the kanji set
+static unsigned int nextCode(const std::string& s, size_t& i) {
+    unsigned char c = s[i++];
+    if (c < 0x80) return c;
+    int extra = c >= 0xF0 ? 3 : c >= 0xE0 ? 2 : 1;
+    unsigned int cp = c & (0x3F >> extra);
+    for (int k = 0; k < extra && i < s.size(); k++) cp = (cp << 6) | (s[i++] & 0x3F);
+    return cp;
+}
+static int kanjiIndex(unsigned int cp) {
+    int lo = 0, hi = KANJI_COUNT - 1;
+    while (lo <= hi) {
+        int m = (lo + hi) / 2;
+        if (kKanjiCode[m] == cp) return m;
+        if (kKanjiCode[m] < cp) lo = m + 1; else hi = m - 1;
+    }
+    return -1;
+}
 
 float Hud::textWidth(float px, const std::string& s) const {
     int f = fontFor(px);
     float sc = px / kFontSize[f], x = 0;
-    for (unsigned char ch : s) {
+    for (size_t i = 0; i < s.size();) {
+        unsigned int cp = nextCode(s, i);
+        if (cp >= 128) {
+            int k = kanjiIndex(cp);
+            x += (k >= 0 ? kKanjiGlyph[k].adv : kKanjiSize) * px / kKanjiSize;
+            continue;
+        }
+        unsigned char ch = (unsigned char)cp;
         if (ch < 32 || ch > 126) ch = '?';
         x += kFontGlyphs[f][ch - 32].adv * sc;
     }
@@ -147,7 +173,22 @@ float Hud::text(float x, float y, float px, const std::string& s, vec4 col, int 
     float sc = px / kFontSize[f];
     auto emit = [&](float ox, float oy, vec4 c) {
         float cx = x + ox;
-        for (unsigned char ch : s) {
+        for (size_t i = 0; i < s.size();) {
+            unsigned int cp = nextCode(s, i);
+            if (cp >= 128) {   // a kanji: sits on the same baseline, its em as tall as the text size
+                int k = kanjiIndex(cp);
+                float ks = px / kKanjiSize;
+                if (k >= 0) {
+                    const FontGlyph& g = kKanjiGlyph[k];
+                    float gx = cx + g.ox * ks, gy = y + oy + (g.oy - kKanjiSize * 0.06f) * ks, gw = g.w * ks, gh = g.h * ks;
+                    float u0 = g.x / float(FONT_ATLAS_W), v0 = g.y / float(FONT_ATLAS_H);
+                    float u1 = (g.x + g.w) / float(FONT_ATLAS_W), v1 = (g.y + g.h) / float(FONT_ATLAS_H);
+                    quad({gx, gy}, {gx + gw, gy}, {gx + gw, gy + gh}, {gx, gy + gh}, c, 1, {u0, v0}, {u1, v0}, {u1, v1}, {u0, v1});
+                    cx += g.adv * ks;
+                } else cx += px;
+                continue;
+            }
+            unsigned char ch = (unsigned char)cp;
             if (ch < 32 || ch > 126) ch = '?';
             const FontGlyph& g = kFontGlyphs[f][ch - 32];
             if (ch != ' ') {
@@ -159,7 +200,7 @@ float Hud::text(float x, float y, float px, const std::string& s, vec4 col, int 
             cx += g.adv * sc;
         }
     };
-    if (shadow) emit(px * 0.05f, px * 0.06f, vec4(0, 0, 0, col.w * 0.55f));
+    if (shadow && 0.3f * col.x + 0.59f * col.y + 0.11f * col.z > 0.45f) emit(px * 0.05f, px * 0.06f, vec4(0, 0, 0, col.w * 0.55f));  // no drop shadow under dark ink
     emit(0, 0, col);
     return wdt;
 }
@@ -232,7 +273,11 @@ float Hud::textFit(float x, float y, float px, const std::string& s, vec4 col, i
     int keep = forceFont;
     forceFont = fontFor(px);  // keep the face when shrinking
     std::string t = s;
-    while (t.size() > 1 && textWidth(p2, t + (t.size() < s.size() ? "..." : "")) > maxW) t.pop_back();
+    while (t.size() > 1 && textWidth(p2, t + (t.size() < s.size() ? "..." : "")) > maxW) {
+        t.pop_back();
+        while (!t.empty() && (static_cast<unsigned char>(t.back()) & 0xC0) == 0x80) t.pop_back();
+        if (!t.empty() && static_cast<unsigned char>(t.back()) >= 0xC0) t.pop_back();
+    }
     if (t.size() < s.size()) t += "...";
     float r = text(x, y + (px - p2) * 0.5f, p2, t, col, align, shadow);
     forceFont = keep;
@@ -286,11 +331,11 @@ float Hud::prompts(float x, float y, float px, const std::string& spec, int alig
             circle(vec2(cx + capH * 0.5f, cy + capH * 0.5f), capH * 0.5f, bc, 24);
             text(cx + capH * 0.5f, cy + (capH - kp) * 0.5f - kp * 0.06f, kp, std::string(1, k[1]), vec4(1, 1, 1, alpha), 1, false);
         } else {
-            roundRect(cx, cy, kw[n], capH, capH * 0.22f, vec4(1, 1, 1, 0.92f * alpha));
-            text(cx + kw[n] * 0.5f, cy + (capH - kp) * 0.5f - kp * 0.06f, kp, k, vec4(0.06f, 0.06f, 0.08f, alpha), 1, false);
+            roundRect(cx, cy, kw[n], capH, capH * capRound, vec4(capFill.x, capFill.y, capFill.z, capFill.w * alpha));
+            text(cx + kw[n] * 0.5f, cy + (capH - kp) * 0.5f - kp * 0.06f, kp, k, vec4(capText.x, capText.y, capText.z, capText.w * alpha), 1, false);
         }
         cx += kw[n] + px * 0.45f;
-        cx += text(cx, y, px, items[n].label, vec4(1, 1, 1, 0.88f * alpha), 0, true);
+        cx += text(cx, y, px, items[n].label, vec4(labelCol.x, labelCol.y, labelCol.z, labelCol.w * alpha), 0, labelShadow);
         cx += gap;
     }
     forceFont = keep;

@@ -422,9 +422,9 @@ void Game::drawGateHud() {
     float a = std::min(1.f, gateBannerT * 3.f);
     float y = hud.h * 0.17f;
     float w = hud.textWidth(20 * u, gateBanner) + 60 * u;
-    hud.rect(hud.w * 0.5f - w * 0.5f, y, w, 40 * u, vec4(0.05f, 0.05f, 0.06f, 0.75f * a));
-    hud.rect(hud.w * 0.5f - w * 0.5f, y, w, 4 * u, vec4(0.95f, 0.1f, 0.48f, a));
-    hud.text(hud.w * 0.5f, y + 9 * u, 20 * u, gateBanner, vec4(1, 1, 1, a), 1, false);
+    card(hud.w * 0.5f - w * 0.5f, y, w, 40 * u, a, false, 153);
+    hud.rect(hud.w * 0.5f - w * 0.5f + 2 * u, y + 2 * u, 8 * u, 36 * u, vec4(0.784f, 0.196f, 0.165f, a));
+    hud.text(hud.w * 0.5f, y + 9 * u, 20 * u, gateBanner, vec4(0.102f, 0.090f, 0.078f, a), 1, false);
 }
 
 // ---- guard rails and chevron boards: wherever the ground falls away beside the race route

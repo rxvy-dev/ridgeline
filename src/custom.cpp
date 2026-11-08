@@ -1,6 +1,7 @@
 // Car customization: liveries, livery colour, race number, window tint, aero kits,
 // ride height, and the animated cockpit steering wheel.
 #include "game.h"
+#include "washi.h"
 #include "carimport.h"
 #include <algorithm>
 #include <array>
@@ -169,7 +170,7 @@ void Game::customInput(Action a) {
 void Game::drawCustomize() {
     float u = hud.ui;
     OwnedCar& oc = garage[std::clamp(subSel, 0, int(garage.size()) - 1)];
-    hud.rectV(0, hud.h - 120 * u, hud.w, 120 * u, vec4(0.07f, 0.34f, 0.32f, 0), vec4(0.07f, 0.34f, 0.32f, 0.85f));
+    hud.rectV(0, hud.h - 120 * u, hud.w, 120 * u, wa::A(wa::PAPER, 0), wa::A(wa::PAPER, 0.85f));
     float slide = 1.f - clampf(stateTime / 0.4f, 0.f, 1.f);
     slide = slide * slide * slide;
     float x0 = 48 * u;
@@ -182,7 +183,7 @@ void Game::drawCustomize() {
         float ry = py + i * rh;
         bool sel = i == custSel;
         themeRow(px, ry, pw, rh - 6 * u, sel);
-        hud.text(px + 20 * u, ry + 6 * u, 11 * u, kRowNames[i], sel ? vec4(0.80f, 0.94f, 0.16f, 1) : vec4(0.75f, 0.9f, 0.88f, 1), 0, false);
+        hud.text(px + 20 * u, ry + 6 * u, 11 * u, kRowNames[i], sel ? wa::GOLD : wa::VERM, 0, false);
         std::string val;
         vec3 swatch(-1, -1, -1);
         switch (i) {
@@ -204,12 +205,12 @@ void Game::drawCustomize() {
             hud.rect(vx, ry + 26 * u, 18 * u, 18 * u, vec4(swatch.x, swatch.y, swatch.z, 1));
             vx += 28 * u;
         }
-        hud.text(vx, ry + 23 * u, 19 * u, val, C_WHITE, 0, false);
+        hud.text(vx, ry + 23 * u, 19 * u, val, sel ? wa::PAPER : wa::INK, 0, false);
         if (sel) {
             float ax = px + pw - 22 * u;
             float nudge = std::sin(R.time * 6.f) * 2 * u;
-            hud.text(ax - 34 * u - nudge, ry + 18 * u, 22 * u, "<", vec4(0.80f, 0.94f, 0.16f, 1), 1, false);
-            hud.text(ax + nudge, ry + 18 * u, 22 * u, ">", vec4(0.80f, 0.94f, 0.16f, 1), 1, false);
+            hud.text(ax - 34 * u - nudge, ry + 18 * u, 22 * u, "<", wa::GOLD, 1, false);
+            hud.text(ax + nudge, ry + 18 * u, 22 * u, ">", wa::GOLD, 1, false);
         }
     }
     // ---- the car's name, top right
@@ -218,8 +219,8 @@ void Game::drawCustomize() {
         float cw = std::max(hud.textWidth(15 * u, cs.make), hud.textWidth(26 * u, cs.model)) + 44 * u;
         float cx = hud.w - x0 - cw + slide * 140 * u, cy = 124 * u;
         themePanel(cx, cy, cw, 76 * u, 1.f, true);
-        hud.text(cx + 22 * u, cy + 12 * u, 15 * u, cs.make, vec4(0.98f, 0.86f, 0.2f, 1), 0, false);
-        hud.text(cx + 22 * u, cy + 32 * u, 26 * u, cs.model, C_WHITE);
+        hud.text(cx + 22 * u, cy + 12 * u, 15 * u, cs.make, wa::VERM, 0, false);
+        hud.text(cx + 22 * u, cy + 32 * u, 26 * u, cs.model, wa::INK, 0, false);
     }
     // ---- every choice for the selected row, laid out under the car so you can see what's next
     {
@@ -244,15 +245,15 @@ void Game::drawCustomize() {
         if (custStripRow != custSel) { custStripRow = custSel; custStripT = R.time; }
         float rise = std::max(0.f, ent) * 16 * u;
         themePanel(sx0, sy + rise, sw0, 88 * u, 1.f, true);
-        hud.text(sx0 + 18 * u, sy + rise + 10 * u, 12 * u, kRowNames[custSel], vec4(0.80f, 0.94f, 0.16f, 1), 0, false);
-        hud.text(sx1 - 18 * u, sy + rise + 10 * u, 12 * u, std::to_string(cur + 1) + " / " + std::to_string(std::max(opts.size(), sw.size())), vec4(0.8f, 0.92f, 0.9f, 1), 2, false);
+        hud.text(sx0 + 18 * u, sy + rise + 10 * u, 12 * u, kRowNames[custSel], wa::VERM, 0, false);
+        hud.text(sx1 - 18 * u, sy + rise + 10 * u, 12 * u, std::to_string(cur + 1) + " / " + std::to_string(std::max(opts.size(), sw.size())), wa::MUTED, 2, false);
         float iy = sy + rise + 34 * u, ih = 40 * u;
         if (!sw.empty()) {
             float cell = std::min(40 * u, (sw0 - 36 * u) / sw.size());
             for (int i = 0; i < int(sw.size()); i++) {
                 float qx = sx0 + 18 * u + i * cell;
                 bool on = i == cur;
-                if (on) hud.rect(qx - 3 * u, iy - 3 * u, cell - 2 * u, ih + 6 * u, vec4(0.80f, 0.94f, 0.16f, 1));
+                if (on) hud.rect(qx - 4 * u, iy - 4 * u, cell, ih + 8 * u, wa::INK);
                 hud.rect(qx, iy, cell - 8 * u, ih, vec4(sw[i].x, sw[i].y, sw[i].z, 1));
             }
         } else {
@@ -269,15 +270,16 @@ void Game::drawCustomize() {
                 bool on = int(i) == cur;
                 if (qx >= sx0 + 16 * u && qx + w[i] <= sx1 - 16 * u) {
                     float a = 1.f;
-                    hud.rect(qx, iy, w[i], ih, on ? vec4(0.97f, 0.97f, 0.96f, a) : vec4(0.08f, 0.36f, 0.33f, 0.6f * a));
-                    if (on) hud.rect(qx, iy + ih - 4 * u, w[i], 4 * u, vec4(0.80f, 0.94f, 0.16f, 1));
-                    hud.text(qx + w[i] * 0.5f, iy + 11 * u, 15 * u, opts[i], on ? vec4(0.08f, 0.08f, 0.08f, a) : vec4(1, 1, 1, 0.85f * a), 1, false);
+                    if (on) hud.rect(qx, iy, w[i], ih, wa::INK);
+                    else inkBox(qx, iy, w[i], ih, 1.5f * u, wa::A(wa::INK, 0.5f));
+                    if (on) hud.rect(qx, iy + ih - 4 * u, w[i], 4 * u, wa::VERM);
+                    hud.text(qx + w[i] * 0.5f, iy + 11 * u, 15 * u, opts[i], on ? wa::PAPER : wa::INK, 1, false);
                 }
                 qx += w[i] + 8 * u;
             }
             // more choices off either end
-            if (off > 1.f) hud.text(sx0 + 6 * u, iy + 9 * u, 18 * u, "<", vec4(0.80f, 0.94f, 0.16f, 1), 0, false);
-            if (total - off > avail + 1.f) hud.text(sx1 - 6 * u, iy + 9 * u, 18 * u, ">", vec4(0.80f, 0.94f, 0.16f, 1), 2, false);
+            if (off > 1.f) hud.text(sx0 + 6 * u, iy + 9 * u, 18 * u, "<", wa::VERM, 0, false);
+            if (total - off > avail + 1.f) hud.text(sx1 - 6 * u, iy + 9 * u, 18 * u, ">", wa::VERM, 2, false);
         }
     }
     drawThemePrompts(pad ? "D-pad up/down choose   left/right change   (A) done   (B) back"

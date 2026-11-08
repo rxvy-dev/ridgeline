@@ -49,3 +49,4 @@ cars/oiia_cat/*.ogg
 *.gltf
 *.blend
 __pycache__/
+tools/.fontcache/

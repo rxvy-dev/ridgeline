@@ -21,7 +21,7 @@ add_executable(ridgeline
   src/textures.cpp
   src/world.cpp
   src/cars.cpp
-  src/carimport.cpp src/gps.cpp src/features.cpp src/effects.cpp src/special.cpp src/custom.cpp src/estates.cpp src/homes.cpp src/eventlab.cpp src/gates.cpp src/erosion.cpp src/festival.cpp src/assets.cpp src/props.cpp src/urban.cpp
+  src/carimport.cpp src/gps.cpp src/washi.cpp src/features.cpp src/effects.cpp src/special.cpp src/custom.cpp src/estates.cpp src/homes.cpp src/eventlab.cpp src/gates.cpp src/erosion.cpp src/festival.cpp src/assets.cpp src/props.cpp src/urban.cpp
   src/inflate.cpp
   src/vehicle.cpp
   src/race.cpp
