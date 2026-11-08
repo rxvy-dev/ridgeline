@@ -76,7 +76,8 @@ void Vehicle::update(float dt, const World& w, const Controls& in) {
     steer += clampf(in.steer - steer, -steerRate * dt, steerRate * dt);
     handbrake += clampf(in.handbrake - handbrake, -8 * dt, 8 * dt);
     float wantThrottle = in.throttle, wantBrake = in.brake;
-    if (!reversing && in.brake > 0.1f && in.throttle < 0.1f && vF < 0.8f) reversing = true;
+    // only drop into reverse when the car has (nearly) stopped - not while sliding sideways with the brake on
+    if (!reversing && in.brake > 0.1f && in.throttle < 0.1f && vF < 0.8f && v < 2.f) reversing = true;
     if (reversing && (in.throttle > 0.1f || vF > 1.5f)) reversing = false;
     if (reversing) { wantThrottle = in.brake; wantBrake = in.throttle; }
     throttle += clampf(wantThrottle - throttle, -10 * dt, 10 * dt);
@@ -251,12 +252,14 @@ void Vehicle::update(float dt, const World& w, const Controls& in) {
         float yawKin = vF2 * std::tan(delta) / wb;
         yawRate = lerpf(yawKin, yawRate, kb);
         float vR2 = dot(vec3(vel.x, 0, vel.z), rgt);
-        float latDamp = (1.f - kb) * std::min(1.f, 12.f * dt);
+        // low-speed sideways scrub - but a car sliding sideways fast keeps sliding (tyre forces slow it)
+        float slideK = 1.f - smoothstepf(4.f, 10.f, length(vec3(vel.x, 0, vel.z)));
+        float latDamp = (1.f - kb) * slideK * std::min(1.f, 12.f * dt);
         vel -= rgt * (vR2 * latDamp);
         // mild stability assist
         yawRate *= 1.f - std::min(1.f, 0.6f * dt);
         // stop creeping when braking at standstill
-        if (brake > 0.5f && std::fabs(vF2) < 0.4f && !reversing) { vel.x *= 0.8f; vel.z *= 0.8f; }
+        if (brake > 0.5f && length(vec3(vel.x, 0, vel.z)) < 0.6f && !reversing) { vel.x *= 0.8f; vel.z *= 0.8f; }
     } else {
         yawRate *= 1.f - std::min(1.f, 0.8f * dt);
     }
