@@ -218,6 +218,12 @@ private:
     std::vector<float> gateFlash;
     std::vector<Mesh> gateGlow;
     Mesh gateLit, gatePaint, lampMesh, lineMesh;
+    float slowmo = 0;
+    static float rampHalfW(const EventDef& E) { return std::min(E.route.width * 0.3f, 3.6f); }
+    std::vector<uint8_t> railSide[2];
+    float railOff = 7.f;
+    void buildRails(const EventDef& E, MeshBuilder& lit, MeshBuilder& paint);
+    void railCollide(Racer& r);
     int gateIdx = 0;
     std::string gateBanner;
     float gateBannerT = 0;

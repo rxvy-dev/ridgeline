@@ -35,6 +35,23 @@ struct Vehicle {
     float tcsLight = 0, absLight = 0, scLight = 0;  // HUD indicator intensities
     float alphaFs = 0, alphaRs = 0;  // slip angles after tyre relaxation
     float fxSpin = 0, fxSpinVel = 0; // special-effect body spin (secret car)
+    // exhaust theatre: big pops on upshifts/limiter, crackle after lifting off at high revs
+    int popCount = 0;          // increments once per big backfire
+    int popSeen = 0;           // (presentation) last popCount turned into flames
+    float crackle = 0;         // >0 while the exhaust is crackling (seconds left)
+    bool revving = false;      // brake + throttle at a standstill: clutch in, rev freely
+    bool onLimiter = false;
+    float prevThrottle = 0, limPh = 0;
+    // flight: the body pitches with the arc, stunt ramps roll/spin it, landings squash the springs
+    float airPitch = 0, airPitchVel = 0;
+    float stuntRoll = 0, stuntYaw = 0, stuntT = 0, stuntDur = 0, stuntRollTurns = 0, stuntYawTurns = 0;
+    float landSquash = 0, landVel = 0;
+    bool wasAir = false;
+    bool stunting() const { return stuntDur > 0; }
+    void startStunt(float rollTurns, float yawTurns, float dur) {
+        stuntRollTurns = rollTurns; stuntYawTurns = yawTurns; stuntDur = dur; stuntT = 0;
+    }
+    unsigned popRng = 12345;
 
     // derived constants
     float finalDrive = 3.5f, dragK = 0.4f, rollRes = 200.f, inertia = 2500.f, aFront = 1.3f, bRear = 1.3f;

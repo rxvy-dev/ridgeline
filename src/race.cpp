@@ -127,6 +127,33 @@ void addBoostPads(EventDef& e, float spacing) {
     }
 }
 
+// Stunt ramps (Asphalt style): on long straights with a clear, straight landing, away from
+// checkpoints and boost pads. Hitting one launches the car into a barrel roll or a flat spin.
+void addSpinRamps(EventDef& e) {
+    e.ramps.clear();
+    e.rampKind.clear();
+    const Route& rt = e.route;
+    float L = rt.length;
+    int kind = 0;
+    for (float d = 300.f; d < L - 260.f && e.ramps.size() < 5; d += 20.f) {
+        if (!e.ramps.empty() && d - e.ramps.back() < 600.f) continue;
+        bool ok = true;
+        for (float o = -40.f; o <= 130.f && ok; o += 10.f) {
+            if (dot(rt.tangentAt(d), rt.tangentAt(d + o)) < 0.975f) ok = false;
+            // landing should be roughly level with or below the take-off
+            if (o > 30.f && rt.pointAt(d + o).y > rt.pointAt(d).y + 2.5f) ok = false;
+        }
+        if (!ok) continue;
+        float g = std::fmod(d, 320.f);
+        if (g < 90.f || g > 320.f - 70.f) continue;  // checkpoint arches every 320 m
+        for (float b : e.boosts) if (std::fabs(b - d) < 120.f) ok = false;
+        if (!ok) continue;
+        e.ramps.push_back(d);
+        e.rampKind.push_back(kind % 4);
+        kind++;
+    }
+}
+
 // Count points along a route a car can't get through: trees, buildings or containers in
 // the way, cliffs too steep to climb, or deep water. Used to check the event layouts.
 int routeObstacles(const World& w, const Route& rt, vec3* firstBad) {
@@ -474,6 +501,11 @@ std::vector<EventDef> buildEvents(const World& w) {
         e.prize[0] = 16000; e.prize[1] = 9000; e.prize[2] = 5000;
         finish(e);
     }
+    for (auto& e : ev)
+        if (e.type == EV_CIRCUIT || e.type == EV_SPRINT) {
+            addSpinRamps(e);
+            SDL_Log("Event '%s': %d stunt ramps", e.name.c_str(), int(e.ramps.size()));
+        }
     for (auto& e : ev) {
         vec3 at;
         int b = routeObstacles(w, e.route, &at);

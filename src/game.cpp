@@ -426,6 +426,39 @@ bool Game::init(const Options& o) {
                 gateIdx = 1;
             }
         }
+        else if (opt.scene == "rampshot") {
+            // mid-air over the first stunt ramp, part-way through the trick (look = phase 0..1)
+            enterFreeRoam(world.hubSpawn, world.hubYaw);
+            startRace(std::clamp(opt.event, 0, int(events.size()) - 1));
+            const EventDef& E = events[raceEvent];
+            if (!E.ramps.empty()) {
+                int k = std::clamp(int(std::fabs(opt.look)), 0, int(E.ramps.size()) - 1);
+                if (opt.look < 0) {  // approach view
+                    float d = E.ramps[k] - 40.f;
+                    vec3 p = E.route.pointAt(d), t = E.route.tangentAt(d);
+                    player.car.placeAt(p, std::atan2(t.x, t.z), world);
+                    camYaw = player.car.yaw;
+                    state = ST_RACE; stateTime = 3.f; raceTime = 20.f;
+                    trackProgress(player, E);
+                    goto rampDone;
+                }
+                float ph = opt.look - int(opt.look);
+                float vy0 = 9.f, T = 2.f * vy0 / 9.81f, tt = ph * T;
+                float d = E.ramps[k] + 30.f * tt;
+                vec3 p = E.route.pointAt(d), t = E.route.tangentAt(d);
+                player.car.placeAt(p, std::atan2(t.x, t.z), world);
+                player.car.pos.y = groundAtRoute(E.route, E.ramps[k], p) + 1.25f + vy0 * tt - 4.905f * tt * tt;
+                player.car.vel = t * 30.f + vec3(0, vy0 - 9.81f * tt, 0);
+                int kind = E.rampKind[k];
+                player.car.startStunt(kind == 0 ? 1.f : kind == 1 ? -1.f : kind == 3 ? 2.f : 0.f, kind == 2 ? 1.f : 0.f, T * 0.9f);
+                player.car.stuntT = tt;
+                player.car.wasAir = true;
+                camYaw = player.car.yaw;
+                state = ST_RACE; stateTime = 3.f; raceTime = 20.f;
+                trackProgress(player, E);
+            }
+            rampDone:;
+        }
         else if (opt.scene == "race") { enterFreeRoam(world.hubSpawn, world.hubYaw); autopilot = true; startRace(std::clamp(opt.event, 0, int(events.size()) - 1)); }
         else if (opt.scene == "dealer") { enterFreeRoam(world.hubSpawn, world.hubYaw); state = ST_DEALER; subSel = std::clamp(opt.event, 0, int(kCars.size()) - 1); dealerPaint = stockPaint(kCars[dealerSpec()]); }
         else if (opt.scene == "garage") { enterFreeRoam(world.hubSpawn, world.hubYaw); state = ST_GARAGE; }
@@ -1524,7 +1557,9 @@ void Game::update(float dt) {
             break;
         }
         case ST_RACE:
-            updateRace(dt);
+            // stunt slow motion: the world slows while you're upside down
+            slowmo = std::max(0.f, slowmo - dt);
+            updateRace(slowmo > 0 ? dt * (0.42f + 0.58f * smoothstepf(0.f, 0.35f, 1.1f - slowmo) * (slowmo < 0.35f ? 1.f : 0.f)) : dt);
             updateGates(dt);
             break;
         case ST_RESULTS: {
@@ -1544,6 +1579,41 @@ void Game::update(float dt) {
         if (wantMouse != SDL_GetWindowRelativeMouseMode(win)) SDL_SetWindowRelativeMouseMode(win, wantMouse);
     }
 
+    // exhaust flames for every car near the camera; bangs and crackle for the one we're listening to
+    if (state != ST_PAUSE && state != ST_MAP) {
+        auto exhaust = [&](Vehicle& v, bool listen) {
+            bool big = v.popCount != v.popSeen;
+            v.popSeen = v.popCount;
+            bool crk = v.crackle > 0 && (rand() % 100) < 22;
+            if (listen) {
+                if (big) audio.popReq = 1.f;
+                audio.crackleLvl = v.crackle > 0 ? 1.f : 0.f;
+                audio.limiter = v.onLimiter ? 1.f : 0.f;
+            }
+            if (!big && !crk) return;
+            if (length(v.pos - cam.pos) > 120.f) return;
+            const CarSpec& sp = *v.spec;
+            vec3 f = v.forward(), rt = v.right();
+            vec3 back = v.pos - f * (sp.length * 0.5f - 0.02f) + v.up * std::max(0.28f, sp.height * 0.24f);
+            int pipes = sp.cylinders >= 8 ? 2 : 1;
+            for (int k = 0; k < pipes; k++) {
+                vec3 ep = back + rt * (pipes == 2 ? (k ? 1.f : -1.f) * sp.width * 0.22f : -sp.width * 0.12f);
+                int n = big ? 14 : 4;
+                for (int j = 0; j < n; j++) {
+                    float r1 = float(rand() % 1000) / 1000.f, r2 = float(rand() % 1000) / 1000.f;
+                    vec3 dir = -f * (big ? 5.f + 9.f * r1 : 3.f + 4.f * r1) + rt * ((r2 - 0.5f) * 0.8f) + vec3(0, 0.4f * r2, 0);
+                    float life = big ? 0.07f + 0.08f * r1 : 0.04f + 0.05f * r1;
+                    float size = (big ? 0.09f + 0.13f * r2 : 0.06f + 0.07f * r2) * (1.f + 0.08f * j);
+                    // blue-white core at the pipe, orange tongue further out
+                    vec3 col = j < 2 ? vec3(0.6f, 0.75f, 2.4f) : vec3(2.6f, 1.05f + 0.4f * r1, 0.25f);
+                    fx.glow(ep + f * (-0.05f * j), v.vel + dir, life, size, col, -1.f);
+                }
+            }
+        };
+        bool playerListed = false;
+        for (Racer* r : racers) { exhaust(r->car, &r->car == audioCar); playerListed |= &r->car == &player.car; }
+        if (!playerListed) exhaust(player.car, &player.car == audioCar);
+    }
     // audio
     audio.rpm = audioCar->rpm;
     audio.throttle = audioCar->throttle;
@@ -1571,6 +1641,7 @@ void Game::stepPhysics(float dt) {
             for (size_t i = 0; i < racers.size(); i++) racers[i]->car.update(h, world, racers[i]->isPlayer ? playerCtl : ctl[i]);
             for (size_t i = 0; i < racers.size(); i++)
                 for (size_t j = i + 1; j < racers.size(); j++) collideCars(racers[i]->car, racers[j]->car);
+            if (raceEvent >= 0) for (Racer* r : racers) railCollide(*r);
         }
         physAcc -= h;
     }
@@ -1598,6 +1669,57 @@ void Game::updateRace(float dt) {
     fx.update(dt, racers, world);
     for (Racer* r : racers) {
         trackProgress(*r, E);
+        // fell off (down a drop or into water) or wandered far away: put them back on the road
+        {
+            const Route& rt = E.route;
+            int i = std::clamp(r->idx, 0, int(rt.pts.size()) - 1);
+            vec3 q = rt.pts[i];
+            float off = std::hypot(r->car.pos.x - q.x, r->car.pos.z - q.z);
+            bool fallen = r->car.pos.y < q.y - 7.f || r->car.waterTime > 0.6f || (E.type != EV_CROSS && off > rt.width * 0.5f + 45.f);
+            r->lost = fallen && !r->finished ? r->lost + dt : 0.f;
+            if (r->lost > (r->isPlayer ? 1.4f : 1.0f)) {
+                int k = i;
+                for (int back = 0; back < 6 && k > 0; back++) k--;  // a few metres before where they left
+                if (rt.closed && i < 6) k = (i - 6 + int(rt.pts.size())) % int(rt.pts.size());
+                r->car.placeAt(rt.pts[k], std::atan2(rt.tan[k].x, rt.tan[k].z), world);
+                r->car.vel = rt.tan[k] * std::min(r->car.speed(), 14.f);
+                r->idx = k;
+                r->lost = 0;
+                if (r->isPlayer) { camYaw = r->car.yaw; offRouteTime = 0; flash = 0.25f; toast("Back on track", vec4(0.4f, 0.9f, 1.f, 1)); }
+            }
+        }
+        // stunt ramps: launch into a roll or a spin
+        if (!E.ramps.empty() && !r->finished && r->car.grounded) {
+            float L = E.route.length;
+            float a0 = E.route.closed ? std::fmod(r->lastProg, L) : r->lastProg;
+            float a1 = E.route.closed ? std::fmod(r->progress, L) : r->progress;
+            if (a1 > a0 && a1 - a0 < 60.f)
+                for (size_t k = 0; k < E.ramps.size(); k++) {
+                    float rd = E.ramps[k];
+                    if (!(rd > a0 && rd <= a1)) continue;
+                    vec3 rp = E.route.pointAt(rd), rtn = E.route.tangentAt(rd), side(-rtn.z, 0, rtn.x);
+                    float lat = dot(r->car.pos - rp, side);
+                    if (std::fabs(lat) > rampHalfW(E) + 0.6f) continue;
+                    Vehicle& c = r->car;
+                    float v = std::max(c.speed(), 27.f);
+                    vec3 f = c.forward();
+                    c.vel = vec3(f.x * v, 0, f.z * v);
+                    c.vel.y = clampf(6.f + v * 0.09f, 8.f, 11.5f);
+                    c.pos.y += 0.35f;
+                    float T = 2.f * c.vel.y / 9.81f;
+                    int kind = E.rampKind[k];
+                    float roll = kind == 0 ? 1.f : kind == 1 ? -1.f : kind == 3 ? (k % 2 ? -2.f : 2.f) : 0.f;
+                    float yawT = kind == 2 ? (k % 2 ? -1.f : 1.f) : 0.f;
+                    c.startStunt(roll, yawT, T * 0.9f);
+                    if (r->isPlayer) {
+                        slowmo = 1.1f;
+                        shake = 0.3f;
+                        audio.beep(330, 0.25f);
+                        const char* nm[4] = {"BARREL ROLL", "BARREL ROLL", "FLAT 360", "DOUBLE ROLL"};
+                        chainAdd(nm[kind], kind == 3 ? 900 : 600);
+                    }
+                }
+        }
         if (!E.boosts.empty() && !r->finished) {
             float L = E.route.length;
             float a0 = E.route.closed ? std::fmod(r->lastProg, L) : r->lastProg;
@@ -2989,6 +3111,34 @@ void Game::drawRaceHud() {
             gap = b;
         }
         hud.text(sx + 218 * u, ry, 14 * u, gap, DIM, 2, false);
+    }
+    // place tags floating over the rivals (Forza style): colour-coded, fading with distance
+    if (E.type != EV_DRIFT) {
+        for (size_t i = 0; i < order.size(); i++) {
+            Racer* r = order[i];
+            if (r->isPlayer) continue;
+            vec3 head = r->car.pos + vec3(0, r->car.spec->height + 1.0f, 0);
+            float dist = length(head - cam.pos);
+            if (dist > 260.f || dist < 2.f) continue;
+            vec4 cp = cam.viewProj * vec4(head, 1.f);
+            if (cp.w <= 0.1f) continue;
+            vec2 ndc(cp.x / cp.w, cp.y / cp.w);
+            if (std::fabs(ndc.x) > 1.1f || std::fabs(ndc.y) > 1.1f) continue;
+            float x = (ndc.x * 0.5f + 0.5f) * hud.w, y = (0.5f - ndc.y * 0.5f) * hud.h;
+            float sc = clampf(30.f / dist, 0.55f, 1.25f);
+            float a = 1.f - smoothstepf(180.f, 260.f, dist);
+            int place = int(i) + 1;
+            std::string t = ordinal(place);
+            vec4 bg = place == 1 ? vec4(1.f, 0.78f, 0.15f, 0.92f * a) : place == 2 ? vec4(0.82f, 0.85f, 0.9f, 0.92f * a)
+                    : place == 3 ? vec4(0.85f, 0.52f, 0.28f, 0.92f * a) : vec4(0.06f, 0.06f, 0.08f, 0.85f * a);
+            vec4 fg = place <= 3 ? vec4(0.05f, 0.05f, 0.06f, a) : vec4(1, 1, 1, a);
+            float fs = 20.f * u * sc, tw = hud.textWidth(fs, t) + 16.f * u * sc, th = fs * 1.35f;
+            hud.rect(x - tw * 0.5f + 3 * u, y - th + 3 * u, tw, th, vec4(0, 0, 0, 0.35f * a));
+            hud.rect(x - tw * 0.5f, y - th, tw, th, bg);
+            hud.triangle(vec2(x - 6 * u * sc, y), vec2(x + 6 * u * sc, y), vec2(x, y + 7 * u * sc), bg);
+            hud.text(x, y - th + fs * 0.12f, fs, t, fg, 1, false);
+            if (dist < 90.f) hud.text(x, y - th - 15 * u * sc, 12 * u * sc, r->name, vec4(1, 1, 1, 0.85f * a * (1.f - smoothstepf(60.f, 90.f, dist))), 1, true);
+        }
     }
     // countdown
     if (state == ST_RACE_INTRO) {

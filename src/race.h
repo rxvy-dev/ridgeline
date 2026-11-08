@@ -38,12 +38,15 @@ struct EventDef {
     bool wet = false;
     int custom = -1;      // index into the player's saved custom events
     std::vector<float> boosts;  // boost pads: distance along the route
+    std::vector<float> ramps;   // stunt ramps: distance along the route
+    std::vector<int> rampKind;  // 0/1 barrel roll left/right, 2 flat 360, 3 double roll
     int driftTarget[3] = {0, 0, 0};  // drift events: points for 1st / 2nd / 3rd
     float totalLength() const { return route.closed ? route.length * laps : route.length; }
 };
 
 std::vector<EventDef> buildEvents(const World& w);
 void addBoostPads(EventDef& e, float spacing);
+void addSpinRamps(EventDef& e);
 int routeObstacles(const World& w, const Route& rt, vec3* firstBad);
 
 // EventLab: player-made events on any road, shareable as a short text code.
@@ -83,6 +86,7 @@ struct Racer {
     float skill = 0.9f;
     float lane = 0, laneTarget = 0;
     float stuck = 0;
+    float lost = 0;           // seconds spent fallen off / far off the route
     float laneTimer = 0;
 };
 

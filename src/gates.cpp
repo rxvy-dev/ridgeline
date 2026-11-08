@@ -256,6 +256,7 @@ void Game::buildGates(const EventDef& E) {
         paint.flatQuad(P(-hwid, hl), P(-hwid, -hl), P(-hwid + lw, -hl), P(-hwid + lw, hl), w);  // sides
         paint.flatQuad(P(hwid - lw, hl), P(hwid - lw, -hl), P(hwid, -hl), P(hwid, hl), w);
     }
+    buildRails(E, lit, paint);
     lit.build(gateLit);
     paint.build(gatePaint);
 }
@@ -424,4 +425,163 @@ void Game::drawGateHud() {
     hud.rect(hud.w * 0.5f - w * 0.5f, y, w, 40 * u, vec4(0.05f, 0.05f, 0.06f, 0.75f * a));
     hud.rect(hud.w * 0.5f - w * 0.5f, y, w, 4 * u, vec4(0.95f, 0.1f, 0.48f, a));
     hud.text(hud.w * 0.5f, y + 9 * u, 20 * u, gateBanner, vec4(1, 1, 1, a), 1, false);
+}
+
+// ---- guard rails and chevron boards: wherever the ground falls away beside the race route
+// (cliffs, embankments, water) there's a steel barrier you scrape along instead of going over.
+void Game::buildRails(const EventDef& E, MeshBuilder& lit, MeshBuilder& paint) {
+    (void)paint;
+    const Route& rt = E.route;
+    int n = int(rt.pts.size());
+    for (int s = 0; s < 2; s++) railSide[s].assign(n, 0);
+    railOff = rt.width * 0.5f + 1.1f;
+    // stunt ramps: festival-pink wedges with white chevrons
+    for (size_t k = 0; k < E.ramps.size(); k++) {
+        float d = E.ramps[k];
+        float W = rampHalfW(E), len = 9.f, H = 1.25f;
+        vec3 p1 = rt.pointAt(d), t = rt.tangentAt(d), side(-t.z, 0, t.x);
+        p1.y = groundAtRoute(rt, d, p1);
+        vec3 p0 = rt.pointAt(d - len);
+        p0.y = groundAtRoute(rt, d - len, p0);
+        vec3 up(0, 1, 0);
+        vec3 a0 = p0 - side * W, b0 = p0 + side * W;             // front lip, on the road
+        vec3 a1 = p1 - side * W + up * H, b1 = p1 + side * W + up * H;  // top edge
+        vec3 a2 = p1 - side * W, b2 = p1 + side * W;             // back, on the road
+        vec4 top(0.95f, 0.12f, 0.5f, 19), sideC(0.12f, 0.12f, 0.14f, 9), wh(0.96f, 0.96f, 0.96f, 21), yel(1.f, 0.82f, 0.1f, 21);
+        lit.flatQuad(a0, b0, b1, a1, top);
+        lit.flatQuad(a2, a1, b1, b2, sideC);
+        lit.flatTri(a0, a1, a2, sideC);
+        lit.flatTri(b0, b2, b1, sideC);
+        // chevrons and a yellow lip so it reads from a distance
+        vec3 nrm = normalize(cross(b1 - a0, b0 - a0));
+        if (nrm.y < 0) nrm = nrm * -1.f;
+        auto onTop = [&](float s01, float x) { return lerp(lerp(a0, a1, s01), lerp(b0, b1, s01), x * 0.5f + 0.5f) + nrm * 0.02f; };
+        for (int c = 0; c < 3; c++) {
+            float s0 = 0.18f + c * 0.26f, s1 = s0 + 0.12f;
+            lit.flatQuad(onTop(s0, -0.75f), onTop(s0, -0.6f), onTop(s1, 0.0f), onTop(s1 - 0.0f, -0.15f), wh);
+            lit.flatQuad(onTop(s0, 0.6f), onTop(s0, 0.75f), onTop(s1, 0.15f), onTop(s1, 0.0f), wh);
+        }
+        lit.flatQuad(onTop(0.94f, -1.f), onTop(0.94f, 1.f), onTop(1.f, 1.f), onTop(1.f, -1.f), yel);
+    }
+    if (n < 4 || E.type == EV_CROSS) return;  // cross-country is meant to be ridden off-road
+    float hw = rt.width * 0.5f;
+    for (int i = 0; i < n; i++) {
+        vec3 p = rt.pts[i], t = rt.tan[i], side(-t.z, 0, t.x);
+        float y = p.y;
+        for (int s = 0; s < 2; s++) {
+            float sg = s ? -1.f : 1.f;
+            vec3 a = p + side * (sg * (hw + 5.f)), b = p + side * (sg * (hw + 12.f));
+            float da = y - world.heightAt(a.x, a.z), db = y - world.heightAt(b.x, b.z);
+            bool wet = world.heightAt(b.x, b.z) < world.waterLevel + 0.3f;
+            if (da > 2.2f || db > 4.5f || wet) railSide[s][i] = 1;
+        }
+    }
+    // grow each run a little and close short gaps so barriers read as continuous
+    auto at = [&](int i) { return rt.closed ? (i % n + n) % n : std::clamp(i, 0, n - 1); };
+    for (int s = 0; s < 2; s++) {
+        std::vector<uint8_t> f = railSide[s];
+        for (int i = 0; i < n; i++)
+            if (railSide[s][i]) for (int k = -5; k <= 5; k++) f[at(i + k)] = 1;
+        for (int i = 0; i < n; i++) {
+            if (f[i] || !f[at(i - 1)]) continue;
+            int j = 1;
+            while (j < 10 && !f[at(i + j)]) j++;
+            if (j < 10) for (int k = 0; k < j; k++) f[at(i + k)] = 1;
+        }
+        // keep the start grid open
+        for (int i = 0; i < n; i++) if (rt.dist[i] < 60.f && !rt.closed) f[i] = 0;
+        railSide[s] = f;
+    }
+    // geometry: posts every ~4 m and a W-beam (two stacked bands), galvanised steel
+    const vec4 steel(0.62f, 0.64f, 0.66f, 7), post(0.42f, 0.43f, 0.44f, 7);
+    for (int s = 0; s < 2; s++) {
+        float sg = s ? -1.f : 1.f;
+        float lastPost = -1e9f;
+        for (int i = 0; i < n; i++) {
+            int j = at(i + 1);
+            if (!railSide[s][i]) continue;
+            vec3 p0 = rt.pts[i], t0 = rt.tan[i], s0(-t0.z, 0, t0.x);
+            vec3 e0 = p0 + s0 * (sg * railOff);
+            e0.y = groundAtRoute(rt, rt.dist[i], p0);
+            if (rt.dist[i] - lastPost > 4.f) {
+                lit.box(e0 + vec3(0, 0.4f, 0), vec3(0.06f, 0.42f, 0.06f), post);
+                lastPost = rt.dist[i];
+            }
+            if (!railSide[s][j] || (!rt.closed && j == i)) continue;
+            vec3 p1 = rt.pts[j], t1 = rt.tan[j], s1(-t1.z, 0, t1.x);
+            vec3 e1 = p1 + s1 * (sg * railOff);
+            e1.y = groundAtRoute(rt, rt.dist[j], p1);
+            vec3 nIn0 = s0 * -sg, nIn1 = s1 * -sg;
+            for (int band = 0; band < 2; band++) {
+                float lo = 0.5f + band * 0.17f, hi = lo + 0.15f;
+                vec3 a = e0 + vec3(0, lo, 0) + nIn0 * 0.08f, b = e1 + vec3(0, lo, 0) + nIn1 * 0.08f;
+                vec3 c = e1 + vec3(0, hi, 0) + nIn1 * 0.08f, d = e0 + vec3(0, hi, 0) + nIn0 * 0.08f;
+                uint32_t i0 = lit.add(a, nIn0, steel), i1 = lit.add(b, nIn1, steel), i2 = lit.add(c, nIn1, steel), i3 = lit.add(d, nIn0, steel);
+                lit.tri(i0, i1, i2); lit.tri(i0, i2, i3);
+                uint32_t k0 = lit.add(a, -nIn0, steel), k1 = lit.add(b, -nIn1, steel), k2 = lit.add(c, -nIn1, steel), k3 = lit.add(d, -nIn0, steel);
+                lit.tri(k0, k2, k1); lit.tri(k0, k3, k2);
+            }
+        }
+    }
+    // red/white chevron boards on the outside of tight bends
+    const vec4 red(0.85f, 0.06f, 0.05f, 21), wht(0.95f, 0.95f, 0.95f, 21);
+    float lastBoard = -1e9f;
+    for (int i = 0; i < n; i++) {
+        float k = rt.curv[i];
+        if (std::fabs(k) < 1.f / 70.f || rt.dist[i] - lastBoard < 14.f) continue;
+        if (!rt.closed && rt.dist[i] < 60.f) continue;
+        lastBoard = rt.dist[i];
+        vec3 p = rt.pts[i], t = rt.tan[i], side(-t.z, 0, t.x);
+        // outside of the bend: curvature sign says which way it turns
+        float sg = k > 0 ? -1.f : 1.f;
+        vec3 e = p + side * (sg * (railOff + 0.5f));
+        e.y = groundAtRoute(rt, rt.dist[i], p);
+        vec3 face = side * -sg;  // faces the road
+        vec3 along = t * (k > 0 ? 1.f : -1.f);
+        lit.box(e + vec3(0, 0.55f, 0), vec3(0.05f, 0.55f, 0.05f), post);
+        // board: red with a white arrow pointing the way the road turns
+        vec3 c0 = e + vec3(0, 1.45f, 0) + face * 0.05f;
+        vec3 tl = c0 - along * 0.6f + vec3(0, 0.4f, 0), tr = c0 + along * 0.6f + vec3(0, 0.4f, 0);
+        vec3 br = c0 + along * 0.6f - vec3(0, 0.4f, 0), bl = c0 - along * 0.6f - vec3(0, 0.4f, 0);
+        lit.flatQuad(bl, br, tr, tl, red);
+        lit.flatQuad(tl, tr, br, bl, red);
+        vec3 f2 = face * 0.012f;
+        vec3 tip = c0 + along * 0.32f + f2, upA = c0 - along * 0.18f + vec3(0, 0.3f, 0) + f2, dnA = c0 - along * 0.18f - vec3(0, 0.3f, 0) + f2;
+        vec3 upB = upA - along * 0.2f, dnB = dnA - along * 0.2f, tipB = tip - along * 0.2f;
+        lit.flatQuad(upB, upA, tip, tipB, wht);
+        lit.flatQuad(tipB, tip, dnA, dnB, wht);
+    }
+}
+
+// keeps cars on the road where a rail exists: scrape along it, lose a little speed, throw sparks
+void Game::railCollide(Racer& r) {
+    if (raceEvent < 0 || railSide[0].empty()) return;
+    const Route& rt = events[raceEvent].route;
+    int n = int(rt.pts.size());
+    if (int(railSide[0].size()) != n) return;
+    int i = std::clamp(r.idx, 0, n - 1);
+    Vehicle& c = r.car;
+    vec3 p = rt.pts[i], t = rt.tan[i], side(-t.z, 0, t.x);
+    vec3 d = c.pos - p;
+    float lat = dot(d, side), along = dot(d, t);
+    if (std::fabs(along) > 12.f) return;
+    float lim = railOff - c.spec->width * 0.5f - 0.1f;
+    int s = lat > 0 ? 0 : 1;
+    if (!railSide[s][i] || std::fabs(lat) < lim || std::fabs(lat) > railOff + 3.f) return;
+    if (c.pos.y < p.y - 3.f) return;  // already gone over
+    float sg = lat > 0 ? 1.f : -1.f;
+    c.pos += side * (sg * (lim - std::fabs(lat)));
+    float vn = dot(c.vel, side) * sg;
+    if (vn > 0) {
+        c.vel -= side * (sg * vn * 1.25f);
+        c.vel = c.vel * (1.f - std::min(0.25f, vn * 0.03f));
+        c.yawRate *= 0.6f;
+        if (vn > 3.f) {
+            c.impact = std::max(c.impact, vn * 0.6f);
+            vec3 hit = c.pos + side * (sg * c.spec->width * 0.5f) + vec3(0, 0.5f, 0);
+            for (int k = 0; k < 10; k++)
+                fx.glow(hit, c.vel * 0.6f + vec3(float(rand() % 100 - 50) * 0.05f, float(rand() % 100) * 0.04f, float(rand() % 100 - 50) * 0.05f),
+                        0.25f + float(rand() % 100) * 0.003f, 0.06f, vec3(2.4f, 1.4f, 0.4f), 9.f);
+        }
+    }
 }

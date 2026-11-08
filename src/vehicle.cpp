@@ -80,6 +80,9 @@ void Vehicle::update(float dt, const World& w, const Controls& in) {
     if (!reversing && in.brake > 0.1f && in.throttle < 0.1f && vF < 0.8f && v < 2.f) reversing = true;
     if (reversing && (in.throttle > 0.1f || vF > 1.5f)) reversing = false;
     if (reversing) { wantThrottle = in.brake; wantBrake = in.throttle; }
+    // holding the brake and the throttle at a standstill revs the engine against the brakes (launch / showing off)
+    revving = !reversing && v < 1.5f && in.brake > 0.3f && in.throttle > 0.1f;
+    if (revving) wantBrake = 1.f;
     throttle += clampf(wantThrottle - throttle, -10 * dt, 10 * dt);
     brake += clampf(wantBrake - brake, -10 * dt, 10 * dt);
 
@@ -91,7 +94,10 @@ void Vehicle::update(float dt, const World& w, const Controls& in) {
     float wheelRpm = std::fabs(vF) / R * 60.f / (2 * PI);
     float rpmWheel = wheelRpm * ratio * finalDrive;
     if (gear > 0 && shiftTimer <= 0) {
-        if (rpmWheel > s.redline * 0.94f && gear < 6) { gear++; shiftTimer = 0.22f; }
+        if (rpmWheel > s.redline * 0.94f && gear < 6) {
+            gear++; shiftTimer = 0.22f;
+            if (throttle > 0.6f) popCount++;  // ignition cut on the upshift: bang
+        }
         else if (gear > 1 && rpmWheel < s.redline * 0.42f) {
             float lower = wheelRpm * kGears[gear - 2] * finalDrive;
             if (lower < s.redline * 0.88f) { gear--; shiftTimer = 0.15f; }
@@ -102,7 +108,21 @@ void Vehicle::update(float dt, const World& w, const Controls& in) {
     float launch = 900.f + throttle * s.redline * 0.55f * (1.f - smoothstepf(2.f, 10.f, std::fabs(vF)));
     float targetRpm = clampf(std::max(rpmWheel, launch), 850.f, s.redline);
     if (!grounded) targetRpm = clampf(900.f + throttle * s.redline, 850.f, s.redline);
-    rpm += (targetRpm - rpm) * damp(18.f, dt);
+    if (revving) targetRpm = clampf(900.f + throttle * s.redline * 1.05f, 850.f, s.redline);
+    rpm += (targetRpm - rpm) * damp(revving ? 9.f : 18.f, dt);
+    // rev limiter bounce: the ignition cuts and the needle drops a little
+    onLimiter = rpm > s.redline * 0.985f && throttle > 0.5f;
+    if (onLimiter) {
+        limPh += dt * 30.f;
+        rpm -= s.redline * 0.05f * std::fabs(std::sin(limPh));
+        popRng = popRng * 1664525u + 1013904223u;
+        if ((popRng >> 24) < 6) popCount++;
+    }
+    // lifting off from high revs: unburnt fuel crackles in the hot exhaust
+    if (prevThrottle > 0.6f && throttle < 0.3f && rpm > s.redline * 0.55f) crackle = 0.5f + 0.9f * (rpm / s.redline);
+    if (throttle > 0.5f) crackle = std::min(crackle, 0.05f);
+    crackle = std::max(0.f, crackle - dt);
+    prevThrottle = throttle;
 
     // ---- ground
     float h = w.heightAt(pos.x, pos.z);
@@ -163,6 +183,7 @@ void Vehicle::update(float dt, const World& w, const Controls& in) {
             float tq = engineTorque(s, rpm);
             if (rpm >= s.redline * 0.995f) tq *= 0.2f;  // limiter
             drive = tq * ratio * finalDrive * 0.9f / R * throttle * (gear < 0 ? -0.6f : 1.f);
+            if (revving) drive = 0;
         }
         float driveF = 0, driveR = 0;
         if (s.drive == FWD) driveF = drive;
@@ -281,9 +302,41 @@ void Vehicle::update(float dt, const World& w, const Controls& in) {
         np.y = hNew;
         vel.y = std::max(vel.y, clampf(follow, -40.f, 40.f));
     }
+    float landSpeed = vel.y;  // vertical speed going into this step (for landing squash)
     pos = np;
     bool air = pos.y - hNew > 0.4f;
     airTime = air ? airTime + dt : 0.f;
+
+    // ---- flight presentation
+    bool flying = pos.y - hNew > 0.25f;
+    if (flying) {
+        // the nose follows the arc: up on the way up, dipping as it falls
+        float hs = std::max(5.f, std::fabs(dot(vel, fwd)));
+        float tgt = clampf(std::atan2(-vel.y, hs) * 0.8f, -0.75f, 0.85f);
+        airPitchVel += ((tgt - airPitch) * 16.f - airPitchVel * 6.f) * dt;
+        // a little air control: steer to yaw, like the arcade racers
+        yawRate += steer * 1.6f * dt;
+    } else {
+        airPitchVel += ((0.f - airPitch) * 160.f - airPitchVel * 20.f) * dt;
+    }
+    airPitch += airPitchVel * dt;
+    if (wasAir && !flying) {
+        // touchdown: compress the springs in proportion to how hard we came down
+        landVel = std::min(landVel, std::max(-4.5f, landSpeed * 0.22f));
+        airPitchVel *= 0.3f;
+    }
+    wasAir = flying;
+    landVel += (-landSquash * 170.f - landVel * 12.f) * dt;
+    landSquash = clampf(landSquash + landVel * dt, -0.22f, 0.12f);
+    // stunt spin: eased so it starts and finishes gently and always lands wheels-down
+    if (stuntDur > 0) {
+        stuntT += dt * (flying || stuntT < 0.15f ? 1.f : 5.f);  // touched down early: wrap it up fast
+        float u = clampf(stuntT / stuntDur, 0.f, 1.f);
+        float e = u - std::sin(2.f * PI * u) / (2.f * PI);
+        stuntRoll = stuntRollTurns * 2.f * PI * e;
+        stuntYaw = stuntYawTurns * 2.f * PI * e;
+        if (u >= 1.f) { stuntDur = 0; stuntRoll = stuntYaw = 0; }
+    }
 
     // world bounds
     const float B = World::HALF - 40.f;
@@ -336,7 +389,14 @@ mat4 Vehicle::chassisMatrix() const {
     vec3 u = normalize(up);
     f = normalize(f - u * dot(f, u));
     vec3 left = cross(u, f);
-    return basis(left, u, f, pos);
+    mat4 M = basis(left, u, f, pos);
+    if (landSquash != 0.f) M = M * translate(vec3(0, landSquash, 0));
+    if (airPitch != 0.f || stuntRoll != 0.f || stuntYaw != 0.f) {
+        // rotate about the middle of the car, not its feet
+        float hc = spec ? spec->height * 0.5f : 0.6f;
+        M = M * translate(vec3(0, hc, 0)) * rotateY(stuntYaw) * rotateZ(stuntRoll) * rotateX(airPitch) * translate(vec3(0, -hc, 0));
+    }
+    return M;
 }
 
 mat4 Vehicle::bodyMatrix() const {
