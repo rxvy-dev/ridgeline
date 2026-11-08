@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 
 // washi and ink: text is sumi on paper, accents vermilion
 static const vec4& F_ACCENT = wa::VERM;
@@ -862,4 +863,5 @@ void Game::updateTimeOfDay(float dt) {
     else todHours = fixedH[m];
     if (opt.scene == "night") todHours = 22.5f;
     else if (opt.scene == "sunset") todHours = 18.4f;
+    if (const char* t = getenv("RL_TOD")) todHours = float(std::atof(t));  // test hook: fixed hour for screenshots
 }

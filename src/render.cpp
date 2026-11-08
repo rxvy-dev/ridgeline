@@ -579,7 +579,7 @@ void Renderer::beginShadowPass(int c, vec3 focus, float extent, float depthRange
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
     glEnable(GL_POLYGON_OFFSET_FILL);
-    glPolygonOffset(2.0f, 3.0f);
+    glPolygonOffset(2.5f, 4.0f);   // slope-scaled: steep faces in the light's view get pushed back more
     depth.use();
     depth.set("uViewProj", lvp);
     depth.set("uModel", mat4());

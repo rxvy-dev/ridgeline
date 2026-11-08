@@ -111,18 +111,23 @@ float shadowFactor0(vec3 wp, vec3 n);
 float shadowFactor(vec3 wp, vec3 n){ return mix(shadowFactor0(wp, n), 1.0, uRain * 0.8); }
 float shadowFactor0(vec3 wp, vec3 n){
     if (uShadows == 0) return 1.0;
-    vec4 a = uShadowMat0 * vec4(wp + n * 0.05, 1.0);
+    // slope-aware offsets: the lower the sun skims a surface, the further we push the lookup off it and
+    // the bigger the depth bias, so low evening sun doesn't speckle walls and roofs with shadow acne
+    float ndl = clamp(dot(n, normalize(uSunDir)), 0.02, 1.0);
+    float slope = clamp(sqrt(1.0 - ndl * ndl) / ndl, 0.0, 6.0);
+    float graze = 1.0 - ndl;
+    vec4 a = uShadowMat0 * vec4(wp + n * (0.05 + 0.22 * graze), 1.0);
     vec3 pa = a.xyz * 0.5 + 0.5;
     vec2 ea = abs(pa.xy - 0.5) * 2.0;
     float ma = max(ea.x, ea.y);
-    vec4 b = uShadowMat1 * vec4(wp + n * 0.3, 1.0);
+    vec4 b = uShadowMat1 * vec4(wp + n * (0.3 + 0.9 * graze), 1.0);
     vec3 pb = b.xyz * 0.5 + 0.5;
     vec2 eb = abs(pb.xy - 0.5) * 2.0;
     float mb = max(eb.x, eb.y);
     float s1 = 1.0;
-    if (mb < 1.0 && pb.z < 1.0) s1 = mix(pcf(uShadow1, vec3(pb.xy, pb.z - 0.00025), uShadowTexel.y), 1.0, smoothstep(0.85, 1.0, mb));
+    if (mb < 1.0 && pb.z < 1.0) s1 = mix(pcf(uShadow1, vec3(pb.xy, pb.z - 0.00025 * (1.0 + slope)), uShadowTexel.y), 1.0, smoothstep(0.85, 1.0, mb));
     if (ma < 0.98 && pa.z < 1.0) {
-        float s0 = pcf5(uShadow0, vec3(pa.xy, pa.z - 0.00010), uShadowTexel.x);
+        float s0 = pcf5(uShadow0, vec3(pa.xy, pa.z - 0.00010 * (1.0 + slope)), uShadowTexel.x);
         return mix(s0, s1, smoothstep(0.75, 0.98, ma));
     }
     return s1;
