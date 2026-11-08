@@ -89,6 +89,8 @@ void Game::labInput(Action a) {
     switch (labSel) {
         case LR_TEST:
             if (!labOk) { toast("That route is too short - pick another start or length", vec4(1, 0.45f, 0.4f, 1)); return; }
+            // never stack test drives: clear any earlier one (and its race) first
+            if (raceEvent >= 0) leaveRace(); else rebuildCustomEvents();
             events.push_back(labPreview);
             if (bestPlace.size() < events.size()) bestPlace.resize(events.size(), 0);
             enterFreeRoam(labPreview.route.pts[0], labPreview.startYaw);
