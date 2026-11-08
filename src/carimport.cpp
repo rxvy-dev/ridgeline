@@ -234,6 +234,7 @@ std::vector<ImportedModel*> loadImportedCars(const std::vector<std::string>& dir
             s.wheelR = (m->wr[0] + m->wr[1] + m->wr[2] + m->wr[3]) * 0.25f;
             s.id = id;
             s.cylinders = int(num("cylinders", 6));
+            s.electric = num("electric", 0) != 0;
             s.credit = kv.count("credit") ? kv["credit"] : "";
             s.starter = num("starter", 0) != 0;
             s.hidden = num("hidden", 0) != 0;

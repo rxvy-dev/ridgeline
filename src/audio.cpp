@@ -92,8 +92,8 @@ void Audio::generate(float* out, int frames) {
     int cyl = cylinders;
     float req = impactReq.exchange(0.f);
     float pr = popReq.exchange(0.f);
-    if (pr > 0) { popEnv = std::min(1.6f, popEnv + pr); popPh = 0; popF = 60.f; }
-    float crk = crackleLvl, lim = limiter;
+    float crk = crackleLvl, lim = limiter, ev = electric;
+    if (pr > 0 && ev < 0.5f) { popEnv = std::min(1.6f, popEnv + pr); popPh = 0; popF = 60.f; }
     if (req > 0) impactEnv = std::min(1.f, impactEnv + req);
     float bf = beepFreq.exchange(0.f);
     if (bf > 0) { beepF = bf; beepEnv = 1.f; }
@@ -120,14 +120,26 @@ void Audio::generate(float* out, int frames) {
         lp2 += (lp - lp2) * cutoff;
         float sub = std::sin(float(subPhase) * 6.2831853f) * 0.35f;
         float engine = (lp2 * 1.4f + sub * (0.6f + smThr * 0.4f)) * (0.32f + smThr * 0.5f) * on;
+        // electric: no combustion at all, a rising motor/inverter whine that follows road speed
+        if (ev > 0.5f) {
+            float spd = smSpeed;
+            float f1 = 90.f + spd * 21.f, f2 = f1 * 2.97f, f3 = 1400.f + spd * 55.f;
+            evPh1 += f1 * dt; if (evPh1 > 1) evPh1 -= 1;
+            evPh2 += f2 * dt; if (evPh2 > 1) evPh2 -= 1;
+            evPh3 += f3 * dt; if (evPh3 > 1) evPh3 -= 1;
+            evLp += (noise - evLp) * 0.08f;
+            float load = 0.25f + smThr * 0.75f;
+            engine = (std::sin(evPh1 * 6.2831853f) * 0.32f + std::sin(evPh2 * 6.2831853f) * 0.16f * load
+                      + std::sin(evPh3 * 6.2831853f) * 0.05f * load + evLp * 0.06f * load) * (0.25f + 0.55f * load) * std::min(1.f, 0.2f + spd / 25.f) * on;
+        }
         // rev limiter: the ignition cuts in and out ~14 times a second
-        if (lim > 0.5f) {
+        if (lim > 0.5f && ev < 0.5f) {
             limPh += 14.f * dt;
             if (limPh > 1) limPh -= 1;
             engine *= limPh < 0.35f ? 0.35f : 1.f;
         }
         // backfires: a sharp noise crack over a low thump; crackle = random small ones
-        if (crk > 0.01f && ((rng >> 7) % 1700u) == 0) {
+        if (ev < 0.5f && crk > 0.01f && ((rng >> 7) % 1700u) == 0) {
             popEnv = std::max(popEnv, 0.35f + 0.5f * float((rng >> 3) & 255) / 255.f);
             popPh = 0; popF = 55.f + float((rng >> 11) & 63);
         }

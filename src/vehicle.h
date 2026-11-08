@@ -47,6 +47,7 @@ struct Vehicle {
     float stuntRoll = 0, stuntYaw = 0, stuntT = 0, stuntDur = 0, stuntRollTurns = 0, stuntYawTurns = 0;
     float landSquash = 0, landVel = 0;
     bool wasAir = false;
+    float groundBoost = 0;  // extra ground height under the car this frame (stunt ramps)
     bool stunting() const { return stuntDur > 0; }
     void startStunt(float rollTurns, float yawTurns, float dur) {
         stuntRollTurns = rollTurns; stuntYawTurns = yawTurns; stuntDur = dur; stuntT = 0;
@@ -66,6 +67,7 @@ struct Vehicle {
     float forwardSpeed() const { return dot(vel, forward()); }
     mat4 chassisMatrix() const;  // ground-aligned frame
     mat4 bodyMatrix() const;     // + roll/pitch
+    mat4 cabinMatrix() const;    // body without the stunt spin (cockpit cameras)
     mat4 wheelMatrix(const CarModel& m, int i, bool spin = true) const;
     void placeAt(vec3 p, float heading, const World& w);
 };

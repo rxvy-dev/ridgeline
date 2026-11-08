@@ -50,6 +50,9 @@ struct World {
     struct Lake { vec3 c; float r; float seed; };
     std::vector<Lake> lakes = {{vec3(380, 0, -300), 250.f, 1.f}, {vec3(-640, 0, -960), 230.f, 2.3f}, {vec3(980, 0, -880), 190.f, 4.1f}, {vec3(520, 0, 430), 80.f, 5.7f}, {vec3(-1950, 0, 900), 260.f, 6.2f}};
     vec3 hubPos;           // festival hub centre
+    vec3 festCenter;       // the festival grounds, beside the hub
+    void rebuildBoxGrid();
+    bool inBox(float x, float z, float pad) const;
     float hubYaw = 0.f;    // spawn heading at hub
     vec3 hubSpawn;
 
@@ -113,6 +116,7 @@ private:
     void carveTerrain();
     void scatter(uint32_t seed);
     void buildShrines();
+    void buildJapan();        // towns, utility poles and wires, the pagoda
     void buildMapTexture();
     void buildUrban(uint32_t seed);
 public:

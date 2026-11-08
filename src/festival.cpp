@@ -119,10 +119,170 @@ void Game::buildFestival() {
     if (catHit.size() != cats.size()) catHit.resize(cats.size(), 0);
     catDirty = true;
 
-    // the big wheel behind the festival plaza: legs and hub are static, the rim turns
-    vec3 fwd(std::sin(world.hubYaw), 0, std::cos(world.hubYaw)), right(-fwd.z, 0, fwd.x);
-    ferrisPos = world.hubPos - fwd * 78.f + right * 34.f;
-    ferrisPos.y = world.heightAt(ferrisPos.x, ferrisPos.z);
+    // ---- the festival grounds (Horizon style): a pink main stage, a field of white marquees with
+    // string lights, grandstands along the road, rides, light towers and balloons over it all
+    vec3 F = world.festCenter;
+    vec3 N = normalize(vec3(F.x - world.hubPos.x, 0, F.z - world.hubPos.z)), Rt(N.z, 0, -N.x);
+    auto at = [&](float r, float n) { vec3 p = F + Rt * r + N * n; p.y = world.heightAt(p.x, p.z); return p; };
+    auto solid = [&](vec3 c, float hx, float hz, float top) {
+        // long rotated things (grandstands) as a row of small boxes, so the axis-aligned
+        // collision boxes hug them instead of reaching out over the road
+        int pieces = std::max(1, int(std::ceil(hx / std::max(hz, 4.f))));
+        for (int k = 0; k < pieces; k++) {
+            float off = -hx + (2.f * hx) * (k + 0.5f) / pieces, phx = hx / pieces;
+            vec3 pc = c + Rt * off;
+            float ex = std::fabs(Rt.x) * phx + std::fabs(N.x) * hz, ez = std::fabs(Rt.z) * phx + std::fabs(N.z) * hz;
+            world.boxes.push_back({pc.x - ex * 0.9f, pc.z - ez * 0.9f, pc.x + ex * 0.9f, pc.z + ez * 0.9f, top});
+        }
+    };
+    {
+        MeshBuilder b;
+        Rng fr(99);
+        const vec4 white(0.93f, 0.93f, 0.94f, 19), pink(0.95f, 0.12f, 0.5f, 19), teal(0.1f, 0.75f, 0.8f, 19), steel(0.55f, 0.56f, 0.58f, 7);
+        const vec4 bulbs[] = {{1.f, 0.85f, 0.5f, 15}, {1.f, 0.3f, 0.7f, 15}, {0.3f, 0.9f, 1.f, 15}};
+        // main stage: deck, LED wall, light truss and a sweeping pink canopy
+        {
+            vec3 c = at(0, 120);
+            mat4 xf = basis(Rt, vec3(0, 1, 0), N, c);
+            b.box(vec3(0, 1.2f, 0), vec3(24, 1.2f, 11), vec4(0.12f, 0.12f, 0.14f, 0), &xf);
+            b.box(vec3(0, 9.f, 9.5f), vec3(17, 7.f, 0.4f), vec4(0.9f, 0.35f, 1.f, 20), &xf);   // LED wall
+            b.box(vec3(0, 9.f, 9.1f), vec3(8, 4.f, 0.1f), vec4(0.3f, 0.95f, 1.f, 20), &xf);
+            for (int k = -1; k <= 1; k += 2) {
+                b.box(vec3(k * 26.f, 11.f, 4.f), vec3(1.2f, 11.f, 1.2f), steel, &xf);  // speaker/light towers
+                for (int j = 0; j < 4; j++) b.box(vec3(k * 26.f, 6.f + j * 4.5f, 2.6f), vec3(1.0f, 0.5f, 0.2f), bulbs[j % 3], &xf);
+            }
+            // canopy: arched ribs with pink membranes between them, swooping up at the front
+            const int ribs = 9;
+            for (int i = 0; i < ribs; i++) {
+                float x0 = -26.f + 52.f * i / (ribs - 1), x1 = -26.f + 52.f * (i + 1) / (ribs - 1);
+                auto prof = [&](float x, float u) {  // u: 0 back .. 1 front
+                    float lift = 1.f - std::pow(std::fabs(x) / 30.f, 2.f);
+                    return vec3(x, 14.f + 9.f * lift + 6.f * u * u, 12.f - 26.f * u);
+                };
+                for (int k = 0; k < 6; k++) {
+                    float u0 = k / 6.f, u1 = (k + 1) / 6.f;
+                    vec3 a = xf.transformPoint(prof(x0, u0)), c2 = xf.transformPoint(prof(x1, u0));
+                    vec3 d = xf.transformPoint(prof(x1, u1)), e = xf.transformPoint(prof(x0, u1));
+                    if (i < ribs - 1) { b.flatQuad(a, c2, d, e, i % 2 ? pink : vec4(1.f, 0.35f, 0.65f, 19)); b.flatQuad(e, d, c2, a, pink); }
+                    b.tube(a, e, 0.25f, 0.25f, 5, steel);
+                }
+            }
+            solid(c, 26, 12, c.y + 25.f);
+        }
+        // marquees: white peaked tents in rows either side of the central avenue
+        int tents = 0;
+        for (float n = -40.f; n <= 80.f; n += 22.f)
+            for (float r = -190.f; r <= 190.f; r += 19.f) {
+                if (std::fabs(r) < 22.f) continue;                       // the avenue
+                if (r > 95.f && r < 150.f && n > 10.f) continue;          // the big wheel
+                if (r < -95.f && r > -165.f && n > 30.f) continue;        // rides
+                if (fr.f() < 0.18f) continue;
+                vec3 c = at(r + fr.range(-2.f, 2.f), n + fr.range(-3.f, 3.f));
+                float s = fr.range(4.f, 6.5f), H = 2.6f;
+                bool accent = fr.f() < 0.3f;
+                mat4 xf = basis(Rt, vec3(0, 1, 0), N, c);
+                b.box(vec3(0, H * 0.5f, 0), vec3(s, H * 0.5f, s), white, &xf);
+                vec3 top = xf.transformPoint(vec3(0, H + s * 0.75f, 0));
+                vec3 q[4] = {xf.transformPoint(vec3(-s - 0.3f, H, -s - 0.3f)), xf.transformPoint(vec3(s + 0.3f, H, -s - 0.3f)),
+                             xf.transformPoint(vec3(s + 0.3f, H, s + 0.3f)), xf.transformPoint(vec3(-s - 0.3f, H, s + 0.3f))};
+                for (int k = 0; k < 4; k++) {
+                    b.flatTri(q[(k + 1) % 4], q[k], top, accent && k % 2 ? (fr.f() < 0.5f ? pink : teal) : white);
+                    // a string of bulbs along each roof edge
+                    for (int j = 1; j < 5; j++) b.box(lerp(q[k], top, j / 5.f) + vec3(0, 0.08f, 0), vec3(0.09f, 0.09f, 0.09f), bulbs[(j + k) % 3]);
+                }
+                b.box(vec3(0, 1.2f, -s - 0.02f), vec3(s * 0.6f, 0.9f, 0.03f), vec4(1.f, 0.85f, 0.6f, 20), &xf);  // lit opening
+                solid(c, s, s, c.y + H + s * 0.75f);
+                tents++;
+            }
+        // grandstands facing the road either side of the hub entrance
+        for (int k = -1; k <= 1; k += 2) {
+            vec3 hc = world.hubPos - N * 36.f + Rt * (k * 100.f);
+            hc.y = world.heightAt(hc.x, hc.z);
+            if (world.roadDistAt(hc.x, hc.z) < 12.f || world.roadDistAt((hc + Rt * 34.f).x, (hc + Rt * 34.f).z) < 9.f ||
+                world.roadDistAt((hc - Rt * 34.f).x, (hc - Rt * 34.f).z) < 9.f) hc = hc + N * 14.f;  // keep it off the road where it curves
+            mat4 xf = basis(Rt, vec3(0, 1, 0), N, hc);
+            const vec4 seats[] = {{0.9f, 0.15f, 0.45f, 0}, {0.15f, 0.7f, 0.85f, 0}, {0.95f, 0.85f, 0.2f, 0}};
+            for (int t = 0; t < 7; t++) {
+                b.box(vec3(0, 0.6f + t * 0.9f, -6.f + t * 1.7f), vec3(34, 0.6f + t * 0.45f * 0.0f, 0.85f), vec4(0.45f, 0.45f, 0.47f, 0), &xf);
+                b.box(vec3(0, 1.35f + t * 0.9f, -6.f + t * 1.7f), vec3(33, 0.18f, 0.6f), seats[t % 3], &xf);
+            }
+            b.box(vec3(0, 3.5f, 6.5f), vec3(34, 3.5f, 0.3f), vec4(0.3f, 0.3f, 0.33f, 0), &xf);   // back wall
+            for (int p = -2; p <= 2; p++) b.box(vec3(p * 16.f, 7.5f, 6.f), vec3(0.3f, 4.f, 0.3f), steel, &xf);
+            mat4 rf = xf * translate(vec3(0, 11.2f, 0.f)) * rotateX(0.12f);
+            b.box(vec3(0, 0, 0), vec3(35, 0.2f, 8.f), white, &rf);                              // roof
+            b.box(vec3(0, 11.f, -7.9f), vec3(30, 0.9f, 0.1f), vec4(1.f, 0.25f, 0.6f, 20), &xf);   // LED banner
+            solid(hc, 35, 8, hc.y + 12.f);
+        }
+        // drop tower and a swing ride
+        {
+            vec3 c = at(-130, 70);
+            b.cylinder(c, 1.4f, 62.f, 12, steel);
+            for (int j = 0; j < 12; j++) b.cylinder(c + vec3(0, 4.f + j * 4.8f, 0), 1.55f, 0.35f, 12, bulbs[j % 3]);
+            b.cylinder(c + vec3(0, 38.f, 0), 3.4f, 1.6f, 16, pink);
+            b.cylinder(c + vec3(0, 62.f, 0), 2.f, 2.f, 12, white);
+            solid(c, 3.5f, 3.5f, c.y + 62.f);
+            vec3 sw = at(-110, 110);
+            b.cylinder(sw, 0.9f, 16.f, 10, steel);
+            b.cone(sw + vec3(0, 15.f, 0), 9.f, 4.f, 20, teal);
+            for (int j = 0; j < 16; j++) {
+                float a = j / 16.f * 2 * PI;
+                vec3 tip = sw + vec3(std::cos(a) * 11.f, 7.f, std::sin(a) * 11.f), hang = sw + vec3(std::cos(a) * 8.6f, 15.f, std::sin(a) * 8.6f);
+                b.tube(hang, tip, 0.04f, 0.04f, 3, steel);
+                b.box(tip, vec3(0.35f, 0.25f, 0.35f), j % 2 ? pink : white);
+                b.box(sw + vec3(std::cos(a) * 9.f, 15.f, std::sin(a) * 9.f), vec3(0.15f, 0.15f, 0.15f), bulbs[j % 3]);
+            }
+            solid(sw, 2, 2, sw.y + 16.f);
+        }
+        // festoon lights: strings of bulbs on poles down the avenue and round the grounds
+        {
+            auto festoon = [&](vec3 a, vec3 c2) {
+                vec3 pa = a + vec3(0, 6.5f, 0), pc = c2 + vec3(0, 6.5f, 0);
+                b.cylinder(a, 0.12f, 6.6f, 6, steel);
+                float L = length(pc - pa);
+                int nb = int(L / 1.8f);
+                for (int j = 1; j < nb; j++) {
+                    float u = j / float(nb);
+                    vec3 q = lerp(pa, pc, u) - vec3(0, 1.4f * 4.f * u * (1.f - u), 0);
+                    b.box(q, vec3(0.13f, 0.13f, 0.13f), bulbs[j % 3]);
+                }
+            };
+            for (float n = -50.f; n < 100.f; n += 25.f) {
+                festoon(at(-14, n), at(-14, n + 25.f));
+                festoon(at(14, n), at(14, n + 25.f));
+                festoon(at(-14, n), at(14, n + 12.f));
+            }
+            for (int k = 0; k < 24; k++) {
+                float a0 = k / 24.f * 2 * PI, a1 = (k + 1) / 24.f * 2 * PI;
+                vec3 p0 = F + vec3(std::cos(a0) * 205.f, 0, std::sin(a0) * 135.f), p1 = F + vec3(std::cos(a1) * 205.f, 0, std::sin(a1) * 135.f);
+                p0.y = world.heightAt(p0.x, p0.z); p1.y = world.heightAt(p1.x, p1.z);
+                festoon(p0, p1);
+            }
+        }
+        // light towers round the edge
+        for (int k = 0; k < 10; k++) {
+            float a = k / 10.f * 2 * PI;
+            vec3 c = F + vec3(std::cos(a) * 225.f, 0, std::sin(a) * 160.f);
+            c.y = world.heightAt(c.x, c.z);
+            b.cylinder(c, 0.35f, 20.f, 8, steel);
+            b.box(c + vec3(0, 20.5f, 0), vec3(1.6f, 0.9f, 0.4f), vec4(1.f, 0.95f, 0.85f, 20));
+        }
+        // hot air balloons drifting over the grounds
+        for (int k = 0; k < 7; k++) {
+            vec3 c = F + vec3(fr.range(-450.f, 450.f), 0, fr.range(-300.f, 350.f));
+            c.y = world.heightAt(c.x, c.z) + fr.range(90.f, 220.f);
+            vec4 col = k % 3 == 0 ? vec4(0.95f, 0.3f, 0.2f, 19) : k % 3 == 1 ? vec4(0.95f, 0.8f, 0.2f, 19) : vec4(0.25f, 0.55f, 0.95f, 19);
+            b.sphere(c, 8.f, 2, col);
+            b.cone(c - vec3(0, 11.5f, 0), 3.f, 5.f, 10, col);
+            b.box(c - vec3(0, 14.5f, 0), vec3(1.2f, 0.8f, 1.2f), vec4(0.45f, 0.3f, 0.18f, 0));
+        }
+        b.build(festSite);
+        SDL_Log("Festival: %d marquees", tents);
+    }
+    world.rebuildBoxGrid();
+
+    // the big wheel at the east end of the grounds: legs and hub are static, the rim turns
+    vec3 right = Rt, fwd = -N;
+    ferrisPos = at(122, 40);
     ferrisAxis = right;
     const float R0 = 26.f, Hh = R0 + 6.f;
     {
@@ -192,6 +352,26 @@ void Game::rebuildCatMesh() {
 void Game::updateFestival(float dt) {
     festShow = std::max(0.f, festShow - dt);
     ferrisAng += dt * 0.12f;
+    // fireworks over the festival from dusk till dawn
+    if (R.night > 0.2f && length(cam.pos - world.festCenter) < 3500.f) {
+        fwTimer -= dt;
+        if (fwTimer <= 0) {
+            fwTimer = 0.35f + float(rand() % 100) * 0.012f;
+            vec3 c = world.festCenter + vec3(float(rand() % 300 - 150), 0, float(rand() % 200 - 60));
+            c.y = world.festCenter.y + 110.f + float(rand() % 90);
+            const vec3 cols[] = {{2.6f, 0.6f, 1.4f}, {0.6f, 1.8f, 2.8f}, {2.8f, 2.0f, 0.5f}, {2.6f, 0.8f, 0.3f}, {1.2f, 2.6f, 0.9f}, {2.6f, 2.6f, 2.6f}};
+            vec3 col = cols[rand() % 6], col2 = cols[rand() % 6];
+            float sp = 14.f + float(rand() % 100) * 0.12f;
+            for (int k = 0; k < 190; k++) {
+                float u = float(rand() % 1000) / 1000.f * 2.f - 1.f, a = float(rand() % 1000) / 1000.f * 2.f * PI;
+                float rr = std::sqrt(1.f - u * u);
+                vec3 d(rr * std::cos(a), u, rr * std::sin(a));
+                fx.glow(c, d * sp * (0.85f + float(rand() % 100) * 0.003f), 1.6f + float(rand() % 100) * 0.008f, 1.5f, (k % 3 ? col : col2) * 1.6f, 3.5f);
+            }
+            fx.glow(c, vec3(0, 0, 0), 0.22f, 14.f, col * 1.2f, 0.f);  // the flash
+            for (int k = 0; k < 12; k++) fx.glow(c - vec3(0, k * 9.f, 0), vec3(0, -2.f, 0), 0.4f + k * 0.02f, 0.3f, vec3(1.5f, 1.0f, 0.5f), 0.f);  // the rocket's trail
+        }
+    }
     if (state != ST_FREEROAM && state != ST_RACE) return;
     Vehicle& c = player.car;
     float v = c.speed();
@@ -229,6 +409,7 @@ void Game::drawFestivalWorld(const Camera& cam_) {
     if (catDirty) rebuildCatMesh();
     R.object.set("uModel", mat4());
     catMesh.draw();
+    festSite.draw();
     ferrisStatic.draw();
     vec3 hubTop = ferrisPos + vec3(0, 32.f, 0);
     mat4 rot = basis(ferrisAxis, vec3(0, 1, 0), cross(ferrisAxis, vec3(0, 1, 0)), hubTop) * rotateX(ferrisAng);

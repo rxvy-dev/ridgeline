@@ -443,6 +443,8 @@ void World::scatter(uint32_t seed) {
             if (urban(x, z, 30.f) || nearEstate(x, z, 42.f)) continue;
             float hubD = std::hypot(x - hubPos.x, z - hubPos.z);
             if (hubD < 95.f) continue;
+            if (std::hypot(x - festCenter.x, z - festCenter.z) < 265.f) continue;  // festival grounds
+            if (inBox(x, z, 3.f)) continue;                                         // town buildings
             if (ccDist(x, z) < 20.f) continue;
             vec3 n = normalAt(x, z);
             float forest = forestAt(x, z);
@@ -747,6 +749,8 @@ void World::generate(uint32_t seed) {
         vec3 toRoad = normalize(-side);
         hubSpawn = hubPos + toRoad * 18.f;
         hubYaw = std::atan2(toRoad.x, toRoad.z);
+        festCenter = hubPos + side * 130.f;
+        festCenter.y = hubPos.y;
     }
 
     placeEstates();
@@ -758,6 +762,9 @@ void World::generate(uint32_t seed) {
             float h = baseHeight(x, z);
             float dh = std::hypot(x - hubPos.x, z - hubPos.z);
             h = lerpf(h, hubPos.y - 0.03f, 1.f - smoothstepf(48.f, 85.f, dh));
+            // the festival grounds: a broad, gently levelled field
+            float df = std::hypot(x - festCenter.x, z - festCenter.z);
+            h = lerpf(h, festCenter.y + (h - festCenter.y) * 0.08f, 1.f - smoothstepf(170.f, 290.f, df));
             for (const Estate& e : estates) {
                 float de = std::hypot(x - e.pos.x, z - e.pos.z);
                 if (de < 70.f) h = lerpf(h, e.pos.y - 0.04f, 1.f - smoothstepf(30.f, 62.f, de));
@@ -769,6 +776,7 @@ void World::generate(uint32_t seed) {
     for (auto& c : crossCountry) c.y = heightAt(c.x, c.z);
     hubSpawn.y = heightAt(hubSpawn.x, hubSpawn.z);
     buildUrban(seed);  // also builds the estates (shares the mesh and collision grid)
+    buildJapan();
     scatter(seed);
     buildShrines();
 }
@@ -1273,4 +1281,236 @@ void World::buildShrines() {
     torii("Usui Pass Road", 0.08f);
     torii("Haruna Loop", 0.3f);
     torii("Chichibu Road", 0.5f);
+}
+
+// ---------------------------------------------------------------- Japan
+// Little towns strung along the roads the way they are in Japan: two-storey shop houses and homes
+// with grey-blue tiled hip roofs right up against the road, concrete utility poles with sagging
+// wires, vending machines glowing by the doors; plus a five-storey pagoda looking across at Fuji.
+void World::buildJapan() {
+    Rng rng(4242);
+    MeshBuilder& b = props;
+    int houses = 0, poles = 0;
+    const vec4 roofCols[] = {{0.20f, 0.23f, 0.28f, 0}, {0.17f, 0.18f, 0.20f, 0}, {0.30f, 0.20f, 0.16f, 0}, {0.24f, 0.30f, 0.34f, 0}};
+    const vec4 wallCols[] = {{0.88f, 0.86f, 0.80f, 0}, {0.80f, 0.77f, 0.70f, 0}, {0.30f, 0.22f, 0.16f, 0}, {0.72f, 0.70f, 0.66f, 0}, {0.62f, 0.56f, 0.48f, 0}};
+    const vec4 neon[] = {{1.f, 0.2f, 0.25f, 15}, {0.2f, 0.85f, 1.f, 15}, {1.f, 0.85f, 0.2f, 15}, {0.4f, 1.f, 0.5f, 15}};
+    auto hipRoof = [&](vec3 c, vec3 f, vec3 r, float hw, float hd, float y, float H, vec4 col) {
+        // eaves overhang the walls; ridge runs along the longer side
+        float o = 0.75f;
+        vec3 e0 = c + r * (-hw - o) + f * (-hd - o), e1 = c + r * (hw + o) + f * (-hd - o);
+        vec3 e2 = c + r * (hw + o) + f * (hd + o), e3 = c + r * (-hw - o) + f * (hd + o);
+        e0.y = e1.y = e2.y = e3.y = y;
+        float rl = std::max(0.f, hw - hd);
+        vec3 r0 = c + r * (-rl), r1 = c + r * rl;
+        r0.y = r1.y = y + H;
+        b.flatQuad(e1, e0, r0, r1, col);      // front slope (wound so the normals face out and up)
+        b.flatQuad(e3, e2, r1, r0, col);      // back slope
+        b.flatTri(e0, e3, r0, col);           // hip ends
+        b.flatTri(e2, e1, r1, col);
+        // dark ridge tiles
+        b.tube(r0 + vec3(0, 0.08f, 0), r1 + vec3(0, 0.08f, 0), 0.18f, 0.18f, 5, vec4(0.1f, 0.1f, 0.11f, 0));
+    };
+    auto house = [&](vec3 c, vec3 f, float w, float d, int floors, bool shop) {
+        vec3 r(f.z, 0, -f.x);
+        float hw = w * 0.5f, hd = d * 0.5f;
+        // stand it on the lowest corner so it never floats
+        float g = 1e9f, gmax = -1e9f;
+        for (int k = 0; k < 4; k++) {
+            vec3 q = c + r * ((k & 1) ? hw : -hw) + f * ((k & 2) ? hd : -hd);
+            float hh = heightAt(q.x, q.z);
+            g = std::min(g, hh); gmax = std::max(gmax, hh);
+        }
+        if (gmax - g > 12.f) return false;
+        // level a pad at road height (front edge), feathered into the slope around it
+        {
+            vec3 fe = c - f * hd;
+            float py = heightAt(fe.x, fe.z);
+            float rad = std::max(hw, hd) + 8.f;
+            int x0 = std::max(0, int((c.x - rad + HALF) / CELL)), x1 = std::min(N - 1, int((c.x + rad + HALF) / CELL) + 1);
+            int z0 = std::max(0, int((c.z - rad + HALF) / CELL)), z1 = std::min(N - 1, int((c.z + rad + HALF) / CELL) + 1);
+            for (int iz = z0; iz <= z1; iz++)
+                for (int ix = x0; ix <= x1; ix++) {
+                    float wx = -HALF + ix * CELL, wz = -HALF + iz * CELL;
+                    if (roadDist[iz * N + ix] < 1.5f) continue;  // never touch the road
+                    vec3 d(wx - c.x, 0, wz - c.z);
+                    float lx = std::fabs(dot(d, r)) - hw - 1.5f, lz = std::fabs(dot(d, f)) - hd - 1.5f;
+                    float out = std::max(lx, lz);
+                    float k = 1.f - smoothstepf(0.f, 6.f, out);
+                    if (k > 0) height[iz * N + ix] = lerpf(height[iz * N + ix], py, k);
+                }
+            g = py;
+        }
+        g -= 0.25f;
+        float H = floors * 3.1f + 0.4f;
+        mat4 xf = basis(r, vec3(0, 1, 0), f, vec3(c.x, g, c.z));
+        vec4 wall = wallCols[rng.irange(0, 4)];
+        b.box(vec3(0, H * 0.5f, 0), vec3(hw, H * 0.5f, hd), wall, &xf);
+        // timber base band and dark window strips on the road side
+        b.box(vec3(0, 0.45f, 0), vec3(hw + 0.02f, 0.45f, hd + 0.02f), vec4(0.22f, 0.17f, 0.13f, 0), &xf);
+        for (int fl = 0; fl < floors; fl++) {
+            float wy = fl * 3.1f + 1.9f;
+            b.box(vec3(0, wy, -hd - 0.02f), vec3(hw * 0.7f, 0.55f, 0.03f), vec4(0.10f, 0.12f, 0.15f, 2), &xf);
+            b.box(vec3(0, wy, hd + 0.02f), vec3(hw * 0.6f, 0.5f, 0.03f), vec4(0.10f, 0.12f, 0.15f, 2), &xf);
+        }
+        if (floors == 2) {
+            // the little skirt roof between the floors
+            mat4 sx = xf * translate(vec3(0, 3.25f, -hd - 0.55f)) * rotateX(-0.35f);
+            b.box(vec3(0, 0, 0), vec3(hw + 0.3f, 0.06f, 0.65f), roofCols[0], &sx);
+        }
+        vec4 rc = roofCols[rng.irange(0, 3)];
+        vec3 cw(c.x, 0, c.z);
+        hipRoof(cw, f, r, hw, hd, g + H, std::min(hw, hd) * 0.62f, rc);
+        if (shop) {
+            // lit shop front, a fabric awning, a vertical sign
+            b.box(vec3(0, 1.35f, -hd - 0.04f), vec3(hw * 0.85f, 0.95f, 0.03f), vec4(1.f, 0.86f, 0.62f, 20), &xf);
+            mat4 aw = xf * translate(vec3(0, 2.55f, -hd - 0.7f)) * rotateX(-0.28f);
+            vec4 awc = rng.f() < 0.5f ? vec4(0.15f, 0.25f, 0.55f, 21) : vec4(0.7f, 0.12f, 0.1f, 21);
+            b.box(vec3(0, 0, 0), vec3(hw * 0.9f, 0.04f, 0.75f), awc, &aw);
+            float sx = rng.range(-hw + 0.6f, hw - 0.6f);
+            b.box(vec3(sx, 4.2f + (floors - 1) * 1.5f, -hd - 0.5f), vec3(0.08f, 1.3f + floors * 0.4f, 0.45f), neon[rng.irange(0, 3)], &xf);
+            if (rng.f() < 0.45f) {  // a pair of vending machines by the door
+                for (int k = 0; k < 2; k++) {
+                    vec3 vm(hw + 0.9f + k * 1.05f, 0.95f, -hd + 0.5f);
+                    b.box(vm, vec3(0.48f, 0.95f, 0.38f), vec4(0.9f, 0.9f, 0.92f, 0), &xf);
+                    b.box(vm + vec3(0, 0.25f, -0.39f), vec3(0.4f, 0.55f, 0.01f), vec4(1.f, 0.95f, 0.85f, 20), &xf);
+                }
+            }
+        }
+        // collision: axis-aligned box around the rotated footprint (slightly shrunk)
+        float ex = std::fabs(r.x) * hw + std::fabs(f.x) * hd, ez = std::fabs(r.z) * hw + std::fabs(f.z) * hd;
+        boxes.push_back({c.x - ex * 0.85f, c.z - ez * 0.85f, c.x + ex * 0.85f, c.z + ez * 0.85f, g + H});
+        houses++;
+        return true;
+    };
+    auto clearSpot = [&](vec3 c, float rad) {
+        if (heightAt(c.x, c.z) < waterLevel + 1.5f) return false;
+        if (urban(c.x, c.z, 20.f) || nearEstate(c.x, c.z, 50.f)) return false;
+        if (std::hypot(c.x - hubPos.x, c.z - hubPos.z) < 110.f || std::hypot(c.x - festCenter.x, c.z - festCenter.z) < 300.f) return false;
+        for (float a = 0; a < 6.28f; a += 0.785f)
+            if (roadDistAt(c.x + std::cos(a) * rad, c.z + std::sin(a) * rad) < 1.5f) return false;
+        return roadDistAt(c.x, c.z) > rad * 0.6f;
+    };
+    auto town = [&](const char* road, float f0, float f1, float density, bool farm) {
+        for (auto& rd : roads) {
+            if (rd.name != road || rd.pts.size() < 10) continue;
+            int n = int(rd.pts.size());
+            int i0 = int(f0 * (n - 1)), i1 = int(f1 * (n - 1));
+            float along = 0, lastPole = -1e9f;
+            vec3 prevPole[2];
+            bool havePole = false;
+            for (int i = i0; i < i1; i++) {
+                along += length(rd.pts[i + 1] - rd.pts[i]);
+                vec3 p = rd.pts[i], t = rd.tan[i], side(-t.z, 0, t.x);
+                // utility poles on one side, wires sagging between them
+                if (along - lastPole > 30.f) {
+                    lastPole = along;
+                    vec3 pp = p + side * (rd.width * 0.5f + 1.6f);
+                    pp.y = heightAt(pp.x, pp.z);
+                    if (roadDistAt(pp.x, pp.z) > 0.8f) {
+                        b.cylinder(pp, 0.16f, 9.5f, 6, vec4(0.6f, 0.6f, 0.58f, 0));
+                        mat4 ax = basis(t, vec3(0, 1, 0), side, pp);
+                        b.box(vec3(0, 8.9f, 0), vec3(0.9f, 0.07f, 0.07f), vec4(0.3f, 0.3f, 0.3f, 7), &ax);
+                        if (rng.f() < 0.3f) b.cylinder(pp + vec3(0, 6.8f, 0) + side * 0.35f, 0.32f, 0.9f, 8, vec4(0.55f, 0.56f, 0.55f, 7));  // transformer
+                        vec3 tops[2] = {pp + vec3(0, 8.95f, 0) + t * 0.75f, pp + vec3(0, 8.95f, 0) - t * 0.75f};
+                        if (havePole)
+                            for (int k = 0; k < 2; k++) {
+                                vec3 a = prevPole[k], c2 = tops[k];
+                                vec3 prev = a;
+                                for (int sgm = 1; sgm <= 4; sgm++) {
+                                    float u = sgm / 4.f;
+                                    vec3 q = lerp(a, c2, u) - vec3(0, 0.9f * 4.f * u * (1.f - u), 0);
+                                    b.tube(prev, q, 0.025f, 0.025f, 3, vec4(0.05f, 0.05f, 0.05f, 0));
+                                    prev = q;
+                                }
+                            }
+                        prevPole[0] = tops[0]; prevPole[1] = tops[1];
+                        havePole = true;
+                        poles++;
+                    }
+                }
+                // buildings, both sides, one every 11-16 m
+                if (i % 3 != 0 || rng.f() > density) continue;
+                for (int s = -1; s <= 1; s += 2) {
+                    if (rng.f() > density) continue;
+                    float w = farm ? rng.range(10.f, 14.f) : rng.range(7.5f, 11.f), d = farm ? rng.range(8.f, 10.f) : rng.range(7.f, 9.5f);
+                    vec3 c = p + side * (s * (rd.width * 0.5f + 2.5f + d * 0.5f));
+                    if (!clearSpot(c, std::max(w, d) * 0.6f)) continue;
+                    if (inBox(c.x, c.z, 2.f)) continue;
+                    vec3 f = side * (float)-s;  // front faces the road
+                    house(c, f, w, d, farm ? 1 : (rng.f() < 0.65f ? 2 : 1), !farm && rng.f() < 0.45f);
+                    rebuildBoxGrid();
+                }
+            }
+        }
+    };
+    // towns go wherever a road runs through level ground for a while (not in cuttings or on
+    // embankments), spaced out across the island; farm roads get scattered farmhouses
+    {
+        std::vector<vec3> placed;
+        int towns = 0;
+        for (auto& rd : roads) {
+            bool skip = rd.name.find("-dori") != std::string::npos || rd.name.find("Street") != std::string::npos || rd.name == "Omotesando"
+                     || rd.name.find("Daikoku") != std::string::npos || rd.name == "Akagi Touge" || rd.name == "Irohazaka" || rd.name == "Okutama Trail"
+                     || rd.name == "Fuji Skyline";
+            if (skip || rd.pts.size() < 40) continue;
+            bool farm = rd.surface != SURF_ASPHALT;
+            int n = int(rd.pts.size());
+            std::vector<char> level(n, 0);
+            for (int i = 0; i < n; i++) {
+                vec3 p = rd.pts[i], t = rd.tan[i], side(-t.z, 0, t.x);
+                bool ok = true;
+                for (int sg = -1; sg <= 1 && ok; sg += 2)
+                    for (float o : {10.f, 18.f}) {
+                        vec3 q = p + side * (sg * (rd.width * 0.5f + o));
+                        if (std::fabs(heightAt(q.x, q.z) - p.y) > 3.5f) ok = false;
+                    }
+                level[i] = ok;
+            }
+            for (int i = 0; i < n;) {
+                if (!level[i]) { i++; continue; }
+                int j = i;
+                while (j < n && level[j]) j++;
+                float len = 0;
+                for (int k = i; k + 1 < j; k++) len += length(rd.pts[k + 1] - rd.pts[k]);
+                vec3 mid = rd.pts[(i + j) / 2];
+                bool far = true;
+                for (auto& q : placed) far &= std::hypot(q.x - mid.x, q.z - mid.z) > 650.f;
+                if (len > 140.f && far && std::hypot(mid.x - festCenter.x, mid.z - festCenter.z) > 400.f && !urban(mid.x, mid.z, 80.f)) {
+                    int cut = std::min(j, i + int((j - i) * std::min(1.f, 420.f / len)));  // at most ~420 m of town
+                    town(rd.name.c_str(), i / float(n - 1), cut / float(n - 1), farm ? 0.5f : 0.92f, farm);
+                    placed.push_back(mid);
+                    towns++;
+                }
+                i = j;
+            }
+        }
+        SDL_Log("Japan: %d towns", towns);
+    }
+
+    // the five-storey pagoda on the hill above the lake, Fuji behind it
+    {
+        vec3 c(-1730.f, 0, 640.f);
+        float g = heightAt(c.x, c.z) - 0.3f;
+        vec4 red(0.82f, 0.16f, 0.08f, 0), roof(0.16f, 0.17f, 0.19f, 0), white(0.9f, 0.88f, 0.82f, 0), gold(0.85f, 0.65f, 0.2f, 7);
+        b.box(vec3(c.x, g + 0.8f, c.z), vec3(8.f, 0.8f, 8.f), vec4(0.5f, 0.49f, 0.46f, 0));
+        float y = g + 1.6f, s = 5.2f;
+        for (int k = 0; k < 5; k++) {
+            float hgt = k == 0 ? 4.f : 3.f;
+            b.box(vec3(c.x, y + hgt * 0.5f, c.z), vec3(s, hgt * 0.5f, s), k % 2 ? white : red);
+            for (int q = 0; q < 4; q++) {  // red corner posts
+                float sx = (q & 1) ? s : -s, sz = (q & 2) ? s : -s;
+                b.box(vec3(c.x + sx, y + hgt * 0.5f, c.z + sz), vec3(0.25f, hgt * 0.5f, 0.25f), red);
+            }
+            y += hgt;
+            vec3 cc(c.x, 0, c.z);
+            hipRoof(cc, vec3(0, 0, 1), vec3(1, 0, 0), s + 1.6f, s + 1.6f, y, 1.6f, roof);
+            y += 0.9f;
+            s *= 0.86f;
+        }
+        b.tube(vec3(c.x, y, c.z), vec3(c.x, y + 7.f, c.z), 0.3f, 0.12f, 6, gold);  // sorin spire
+        for (int k = 0; k < 7; k++) b.cylinder(vec3(c.x, y + 1.f + k * 0.8f, c.z), 0.55f, 0.12f, 10, gold);
+        boxes.push_back({c.x - 8, c.z - 8, c.x + 8, c.z + 8, y});
+    }
+    rebuildBoxGrid();
+    SDL_Log("Japan: %d buildings, %d utility poles", houses, poles);
 }

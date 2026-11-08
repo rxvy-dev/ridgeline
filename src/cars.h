@@ -28,6 +28,7 @@ struct CarSpec {
     // imported cars
     std::string id = "";
     int cylinders = 0;
+    bool electric = false;  // EV: motor whine instead of an engine, no exhaust
     int importIdx = -1;
     std::string credit = "";
     bool starter = false;

@@ -226,7 +226,8 @@ private:
     static constexpr size_t kCatCount = 60;
     std::vector<LuckyCat> cats;
     std::vector<uint8_t> catHit;
-    Mesh catMesh, ferrisMesh, ferrisStatic, gondolaMesh;
+    Mesh catMesh, ferrisMesh, ferrisStatic, gondolaMesh, festSite;
+    float fwTimer = 0;
     bool catDirty = true;
     int festDay = -1, festDone = 0, festPick[3] = {0, 1, 2}, streak = 0, lastDay = -1;
     float festProg[3] = {0, 0, 0}, festShow = 0, festKmAcc = 0, ferrisAng = 0;

@@ -125,7 +125,7 @@ void Vehicle::update(float dt, const World& w, const Controls& in) {
     prevThrottle = throttle;
 
     // ---- ground
-    float h = w.heightAt(pos.x, pos.z);
+    float h = w.heightAt(pos.x, pos.z) + groundBoost;
     float clearance = pos.y - h;
     float contact = 1.f - smoothstepf(0.08f, 0.4f, clearance);
     grounded = contact > 0.01f;
@@ -293,9 +293,10 @@ void Vehicle::update(float dt, const World& w, const Controls& in) {
 
     // ---- vertical / terrain following
     float hOld = h;
-    vel.y -= G * dt;
+    // a touch more hang time while a stunt is spinning
+    vel.y -= G * (stuntDur > 0 ? 0.8f : 1.f) * dt;
     vec3 np = pos + vel * dt;
-    float hNew = w.heightAt(np.x, np.z);
+    float hNew = w.heightAt(np.x, np.z) + groundBoost;
     if (np.y < hNew) {
         float follow = (hNew - hOld) / dt;
         if (!grounded && vel.y < follow - 4.f) impact = std::max(impact, follow - vel.y);
@@ -314,23 +315,35 @@ void Vehicle::update(float dt, const World& w, const Controls& in) {
         float hs = std::max(5.f, std::fabs(dot(vel, fwd)));
         float tgt = clampf(std::atan2(-vel.y, hs) * 0.8f, -0.75f, 0.85f);
         airPitchVel += ((tgt - airPitch) * 16.f - airPitchVel * 6.f) * dt;
-        // a little air control: steer to yaw, like the arcade racers
-        yawRate += steer * 1.6f * dt;
+        // air control: a little steering, and the nose drifts round to line up with where the car
+        // is travelling so it lands pointing the right way
+        float hsp = std::hypot(vel.x, vel.z);
+        if (hsp > 6.f) {
+            float want = wrapAngle(std::atan2(vel.x, vel.z) - yaw);
+            float target = -want * 2.2f + steer * 0.9f;
+            yawRate += (target - yawRate) * std::min(1.f, 3.f * dt);
+        }
+        yawRate = clampf(yawRate, -1.6f, 1.6f);
     } else {
         airPitchVel += ((0.f - airPitch) * 160.f - airPitchVel * 20.f) * dt;
     }
     airPitch += airPitchVel * dt;
     if (wasAir && !flying) {
-        // touchdown: compress the springs in proportion to how hard we came down
+        // touchdown: compress the springs in proportion to how hard we came down, a little speed scrubbed, and the yaw settles instead of spinning out
+        float vi = -landSpeed;
         landVel = std::min(landVel, std::max(-4.5f, landSpeed * 0.22f));
         airPitchVel *= 0.3f;
+        float scrub = clampf((vi - 6.f) * 0.008f, 0.f, 0.06f);
+        vel.x *= 1.f - scrub; vel.z *= 1.f - scrub;
+        yawRate *= 0.4f;
+        alphaFs *= 0.5f; alphaRs *= 0.5f;
     }
     wasAir = flying;
     landVel += (-landSquash * 170.f - landVel * 12.f) * dt;
     landSquash = clampf(landSquash + landVel * dt, -0.22f, 0.12f);
     // stunt spin: eased so it starts and finishes gently and always lands wheels-down
     if (stuntDur > 0) {
-        stuntT += dt * (flying || stuntT < 0.15f ? 1.f : 5.f);  // touched down early: wrap it up fast
+        stuntT += dt * (flying || stuntT < 0.15f ? 1.f : 3.f);  // touched down early: wrap it up quickly
         float u = clampf(stuntT / stuntDur, 0.f, 1.f);
         float e = u - std::sin(2.f * PI * u) / (2.f * PI);
         stuntRoll = stuntRollTurns * 2.f * PI * e;
@@ -397,6 +410,13 @@ mat4 Vehicle::chassisMatrix() const {
         M = M * translate(vec3(0, hc, 0)) * rotateY(stuntYaw) * rotateZ(stuntRoll) * rotateX(airPitch) * translate(vec3(0, -hc, 0));
     }
     return M;
+}
+
+mat4 Vehicle::cabinMatrix() const {
+    vec3 f = forward();
+    vec3 u = normalize(up);
+    f = normalize(f - u * dot(f, u));
+    return basis(cross(u, f), u, f, pos) * translate(vec3(0, 0.02f + landSquash, 0)) * rotateX(bodyPitch + airPitch * 0.5f) * rotateZ(bodyRoll);
 }
 
 mat4 Vehicle::bodyMatrix() const {

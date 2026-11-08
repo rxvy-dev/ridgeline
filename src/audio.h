@@ -11,7 +11,8 @@ struct Audio {
     std::atomic<int> cylinders{4};
     std::atomic<float> impactReq{0};
     // exhaust: one-shot bangs, a crackle level and the rev-limiter cut
-    std::atomic<float> popReq{0}, crackleLvl{0}, limiter{0};
+    std::atomic<float> popReq{0}, crackleLvl{0}, limiter{0}, electric{0};
+    float evPh1 = 0, evPh2 = 0, evPh3 = 0, evLp = 0;
     float popEnv = 0, popPh = 0, popF = 70, popLp = 0, popLp2 = 0, limPh = 0;
     std::atomic<float> beepFreq{0}, beepLen{0};
     std::atomic<int> horn{0};

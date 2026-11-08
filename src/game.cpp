@@ -443,6 +443,7 @@ bool Game::init(const Options& o) {
                     camYaw = player.car.yaw;
                     state = ST_RACE; stateTime = 3.f; raceTime = 20.f;
                     trackProgress(player, E);
+                    if (opt.simSeconds > 0) { player.car.vel = t * 32.f; autopilot = true; }  // drive it off the ramp
                     goto rampDone;
                 }
                 float ph = opt.look - int(opt.look);
@@ -780,6 +781,7 @@ void Game::setPlayerCar(int idx) {
     player.name = "You";
     player.car.assists = settings.assists;
     audio.cylinders = cylindersFor(kCars[oc.spec]);
+    audio.electric = kCars[oc.spec].electric ? 1.f : 0.f;
 }
 
 void Game::enterFreeRoam(vec3 pos, float yaw) {
@@ -1575,7 +1577,7 @@ void Game::update(float dt) {
         case ST_RACE:
             // stunt slow motion: the world slows while you're upside down
             slowmo = std::max(0.f, slowmo - dt);
-            updateRace(slowmo > 0 ? dt * (0.42f + 0.58f * smoothstepf(0.f, 0.35f, 1.1f - slowmo) * (slowmo < 0.35f ? 1.f : 0.f)) : dt);
+            updateRace(dt * (slowmo > 0.3f ? 0.45f : 0.45f + 0.55f * (1.f - slowmo / 0.3f)));
             updateGates(dt);
             break;
         case ST_RESULTS: {
@@ -1598,6 +1600,7 @@ void Game::update(float dt) {
     // exhaust flames for every car near the camera; bangs and crackle for the one we're listening to
     if (state != ST_PAUSE && state != ST_MAP) {
         auto exhaust = [&](Vehicle& v, bool listen) {
+            if (v.spec->electric) { v.popSeen = v.popCount; if (listen) { audio.crackleLvl = 0.f; audio.limiter = 0.f; } return; }
             bool big = v.popCount != v.popSeen;
             v.popSeen = v.popCount;
             bool crk = v.crackle > 0 && (rand() % 100) < 22;
@@ -1682,6 +1685,17 @@ void Game::updateRace(float dt) {
         float rubber = clampf(1.f - diff / 3000.f, 0.93f, 1.06f);
         ctl[i] = aiDrive(*r, E.route, world, racers, rubber, dt);
     }
+    // stunt ramps are solid: the car rides up the wedge before it leaves the lip
+    for (Racer* r : racers) {
+        r->car.groundBoost = 0;
+        for (size_t k = 0; k < E.ramps.size(); k++) {
+            float d = E.ramps[k], len = 9.f, H = 1.25f;
+            vec3 p0 = E.route.pointAt(d - len), t = E.route.tangentAt(d), side(-t.z, 0, t.x);
+            vec3 q = r->car.pos - p0;
+            float along = dot(q, t), lat = dot(q, side);
+            if (along >= 0.f && along <= len && std::fabs(lat) < rampHalfW(E)) r->car.groundBoost = H * along / len;
+        }
+    }
     stepPhysics(dt);
     fx.update(dt, racers, world);
     for (Racer* r : racers) {
@@ -1706,7 +1720,7 @@ void Game::updateRace(float dt) {
             }
         }
         // stunt ramps: launch into a roll or a spin
-        if (!E.ramps.empty() && !r->finished && r->car.grounded) {
+        if (!E.ramps.empty() && !r->finished && !r->car.stunting()) {
             float L = E.route.length;
             float a0 = E.route.closed ? std::fmod(r->lastProg, L) : r->lastProg;
             float a1 = E.route.closed ? std::fmod(r->progress, L) : r->progress;
@@ -1717,13 +1731,14 @@ void Game::updateRace(float dt) {
                     vec3 rp = E.route.pointAt(rd), rtn = E.route.tangentAt(rd), side(-rtn.z, 0, rtn.x);
                     float lat = dot(r->car.pos - rp, side);
                     if (std::fabs(lat) > rampHalfW(E) + 0.6f) continue;
+                    if (r->car.pos.y > groundAtRoute(E.route, rd, rp) + 1.25f + 2.5f) continue;  // sailed over it
                     Vehicle& c = r->car;
                     float v = std::max(c.speed(), 27.f);
                     vec3 f = c.forward();
                     c.vel = vec3(f.x * v, 0, f.z * v);
                     c.vel.y = clampf(6.f + v * 0.09f, 8.f, 11.5f);
                     c.pos.y += 0.35f;
-                    float T = 2.f * c.vel.y / 9.81f;
+                    float T = 2.f * c.vel.y / (9.81f * 0.8f);
                     int kind = E.rampKind[k];
                     float roll = kind == 0 ? 1.f : kind == 1 ? -1.f : kind == 3 ? (k % 2 ? -2.f : 2.f) : 0.f;
                     float yawT = kind == 2 ? (k % 2 ? -1.f : 1.f) : 0.f;
@@ -1973,7 +1988,7 @@ void Game::updateCameraRaw(float dt) {
         camRollSm += (clampf(accLatSm * 0.0028f, -0.04f, 0.04f) - camRollSm) * damp(3.f, dt);
         cam.roll = camRollSm * (1.f - orbit);
     } else {
-        mat4 bm = car.bodyMatrix();
+        mat4 bm = car.cabinMatrix();  // the camera stays upright through stunt spins
         const CarModel& m = *tr.model;
         vec3 local = camMode == 2 ? m.eye : (camMode == 3 ? m.hoodCam : m.bumperCam);
         cam.nearZ = camMode == 2 ? 0.04f : 0.12f;

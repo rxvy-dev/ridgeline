@@ -28,8 +28,8 @@ void World::buildUrban(uint32_t seed) {
     };
 
     // ================================================================ Tokyo
-    // Every block is filled the way Tokyo is: narrow buildings shoulder to shoulder along each street
-    // frontage, a back alley behind, towers clustered round Shinjuku, signs stacked up the shop fronts.
+    // A small Tokyo neighbourhood: narrow low buildings shoulder to shoulder along each street
+    // frontage, a back alley behind, signs stacked up the shop fronts, Tokyo Tower over the rooftops.
     const float xs[] = {1800, 1950, 2100, 2250, 2400, 2550, 2700};
     const float zs[] = {-850, -700, -550, -400, -250, -100, 50, 200};
     const vec3 downtown(2240, 0, -260);
@@ -47,7 +47,7 @@ void World::buildUrban(uint32_t seed) {
     auto building = [&](float x0, float z0, float x1, float z1, float H, int face, float down) {
         if (x1 - x0 < 6.f || z1 - z0 < 6.f || !clearOfRoads(x0, z0, x1, z1)) return;
         float g = std::min(std::min(heightAt(x0, z0), heightAt(x1, z1)), std::min(heightAt(x0, z1), heightAt(x1, z0))) - 0.3f;
-        bool glassy = H > 70.f || (down > 0.5f && rng.f() < 0.3f);
+        bool glassy = H > 22.f && rng.f() < 0.25f;
         vec4 col = glassy ? kGlass[rng.irange(0, 3)] : (rng.f() < 0.6f ? kTile[rng.irange(0, 6)] : kConcrete[rng.irange(0, 6)]);
         vec3 lo(x0, g, z0), hi(x1, g + H, z1);
         block(city, lo, hi, col);
@@ -99,8 +99,9 @@ void World::buildUrban(uint32_t seed) {
     auto heightFor = [&](float cx, float cz, float& down) {
         float dd = std::hypot(cx - downtown.x, cz - downtown.z);
         down = std::exp(-dd * dd / (380.f * 380.f));
-        float H = 9.f + 22.f * rng.f() * rng.f() + down * (25.f + 120.f * rng.f() * rng.f());
-        if (rng.f() < 0.12f) H += 18.f;  // the odd pencil tower
+        // a small Tokyo neighbourhood: two to six storeys, a little taller round the station
+        float H = 6.5f + 7.f * rng.f() * rng.f() + down * (5.f + 14.f * rng.f() * rng.f());
+        if (rng.f() < 0.08f) H += 7.f;  // the odd narrow pencil building
         return H;
     };
     for (int bx = 0; bx < 6; bx++)
@@ -109,35 +110,6 @@ void World::buildUrban(uint32_t seed) {
             if (bx == 0 && bz == 0) continue;  // Tokyo Tower's park
             float cx = (x0 + x1) * 0.5f, cz = (z0 + z1) * 0.5f, down;
             heightFor(cx, cz, down);
-            if (down > 0.55f && rng.f() < 0.55f) {
-                // Shinjuku: a podium filling the block with one or two towers on it
-                float g = heightAt(cx, cz) - 0.3f;
-                if (clearOfRoads(x0, z0, x1, z1)) {
-                    block(city, vec3(x0, g, z0), vec3(x1, g + 14.f, z1), kConcrete[rng.irange(0, 6)]);
-                    solid(x0, z0, x1, z1, g + 14.f);
-                    int nt = rng.f() < 0.5f ? 2 : 1;
-                    for (int t = 0; t < nt; t++) {
-                        float w = rng.range(34.f, 52.f), d = rng.range(34.f, 52.f);
-                        float tx = nt == 2 ? (t ? x1 - w - 6 : x0 + 6) : cx - w * 0.5f, tz = rng.range(z0 + 6, z1 - d - 6);
-                        float H = 90.f + 140.f * rng.f() * down;
-                        vec4 col = kGlass[rng.irange(0, 3)];
-                        block(city, vec3(tx, g + 14.f, tz), vec3(tx + w, g + 14.f + H, tz + d), col);
-                        solid(tx, tz, tx + w, tz + d, g + 14.f + H);
-                        float in = std::min(w, d) * 0.18f;
-                        block(city, vec3(tx + in, g + 14.f + H, tz + in), vec3(tx + w - in, g + 14.f + H * 1.14f, tz + d - in), col);
-                        vec3 c(tx + w * 0.5f, g + 14.f + H * 1.14f, tz + d * 0.5f);
-                        block(city, vec3(c.x - 0.6f, c.y, c.z - 0.6f), vec3(c.x + 0.6f, c.y + 1.2f, c.z + 0.6f), vec4(1.f, 0.15f, 0.1f, 15));
-                        towers++;
-                    }
-                    // street-level signs round the podium
-                    for (float x = x0 + 6; x < x1 - 6; x += rng.range(10.f, 18.f)) {
-                        block(city, vec3(x - 0.12f, g + 4.f, z0 - 1.4f), vec3(x + 0.12f, g + 12.f, z0 - 0.2f), kNeon[rng.irange(0, 5)]);
-                        block(city, vec3(x - 0.12f, g + 4.f, z1 + 0.2f), vec3(x + 0.12f, g + 12.f, z1 + 1.4f), kNeon[rng.irange(0, 5)]);
-                        signs += 2;
-                    }
-                }
-                continue;
-            }
             // perimeter lots along the four frontages, an alley behind them
             float dS = rng.range(24.f, 36.f), dN = rng.range(24.f, 36.f), dW = rng.range(22.f, 32.f), dE = rng.range(22.f, 32.f);
             for (int side = 0; side < 2; side++) {
@@ -334,7 +306,11 @@ void World::buildUrban(uint32_t seed) {
             if (urban(x, z, 4.f) && height[iz * N + ix] > waterLevel + 0.5f) roadDist[iz * N + ix] = std::min(roadDist[iz * N + ix], -0.5f);
         }
 
-    // ---- collision grid
+    rebuildBoxGrid();
+    SDL_Log("City: %zu solids, %d towers, %d signs, %d containers", boxes.size(), towers, signs, containers);
+}
+
+void World::rebuildBoxGrid() {
     int gN = int(std::ceil(2 * HALF / TGRID));
     boxGrid.assign(gN * gN, {});
     for (int i = 0; i < int(boxes.size()); i++) {
@@ -344,5 +320,20 @@ void World::buildUrban(uint32_t seed) {
         for (int z = az; z <= bz; z++)
             for (int x = ax; x <= bx; x++) boxGrid[z * gN + x].push_back(i);
     }
-    SDL_Log("City: %zu solids, %d towers, %d signs, %d containers", boxes.size(), towers, signs, containers);
+}
+
+bool World::inBox(float x, float z, float pad) const {
+    int gN = int(std::ceil(2 * HALF / TGRID));
+    if (boxGrid.empty()) return false;
+    int cx = std::clamp(int((x + HALF) / TGRID), 0, gN - 1), cz = std::clamp(int((z + HALF) / TGRID), 0, gN - 1);
+    for (int dz = -1; dz <= 1; dz++)
+        for (int dx = -1; dx <= 1; dx++) {
+            int gx = cx + dx, gz = cz + dz;
+            if (gx < 0 || gz < 0 || gx >= gN || gz >= gN) continue;
+            for (int i : boxGrid[gz * gN + gx]) {
+                const Box& b = boxes[i];
+                if (x > b.x0 - pad && x < b.x1 + pad && z > b.z0 - pad && z < b.z1 + pad) return true;
+            }
+        }
+    return false;
 }
