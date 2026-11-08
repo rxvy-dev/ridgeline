@@ -371,9 +371,11 @@ private:
     void drawThemePrompts(const std::string& spec, float x = -1.f);
     void themePanel(float x, float y, float w, float h, float a = 1.f, bool lit = false);  // festival teal card
     void drawMenuToasts(float y);
+    GLuint captureCutout(const Camera& c, Racer& r, float aspect);
     void themeRow(float x, float y, float w, float h, bool sel, float a = 1.f);         // list row with a sliding highlight
     int custStripRow = -1;
     float shoOff = 0;
+    bool hudGlass = false;  // panels drawn over the live world use dark glass instead of menu teal
     float mapZoomTarget = 2.2f;  // world map zoom (Q/E)  // showroom camera's sideways framing
     float custStripT = 0;
     bool titleMenu = false;   // title: false = attract screen, true = main menu tiles

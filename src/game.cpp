@@ -14,7 +14,7 @@
 static const vec4 ACCENT(0.96f, 0.10f, 0.50f, 1.f);
 static const vec4 WHITE(1, 1, 1, 1);
 static const vec4 DIM(1, 1, 1, 0.6f);
-static const vec4 PANEL(0.03f, 0.24f, 0.26f, 0.86f);  // festival teal
+static const vec4 PANEL(0.13f, 0.46f, 0.42f, 0.86f);  // festival teal
 static const vec4 LIME(0.80f, 0.94f, 0.16f, 1.f);
 static const vec4 GOLD(0.98f, 0.86f, 0.2f, 1.f);
 static const char* kBotNames[] = {"Vex", "Juniper", "Halcyon", "Brick", "Nova", "Tamsin", "Ozzy", "Kiri", "Marlow", "Sable", "Dax", "Wren"};
@@ -1058,24 +1058,24 @@ static const char* kTabNames[] = {"FESTIVAL", "CARS", "HOUSES", "EVENTLAB", "OPT
 static const int kTabCount = 5;
 static std::vector<MenuTile> gTiles;  // tiles of the open tab (rebuilt each frame)
 static const MenuTile kTabTiles[][5] = {
-    {{0, 0, 2, 2, "Resume", "Back to the road", {0.96f, 0.10f, 0.50f, 1}, MA_RESUME, 0},
-     {2, 0, 1, 1, "World Map", "Fast travel anywhere", {0.30f, 0.62f, 0.95f, 1}, MA_MAP, 1},
-     {3, 0, 1, 1, "Next Race", "", {0.45f, 0.85f, 0.35f, 1}, MA_NEXTRACE, 5},
-     {2, 1, 1, 1, "Wheelspin", "", {1.0f, 0.25f, 0.55f, 1}, MA_SPIN, -2},
-     {3, 1, 1, 1, "Photo Mode", "Frame the perfect shot", {0.20f, 0.70f, 0.66f, 1}, MA_PHOTO, 0}},
-    {{0, 0, 2, 2, "My Garage", "Drive, paint and sell", {0.88f, 0.22f, 0.16f, 1}, MA_GARAGE, 4},
-     {2, 0, 2, 1, "Autoshow", "Buy new cars", {0.98f, 0.72f, 0.18f, 1}, MA_AUTOSHOW, 3},
-     {2, 1, 1, 1, "Customize", "Livery, aero, tint, stance", {0.62f, 0.30f, 0.95f, 1}, MA_CUSTOMIZE, -1},
-     {3, 1, 1, 1, "Upgrades", "Engine, weight, tyres", {1.0f, 0.50f, 0.12f, 1}, MA_UPGRADE, -1},
+    {{0, 0, 2, 2, "Resume", "Back to the road", {1.0f, 0.84f, 0.10f, 1}, MA_RESUME, 0},
+     {2, 0, 1, 1, "World Map", "Fast travel anywhere", {0.14f, 0.48f, 0.44f, 1}, MA_MAP, 1},
+     {3, 0, 1, 1, "Next Race", "", {0.14f, 0.48f, 0.44f, 1}, MA_NEXTRACE, 5},
+     {2, 1, 1, 1, "Wheelspin", "", {1.0f, 0.27f, 0.72f, 1}, MA_SPIN, -2},
+     {3, 1, 1, 1, "Photo Mode", "Frame the perfect shot", {0.14f, 0.48f, 0.44f, 1}, MA_PHOTO, 0}},
+    {{0, 0, 2, 2, "My Garage", "Drive, paint and sell", {1.0f, 0.84f, 0.10f, 1}, MA_GARAGE, 4},
+     {2, 0, 2, 1, "Autoshow", "Buy new cars", {0.14f, 0.48f, 0.44f, 1}, MA_AUTOSHOW, 3},
+     {2, 1, 1, 1, "Customize", "Livery, aero, tint, stance", {1.0f, 0.27f, 0.72f, 1}, MA_CUSTOMIZE, -1},
+     {3, 1, 1, 1, "Upgrades", "Engine, weight, tyres", {0.14f, 0.48f, 0.44f, 1}, MA_UPGRADE, -1},
      {-1, 0, 0, 0, nullptr, nullptr, {}, 0, 0}},
     {},
-    {{0, 0, 2, 2, "EventLab", "Build a race on any road", {0.20f, 0.80f, 0.95f, 1}, MA_EVENTLAB, -3},
-     {2, 0, 2, 1, "My Events", "", {0.62f, 0.30f, 0.95f, 1}, MA_MYEVENTS, -1},
-     {2, 1, 2, 1, "Import Event", "Paste a share code from the clipboard", {0.45f, 0.85f, 0.35f, 1}, MA_IMPORT, -1},
+    {{0, 0, 2, 2, "EventLab", "Build a race on any road", {1.0f, 0.84f, 0.10f, 1}, MA_EVENTLAB, -3},
+     {2, 0, 2, 1, "My Events", "", {1.0f, 0.27f, 0.72f, 1}, MA_MYEVENTS, -1},
+     {2, 1, 2, 1, "Import Event", "Paste a share code from the clipboard", {0.14f, 0.48f, 0.44f, 1}, MA_IMPORT, -1},
      {-1, 0, 0, 0, nullptr, nullptr, {}, 0, 0}, {-1, 0, 0, 0, nullptr, nullptr, {}, 0, 0}},
-    {{0, 0, 2, 2, "Settings", "Graphics, sound, driving", {0.62f, 0.62f, 0.66f, 1}, MA_SETTINGS, 6},
-     {2, 0, 2, 1, "Save & Exit", "Back to the title screen", {0.20f, 0.70f, 0.66f, 1}, MA_EXIT, 7},
-     {2, 1, 2, 1, "Quit Game", "See you on the road", {0.75f, 0.18f, 0.20f, 1}, MA_QUIT, -1},
+    {{0, 0, 2, 2, "Settings", "Graphics, sound, driving", {1.0f, 0.84f, 0.10f, 1}, MA_SETTINGS, 6},
+     {2, 0, 2, 1, "Save & Exit", "Back to the title screen", {0.14f, 0.48f, 0.44f, 1}, MA_EXIT, 7},
+     {2, 1, 2, 1, "Quit Game", "See you on the road", {0.14f, 0.48f, 0.44f, 1}, MA_QUIT, -1},
      {-1, 0, 0, 0, nullptr, nullptr, {}, 0, 0}, {-1, 0, 0, 0, nullptr, nullptr, {}, 0, 0}},
 };
 static const char* kHouseSub[5];
@@ -1084,9 +1084,8 @@ static void buildTabTiles(int tab, const World& w, const std::vector<int>& owned
     if (tab == 2) {
         static const float pos[5][4] = {{0, 0, 2, 2}, {2, 0, 1, 1}, {3, 0, 1, 1}, {2, 1, 1, 1}, {3, 1, 1, 1}};
         for (int i = 0; i < int(w.estates.size()) && i < 5; i++) {
-            bool own = std::find(owned.begin(), owned.end(), i) != owned.end();
             gTiles.push_back({pos[i][0], pos[i][1], pos[i][2], pos[i][3], w.estates[i].name.c_str(), "",
-                              own ? vec4(0.35f, 0.85f, 1.f, 1) : vec4(1.f, 0.78f, 0.25f, 1), MA_HOUSE + i, 100 + i});
+                              i == 0 ? vec4(1.0f, 0.84f, 0.10f, 1) : vec4(0.14f, 0.48f, 0.44f, 1), MA_HOUSE + i, 100 + i});
         }
         return;
     }
@@ -2650,8 +2649,67 @@ void Game::buildCarThumb(int spec) {
     c.pos.y = std::max(c.pos.y, r.car.pos.y + 0.8f);
     c.target = vec3(ct.x, r.car.pos.y + 0.55f, ct.z);
     c.fov = 0.62f;
-    carThumb[spec] = captureThumb(c, nullptr, 16.f / 10.f);
+    carThumb[spec] = captureCutout(c, r, 16.f / 10.f);
     thumbCars.clear();
+}
+
+// A studio cut-out of a car, like the Horizon menus: the scene is rendered twice, with and without the
+// car, and whatever changed becomes the picture. Where the only change is the ground getting darker,
+// that's the car's shadow, kept as a soft black shadow under it.
+GLuint Game::captureCutout(const Camera& c0, Racer& r, float aspect) {
+    Camera c = c0;
+    c.aspect = float(R.width) / float(R.height);
+    c.update();
+    int cw = R.width, ch = R.height;
+    if (cw / float(ch) > aspect) cw = int(ch * aspect);
+    else ch = int(cw / aspect);
+    int x0 = (R.width - cw) / 2, y0 = (R.height - ch) / 2;
+    std::vector<uint8_t> A(size_t(cw) * ch * 4), B(size_t(cw) * ch * 4);
+    auto pass = [&](std::vector<uint8_t>& out, bool withCar) {
+        thumbCars.clear();
+        if (withCar) thumbCars.push_back(&r);
+        thumbActive = true;
+        renderWorld(c, false);
+        thumbActive = false;
+        float sa = R.sunAmt;
+        R.sunAmt = 0;
+        R.endScene(0, 0, &c);
+        R.sunAmt = sa;
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadPixels(x0, y0, cw, ch, GL_RGBA, GL_UNSIGNED_BYTE, out.data());
+    };
+    pass(A, true);
+    pass(B, false);
+    std::vector<uint8_t> O(A.size());
+    for (size_t i = 0; i < A.size(); i += 4) {
+        float a[3] = {float(A[i]), float(A[i + 1]), float(A[i + 2])}, b[3] = {float(B[i]), float(B[i + 1]), float(B[i + 2])};
+        float diff = std::max({std::fabs(a[0] - b[0]), std::fabs(a[1] - b[1]), std::fabs(a[2] - b[2])});
+        float la = 0.3f * a[0] + 0.59f * a[1] + 0.11f * a[2], lb = 0.3f * b[0] + 0.59f * b[1] + 0.11f * b[2];
+        float outA = 0, oc[3] = {0, 0, 0};
+        if (diff > 5.f) {
+            float k = lb > 6.f ? la / lb : 1.f;
+            float err = std::max({std::fabs(a[0] - k * b[0]), std::fabs(a[1] - k * b[1]), std::fabs(a[2] - k * b[2])});
+            if (k < 0.98f && err < 9.f) {
+                outA = clampf((1.f - k) * 0.95f, 0.f, 0.8f);  // shadow
+            } else {
+                outA = smoothstepf(5.f, 36.f, diff);
+                for (int q = 0; q < 3; q++) oc[q] = clampf((a[q] - (1.f - outA) * b[q]) / std::max(outA, 0.05f), 0.f, 255.f);
+            }
+        }
+        O[i] = uint8_t(oc[0]); O[i + 1] = uint8_t(oc[1]); O[i + 2] = uint8_t(oc[2]); O[i + 3] = uint8_t(outA * 255.f + 0.5f);
+    }
+    GLuint t;
+    glGenTextures(1, &t);
+    glBindTexture(GL_TEXTURE_2D, t);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, cw, ch, 0, GL_RGBA, GL_UNSIGNED_BYTE, O.data());
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    return t;
 }
 
 void Game::buildMenuThumbs() {
@@ -2874,7 +2932,7 @@ void Game::drawSpeedo() {
     auto dir = [](float a) { return vec2(std::cos(a), std::sin(a)); };
 
     // body
-    hud.disc(c, R0 + 12 * u, vec4(0.03f, 0.26f, 0.28f, 0.78f), vec4(0.02f, 0.16f, 0.18f, 0.55f), 64);
+    hud.disc(c, R0 + 12 * u, vec4(0.03f, 0.07f, 0.08f, 0.72f), vec4(0.02f, 0.05f, 0.06f, 0.45f), 64);
     hud.arc(c, R0 + 9 * u, R0 + 12 * u, 0, 2 * PI, vec4(1, 1, 1, 0.28f), 64);
     // outer progress ring: speed against the car's top speed
     hud.arc(c, R0 + 13 * u, R0 + 17 * u, a0, lerpf(a0, a1, clampf(car.speedKmh() / std::max(60.f, car.spec->topKmh), 0.f, 1.f)), vec4(LIME.x, LIME.y, LIME.z, 0.9f), 48);
@@ -2951,7 +3009,7 @@ void Game::drawMinimap() {
         return c + vec2(dot(d, rgt), -dot(d, fwd)) * sc;
     };
     const vec4 GPS(0.78f, 0.38f, 1.f, 1.f);
-    hud.disc(c, Rr + 5 * u, vec4(0.03f, 0.26f, 0.28f, 0.7f), vec4(0.02f, 0.18f, 0.2f, 0.6f), 64);
+    hud.disc(c, Rr + 5 * u, vec4(0.03f, 0.07f, 0.08f, 0.66f), vec4(0.02f, 0.05f, 0.06f, 0.55f), 64);
     hud.clip(c.x, c.y, Rr);
     // terrain underlay
     vec2 corners[4] = {{-1, -1}, {1, -1}, {1, 1}, {-1, 1}};
@@ -3022,7 +3080,7 @@ void Game::drawMinimap() {
         pin(world.hubPos, vec4(1.f, 0.25f, 0.55f, 1), 6 * u, gpsShown == -2);
     }
     hud.arc(c, Rr, Rr + 3.5f * u, 0, 2 * PI, vec4(1, 1, 1, 0.85f), 72);
-    hud.arc(c, Rr + 3.5f * u, Rr + 6 * u, 0, 2 * PI, vec4(0.02f, 0.18f, 0.2f, 0.8f), 72);
+    hud.arc(c, Rr + 3.5f * u, Rr + 6 * u, 0, 2 * PI, vec4(0.02f, 0.05f, 0.06f, 0.8f), 72);
     // player arrow
     vec3 cfw = car.forward();
     vec2 f(dot(cfw, rgt), -dot(cfw, fwd));
@@ -3056,7 +3114,7 @@ void Game::drawMinimap() {
         else std::snprintf(buf, sizeof(buf), "%.1f km", dist / 1000.f);
         float tw = std::max(hud.textWidth(13 * u, label), hud.textWidth(20 * u, buf)) + 30 * u;
         float px = c.x + Rr + 16 * u, py = c.y + Rr - 50 * u;
-        hud.rectH(px, py, tw + 30 * u, 50 * u, vec4(0.03f, 0.26f, 0.28f, 0.88f), vec4(0.03f, 0.26f, 0.28f, 0.0f));
+        hud.rectH(px, py, tw + 30 * u, 50 * u, vec4(0.03f, 0.07f, 0.08f, 0.85f), vec4(0.03f, 0.07f, 0.08f, 0.0f));
         hud.rect(px, py, 5 * u, 50 * u, GPS);
         hud.text(px + 14 * u, py + 6 * u, 13 * u, label, vec4(0.85f, 0.95f, 0.93f, 1), 0, false);
         hud.text(px + 14 * u, py + 22 * u, 20 * u, buf, WHITE, 0, false);
@@ -3073,7 +3131,7 @@ void Game::drawMenuPanel(const std::string& title, const std::vector<std::string
     // the festival theme: dark teal panel, a bold title with the yellow-green bar under it,
     // the selected row a white slab that slides to where you are
     hud.rect(x + 8 * u, y + 10 * u, w, hgt, vec4(0, 0, 0, 0.22f));
-    hud.rectV(x, y, w, hgt, vec4(0.03f, 0.27f, 0.29f, 0.94f), vec4(0.02f, 0.19f, 0.21f, 0.94f));
+    hud.rectV(x, y, w, hgt, vec4(0.14f, 0.48f, 0.44f, 0.94f), vec4(0.11f, 0.42f, 0.39f, 0.94f));
     hud.text(x + 26 * u, y + 20 * u, 30 * u, title, WHITE, 0, false);
     hud.rect(x + 26 * u, y + 60 * u, 48 * u, 4 * u, vec4(0.80f, 0.94f, 0.16f, 1));
     if (first > 0) hud.text(x + w - 30 * u, y + 26 * u, 14 * u, "^", vec4(1, 1, 1, 0.5f), 2, false);
@@ -3127,6 +3185,7 @@ void Game::drawHud() {
         case ST_SWITCH: drawSwitcher(); return;
         default: break;
     }
+    hudGlass = true;
     drawTimeCircuits();
     if (state == ST_RACE || state == ST_RACE_INTRO) { drawRaceHud(); drawGateHud(); }
     else {
@@ -3154,13 +3213,18 @@ void Game::drawHud() {
         hud.text(18 * u + lvw * 0.5f, 89 * u, 14 * u, lv, vec4(0.1f, 0.1f, 0.1f, 1), 1, false);
         float spinW = spins.empty() ? 0.f : hud.textWidth(12 * u, spins) + 20 * u;
         float barX = 18 * u + lvw, barW = pw - lvw - spinW;
-        hud.rect(barX, 86 * u, barW, 22 * u, vec4(0.02f, 0.16f, 0.18f, 0.8f));
+        hud.rect(barX, 86 * u, barW, 22 * u, vec4(0.03f, 0.07f, 0.08f, 0.8f));
         hud.rect(barX + 6 * u, 95 * u, (barW - 12 * u) * clampf(xp / float(xpToNext()), 0.f, 1.f), 4 * u, vec4(0.96f, 0.10f, 0.50f, 1));
         if (!spins.empty()) {
             hud.rect(18 * u + pw - spinW, 86 * u, spinW, 22 * u, vec4(0.96f, 0.10f, 0.50f, 0.95f));
             hud.text(18 * u + pw - spinW * 0.5f, 90 * u, 12 * u, spins, WHITE, 1, false);
         }
-        hud.text(22 * u, 114 * u, 12 * u, clockText(), vec4(1, 1, 1, 0.8f), 0, true);
+        {
+            std::string ck = clockText();
+            float cw2 = hud.textWidth(12 * u, ck) + 16 * u;
+            hud.rect(18 * u, 110 * u, cw2, 18 * u, vec4(0.03f, 0.07f, 0.08f, 0.7f));
+            hud.text(26 * u, 112 * u, 12 * u, ck, vec4(1, 1, 1, 0.9f), 0, false);
+        }
         drawFestivalHud();
         // prompts
         std::string prompt;
@@ -3193,7 +3257,7 @@ void Game::drawHud() {
             const char* hints = pad ? "START menu   BACK map   UP switch car   RB camera   (Y) rewind   R3 photo" : "ESC menu   M map   G switch car   C camera   R reset   BKSP rewind   P photo   H horn";
             float ha = clampf((14.f - hintT) / 2.f, 0.f, 1.f);
             float hwid = hud.prompts(hud.w - 24 * u, 22 * u, 12 * u, hints, 2, ha, true);
-            if (ha > 0.01f) hud.roundRect(hud.w - 24 * u - hwid - 14 * u, 13 * u, hwid + 28 * u, 32 * u, 16 * u, vec4(0.02f, 0.18f, 0.2f, 0.6f * ha));
+            if (ha > 0.01f) hud.roundRect(hud.w - 24 * u - hwid - 14 * u, 13 * u, hwid + 28 * u, 32 * u, 16 * u, vec4(0.05f, 0.27f, 0.27f, 0.6f * ha));
             hud.prompts(hud.w - 24 * u, 22 * u, 12 * u, hints, 2, ha);
         }
     }
@@ -3209,6 +3273,7 @@ void Game::drawHud() {
     drawMenuToasts(hud.h * 0.13f);
     drawSpeedo();
     drawMinimap();
+    hudGlass = false;
 }
 
 void Game::drawMenuToasts(float ty) {
@@ -3222,7 +3287,8 @@ void Game::drawMenuToasts(float ty) {
         float tw = hud.textWidth(20 * u, t.text) + 44 * u;
         float x = hud.w * 0.5f - tw * 0.5f, y = ty - (1.f - back) * 24 * u;
         hud.rect(x + 4 * u, y - 2 * u, tw, 36 * u, vec4(0, 0, 0, 0.2f * a));
-        hud.rectV(x, y - 6 * u, tw, 36 * u, vec4(0.04f, 0.31f, 0.33f, 0.94f * a), vec4(0.02f, 0.20f, 0.22f, 0.94f * a));
+        if (hudGlass) hud.rectV(x, y - 6 * u, tw, 36 * u, vec4(0.04f, 0.10f, 0.11f, 0.82f * a), vec4(0.02f, 0.06f, 0.07f, 0.86f * a));
+        else hud.rectV(x, y - 6 * u, tw, 36 * u, vec4(0.16f, 0.52f, 0.47f, 0.96f * a), vec4(0.11f, 0.42f, 0.39f, 0.96f * a));
         hud.rect(x, y - 6 * u, 6 * u, 36 * u, vec4(t.col.x, t.col.y, t.col.z, a));
         hud.rect(x, y + 27 * u, tw * clampf(t.t / 3.f, 0.f, 1.f), 3 * u, vec4(LIME.x, LIME.y, LIME.z, 0.8f * a));
         hud.text(hud.w * 0.5f + 2 * u, y, 20 * u, t.text, vec4(1, 1, 1, a), 1, false);
@@ -3320,7 +3386,7 @@ void Game::drawRaceHud() {
         if (stateTime < 2.5f) {
             float ie = clampf(stateTime / 0.35f, 0.f, 1.f);
             ie = 1.f - (1.f - ie) * (1.f - ie);
-            hud.rectV(0, hud.h * 0.36f, hud.w * ie, 110 * u, vec4(0.04f, 0.31f, 0.33f, 0.88f), vec4(0.02f, 0.20f, 0.22f, 0.88f));
+            hud.rectV(0, hud.h * 0.36f, hud.w * ie, 110 * u, vec4(0.16f, 0.52f, 0.47f, 0.88f), vec4(0.11f, 0.42f, 0.39f, 0.88f));
             hud.rect(0, hud.h * 0.36f, hud.w * ie, 4 * u, eventColor(E.type));
             hud.rect(0, hud.h * 0.36f + 106 * u, hud.w * ie, 4 * u, LIME);
             hud.text(hud.w * 0.5f, hud.h * 0.36f + 14 * u, 40 * u, E.name, WHITE, 1);
@@ -3332,7 +3398,7 @@ void Game::drawRaceHud() {
             int n = int(std::ceil(countdown));
             float f = countdown - std::floor(countdown);
             float cs = (90 + f * 40) * u;
-            hud.circle(vec2(hud.w * 0.5f, hud.h * 0.32f + cs * 0.55f), cs * 0.85f, vec4(0.03f, 0.26f, 0.28f, 0.75f * f), 48);
+            hud.circle(vec2(hud.w * 0.5f, hud.h * 0.32f + cs * 0.55f), cs * 0.85f, vec4(0.13f, 0.47f, 0.43f, 0.75f * f), 48);
             hud.text(hud.w * 0.5f, hud.h * 0.32f, cs, std::to_string(std::max(n, 1)), WHITE, 1);
         }
     } else if (stateTime < 1.2f) {
@@ -3346,6 +3412,115 @@ int Game::nextRaceEvent() const {
     for (int i = 0; i < int(events.size()); i++)
         if (i >= int(bestPlace.size()) || bestPlace[i] != 1) return i;
     return 0;
+}
+
+// Line-art icons for the menu tiles, drawn big and pale like the Horizon tiles' artwork.
+static void drawMenuIcon(Hud& hud, int act, vec2 c, float r, vec4 col, float T) {
+    float t = r * 0.11f;  // stroke
+    auto ring = [&](vec2 p, float rr, float th) { hud.arc(p, rr - th * 0.5f, rr + th * 0.5f, 0, 2 * PI, col, 40); };
+    auto bar = [&](vec2 a, vec2 b) { hud.line(a, b, t, col); hud.circle(a, t * 0.5f, col, 10); hud.circle(b, t * 0.5f, col, 10); };
+    switch (act) {
+        case MA_RESUME:
+            hud.triangle(c + vec2(-0.35f, -0.5f) * r, c + vec2(-0.35f, 0.5f) * r, c + vec2(0.5f, 0) * r, col);
+            break;
+        case MA_MAP: {   // a map pin
+            vec2 h = c + vec2(0, -0.2f * r);
+            hud.circle(h, 0.42f * r, col, 32);
+            hud.triangle(h + vec2(-0.37f, 0.2f) * r, h + vec2(0.37f, 0.2f) * r, c + vec2(0, 0.62f * r), col);
+            hud.circle(h, 0.16f * r, vec4(0, 0, 0, 0.25f * col.w), 20);
+            break;
+        }
+        case MA_AUTOSHOW: case MA_GARAGE: {   // a car side-on
+            hud.roundRect(c.x - 0.62f * r, c.y - 0.05f * r, 1.24f * r, 0.32f * r, 0.08f * r, col);
+            hud.quad(c + vec2(-0.32f, -0.05f) * r, c + vec2(-0.12f, -0.34f) * r, c + vec2(0.24f, -0.34f) * r, c + vec2(0.42f, -0.05f) * r, col);
+            for (float wx : {-0.36f, 0.36f}) { hud.circle(c + vec2(wx, 0.3f) * r, 0.17f * r, col, 20); }
+            if (act == MA_AUTOSHOW) {   // a "new" sparkle over the roof
+                vec2 sp = c + vec2(0.45f, -0.55f) * r;
+                float q = 0.2f * r * (1.f + 0.15f * std::sin(T * 4.f));
+                hud.quad(sp + vec2(0, -q), sp + vec2(q * 0.3f, 0), sp + vec2(0, q), sp + vec2(-q * 0.3f, 0), col);
+                hud.quad(sp + vec2(-q, 0), sp + vec2(0, -q * 0.3f), sp + vec2(q, 0), sp + vec2(0, q * 0.3f), col);
+            }
+            break;
+        }
+        case MA_NEXTRACE: {   // chequered flag
+            bar(c + vec2(-0.45f, -0.6f) * r, c + vec2(-0.45f, 0.62f) * r);
+            float fx = c.x - 0.4f * r, fy = c.y - 0.58f * r, q = 0.24f * r;
+            for (int yy = 0; yy < 3; yy++)
+                for (int xx = 0; xx < 4; xx++)
+                    if ((xx + yy) % 2 == 0) hud.rect(fx + xx * q, fy + yy * q + std::sin(T * 3.f + xx) * 0.03f * r, q, q, col);
+            break;
+        }
+        case MA_SETTINGS: {   // a gear
+            for (int k = 0; k < 8; k++) {
+                float q = T * 0.4f + k * PI / 4.f;
+                vec2 d(std::cos(q), std::sin(q)), n(-d.y, d.x);
+                hud.quad(c + d * 0.38f * r - n * 0.11f * r, c + d * 0.62f * r - n * 0.08f * r, c + d * 0.62f * r + n * 0.08f * r, c + d * 0.38f * r + n * 0.11f * r, col);
+            }
+            ring(c, 0.36f * r, 0.2f * r);
+            break;
+        }
+        case MA_EXIT: {   // door with an arrow out
+            bar(c + vec2(-0.5f, -0.6f) * r, c + vec2(0.1f, -0.6f) * r);
+            bar(c + vec2(-0.5f, -0.6f) * r, c + vec2(-0.5f, 0.6f) * r);
+            bar(c + vec2(-0.5f, 0.6f) * r, c + vec2(0.1f, 0.6f) * r);
+            bar(c + vec2(-0.15f, 0) * r, c + vec2(0.55f, 0) * r);
+            hud.triangle(c + vec2(0.7f, 0) * r, c + vec2(0.42f, -0.25f) * r, c + vec2(0.42f, 0.25f) * r, col);
+            break;
+        }
+        case MA_QUIT: {   // power symbol
+            hud.arc(c, 0.42f * r, 0.42f * r + t, -PI * 0.5f + 0.7f, -PI * 0.5f + 2 * PI - 0.7f, col, 40);
+            bar(c + vec2(0, -0.62f) * r, c + vec2(0, -0.05f) * r);
+            break;
+        }
+        case MA_CUSTOMIZE: {   // a paint drop with a brush stroke
+            vec2 h = c + vec2(0, 0.15f * r);
+            hud.circle(h, 0.36f * r, col, 32);
+            hud.triangle(h + vec2(-0.33f, -0.12f) * r, h + vec2(0.33f, -0.12f) * r, c + vec2(0, -0.66f * r), col);
+            break;
+        }
+        case MA_UPGRADE: {   // three stacked chevrons, climbing
+            for (int k = 0; k < 3; k++) {
+                float yy = 0.4f - k * 0.36f + 0.05f * std::sin(T * 3.f - k);
+                hud.line(c + vec2(-0.5f, yy + 0.2f) * r, c + vec2(0, yy - 0.15f) * r, t * 1.3f, col);
+                hud.line(c + vec2(0, yy - 0.15f) * r, c + vec2(0.5f, yy + 0.2f) * r, t * 1.3f, col);
+            }
+            break;
+        }
+        case MA_PHOTO: {   // camera
+            hud.roundRect(c.x - 0.62f * r, c.y - 0.32f * r, 1.24f * r, 0.84f * r, 0.12f * r, col);
+            hud.rect(c.x - 0.22f * r, c.y - 0.48f * r, 0.44f * r, 0.18f * r, col);
+            hud.circle(c + vec2(0, 0.1f) * r, 0.28f * r, vec4(col.x * 0.4f, col.y * 0.5f, col.z * 0.5f, col.w), 28);
+            hud.circle(c + vec2(0, 0.1f) * r, 0.16f * r, col, 24);
+            break;
+        }
+        case MA_EVENTLAB: {   // a route: dots joined by a winding line
+            vec2 p[4] = {c + vec2(-0.55f, 0.45f) * r, c + vec2(-0.15f, -0.1f) * r, c + vec2(0.2f, 0.3f) * r, c + vec2(0.55f, -0.45f) * r};
+            for (int k = 0; k < 3; k++) hud.line(p[k], p[k + 1], t, col);
+            for (int k = 0; k < 4; k++) hud.circle(p[k], (k == 0 || k == 3 ? 0.16f : 0.1f) * r, col, 18);
+            break;
+        }
+        case MA_MYEVENTS: {   // a list
+            for (int k = 0; k < 3; k++) {
+                float yy = (k - 1) * 0.38f;
+                hud.circle(c + vec2(-0.5f, yy) * r, 0.09f * r, col, 12);
+                bar(c + vec2(-0.25f, yy) * r, c + vec2(0.55f, yy) * r);
+            }
+            break;
+        }
+        case MA_IMPORT: {   // download into a tray
+            bar(c + vec2(0, -0.6f) * r, c + vec2(0, 0.15f) * r);
+            hud.triangle(c + vec2(0, 0.35f) * r, c + vec2(-0.3f, 0.05f) * r, c + vec2(0.3f, 0.05f) * r, col);
+            bar(c + vec2(-0.55f, 0.25f) * r, c + vec2(-0.55f, 0.55f) * r);
+            bar(c + vec2(-0.55f, 0.55f) * r, c + vec2(0.55f, 0.55f) * r);
+            bar(c + vec2(0.55f, 0.55f) * r, c + vec2(0.55f, 0.25f) * r);
+            break;
+        }
+        default: {   // a house
+            hud.triangle(c + vec2(-0.62f, -0.05f) * r, c + vec2(0.62f, -0.05f) * r, c + vec2(0, -0.6f) * r, col);
+            hud.rect(c.x - 0.45f * r, c.y - 0.06f * r, 0.9f * r, 0.62f * r, col);
+            break;
+        }
+    }
 }
 
 void Game::drawPause() {
@@ -3411,32 +3586,28 @@ void Game::drawPause() {
                 }
                 // the title, big and bold, a word per line when it is long
                 std::string lab = t.label;
-                float px = std::min(64 * u, th * 0.2f);
+                float px = std::min(84 * u, th * 0.24f);
                 float lyy = tyy + 26 * u;
                 size_t sp = lab.find(' ');
                 if (sp != std::string::npos && hud.textWidth(px, lab) > tw * 0.4f) {
-                    hud.text(tx + 30 * u, lyy, px, lab.substr(0, sp), vec4(0.92f, 0.92f, 0.92f, alpha), 0, false);
-                    hud.text(tx + 30 * u, lyy + px * 1.02f, px, lab.substr(sp + 1), vec4(0.92f, 0.92f, 0.92f, alpha), 0, false);
-                } else hud.text(tx + 30 * u, lyy, px, lab, vec4(0.92f, 0.92f, 0.92f, alpha), 0, false);
+                    hud.text(tx + 30 * u, lyy, px, lab.substr(0, sp), vec4(0.88f, 0.88f, 0.88f, alpha), 0, false);
+                    hud.text(tx + 30 * u, lyy + px * 0.98f, px, lab.substr(sp + 1), vec4(0.88f, 0.88f, 0.88f, alpha), 0, false);
+                } else hud.text(tx + 30 * u, lyy, px, lab, vec4(0.88f, 0.88f, 0.88f, alpha), 0, false);
             } else if (img && t.act != MA_MAP && t.act != MA_EVENTLAB) {
                 fitImage(tx, tyy, tw, th, vec4(1, 1, 1, alpha), pan);
                 hud.rectV(tx, tyy, tw, th, vec4(0.03f, 0.32f, 0.32f, 0.55f * alpha), vec4(0.02f, 0.25f, 0.26f, 0.9f * alpha));
             } else if (t.act == MA_MAP || t.act == MA_EVENTLAB) {
-                hud.rect(tx, tyy, tw, th, vec4(0.04f, 0.33f, 0.34f, alpha));
+                hud.rect(tx, tyy, tw, th, vec4(0.16f, 0.53f, 0.48f, alpha));
             } else {
-                // a flat panel of the tile colour, scattered with its own shapes
+                // a flat panel of the tile colour with its icon, big and pale, in a ring (the Horizon tile look)
                 hud.rect(tx, tyy, tw, th, vec4(acc.x, acc.y, acc.z, alpha));
-                vec4 deco(std::min(1.f, acc.x * 0.7f + 0.3f), std::min(1.f, acc.y * 0.7f + 0.35f), std::min(1.f, acc.z * 0.5f + 0.1f), 0.55f * alpha);
-                hud.flush();
-                for (int k = 0; k < 7; k++) {
-                    float fx = tx + tw * (0.35f + 0.6f * std::fmod(k * 0.618f + i * 0.13f, 1.f));
-                    float fy = tyy + th * (0.12f + 0.75f * std::fmod(k * 0.381f + i * 0.29f, 1.f));
-                    float r = (10.f + 9.f * (k % 3)) * u;
-                    float ang = R.time * 0.3f * ((k % 2) ? 1.f : -1.f) + k;
-                    vec2 c(fx, fy), ax(std::cos(ang) * r, std::sin(ang) * r), ay(-ax.y, ax.x);
-                    if (fx + r > tx + tw || fy + r > tyy + th) continue;
-                    if (k % 3 == 0) hud.arc(c, r * 0.55f, r, 0, 2 * PI, deco, 20);
-                    else hud.quad(c - ax - ay, c + ax - ay, c + ax + ay, c - ax + ay, deco);
+                hud.rectV(tx, tyy, tw, th * 0.5f, vec4(1, 1, 1, 0.05f * alpha), vec4(1, 1, 1, 0));
+                if (t.act != MA_SPIN) {
+                    float ir = std::min(tw * 0.3f, th * 0.34f);
+                    vec2 ic(tx + tw - ir - std::min(tw, th) * 0.12f, tyy + th * 0.5f);
+                    vec4 pale(1, 1, 1, (0.20f + 0.08f * sa) * alpha);
+                    hud.arc(ic, ir - 3 * u, ir + 3 * u, 0, 2 * PI, pale, 56);
+                    drawMenuIcon(hud, t.act, ic, ir * 0.82f * (1.f + 0.04f * sa), pale, R.time);
                 }
             }
             if (t.act == MA_MAP || t.act == MA_EVENTLAB) {  // live map preview
@@ -3467,7 +3638,8 @@ void Game::drawPause() {
                 hud.arc(me, 8 * u + ping * 22 * u, 10 * u + ping * 22 * u, 0, 2 * PI, vec4(1, 1, 1, (1.f - ping) * 0.8f * alpha), 32);
                 hud.circle(me, 8 * u, vec4(0, 0, 0, alpha), 14);
                 hud.circle(me, 6 * u, vec4(1, 1, 1, alpha), 14);
-                hud.rectV(tx, tyy + th * 0.55f, tw, th * 0.45f, vec4(0, 0, 0, 0), vec4(0.02f, 0.22f, 0.24f, 0.85f * alpha));
+                hud.rectV(tx, tyy + th * 0.55f, tw, th * 0.45f, vec4(0, 0, 0, 0), vec4(0.09f, 0.38f, 0.36f, 0.85f * alpha));
+                hud.rectV(tx, tyy, tw, th * 0.45f, vec4(0.09f, 0.38f, 0.36f, 0.8f * alpha), vec4(0, 0, 0, 0));
             }
             std::string sub = t.sub;
             if (t.act == MA_NEXTRACE) sub = events[nextRaceEvent()].name;
@@ -3479,8 +3651,8 @@ void Game::drawPause() {
             }
             if (t.act == MA_SPIN) {
                 sub = wheelspins > 0 ? std::to_string(wheelspins) + (wheelspins == 1 ? " spin ready" : " spins ready") : "Level up to earn spins";
-                vec2 cc(tx + tw * 0.72f, tyy + th * 0.42f);
-                float rr = std::min(tw, th) * 0.24f;
+                float rr = std::min(tw, th) * 0.26f;
+                vec2 cc(tx + tw - rr - std::min(tw, th) * 0.1f, tyy + th - rr - std::min(tw, th) * 0.1f);
                 float spin = R.time * (wheelspins > 0 ? 1.4f : 0.3f);
                 for (int k = 0; k < 8; k++) {  // a little prize wheel, turning
                     float a0 = spin + k * PI / 4, a1 = a0 + PI / 4;
@@ -3491,11 +3663,19 @@ void Game::drawPause() {
                 hud.text(cc.x, cc.y - rr * 0.22f, rr * 0.36f, std::to_string(level), vec4(1, 1, 1, alpha), 1, false);
             }
             if (!hero) {
-                float px = std::min(30 * u, th * 0.17f);
-                hud.textFit(tx + 22 * u, tyy + 18 * u, px, t.label, vec4(0.95f, 0.95f, 0.95f, alpha), 0, tw - 40 * u, false);
+                // big bold title, a word per line when it doesn't fit, like the Horizon tiles
+                float px = std::min(44 * u, th * 0.2f);
+                std::string lab = t.label;
+                std::vector<std::string> lines;
+                if (hud.textWidth(px, lab) > tw * 0.62f && lab.find(' ') != std::string::npos) {
+                    size_t sp = lab.find(' ');
+                    lines = {lab.substr(0, sp), lab.substr(sp + 1)};
+                } else lines = {lab};
+                for (size_t k = 0; k < lines.size(); k++)
+                    hud.textFit(tx + 24 * u, tyy + 18 * u + k * px * 1.0f, px, lines[k], vec4(0.92f, 0.92f, 0.92f, alpha), 0, tw - 44 * u, false);
             }
-            hud.textFit(tx + (hero ? 30 : 22) * u, tyy + th - (hero ? 46 : 34) * u, (hero ? 17 : 14) * u, hero ? std::string(sub.size() ? sub : "") : sub,
-                        vec4(1, 1, 1, 0.88f * alpha), 0, hero ? tw * 0.45f : tw - 40 * u, false);
+            hud.textFit(tx + (hero ? 30 : 24) * u, tyy + th - (hero ? 48 : 38) * u, (hero ? 19 : 16) * u, hero ? std::string(sub.size() ? sub : "") : sub,
+                        vec4(0.92f, 0.92f, 0.92f, 0.95f * alpha), 0, hero ? tw * 0.45f : tw - 44 * u, false);
             if (sa > 0.02f) {
                 // yellow-green frame and a glint that sweeps across now and then
                 float b = 5 * u;
@@ -3537,7 +3717,7 @@ void Game::drawPause() {
             e = 1.f - (1.f - e) * (1.f - e);
             float dw = hud.textWidth(15 * u, kWhat[act]) + 40 * u;
             float dx = hud.w - 64 * u - dw + (1.f - e) * 30 * u, dy = hud.h - 68 * u;
-            hud.rect(dx, dy, dw, 40 * u, vec4(0.02f, 0.18f, 0.2f, 0.6f * e));
+            hud.rect(dx, dy, dw, 40 * u, vec4(0.05f, 0.27f, 0.27f, 0.6f * e));
             hud.rect(dx, dy, 4 * u, 40 * u, vec4(LIME.x, LIME.y, LIME.z, e));
             hud.text(dx + 20 * u, dy + 11 * u, 15 * u, kWhat[act], vec4(1, 1, 1, e), 0, false);
         }
@@ -3546,7 +3726,7 @@ void Game::drawPause() {
     }
     // ---- paused mid-race: the frozen race stays visible behind a teal wash
     float open = smoothstepf(0.f, 1.f, clampf(menuOpenT / 0.3f, 0.f, 1.f));
-    hud.rectH(0, 0, hud.w, hud.h, vec4(0.02f, 0.20f, 0.22f, 0.86f * open), vec4(0.02f, 0.20f, 0.22f, 0.45f * open));
+    hud.rectH(0, 0, hud.w, hud.h, vec4(0.11f, 0.42f, 0.39f, 0.86f * open), vec4(0.11f, 0.42f, 0.39f, 0.45f * open));
     drawPetals(0.5f * open, R.time);
     const EventDef& E = events[raceEvent];
     vec4 ec = eventColor(E.type);
@@ -3571,19 +3751,22 @@ void Game::drawPause() {
         float it = clampf((menuOpenT - 0.05f - i * 0.05f) / 0.25f, 0.f, 1.f), ie = 1.f - (1.f - it) * (1.f - it) * (1.f - it);
         bool on = i == menuSel;
         float yy = ly + i * (lh + 10 * u), xx = x0 - (1.f - ie) * 120 * u + (on ? 14 * u : 0.f), sl = 16 * u;
-        vec4 bg = on ? vec4(0.97f, 0.97f, 0.96f, ie) : vec4(0.03f, 0.27f, 0.29f, 0.92f * ie);
-        hud.quad(vec2(xx + sl + 6 * u, yy + 7 * u), vec2(xx + lw + sl + 6 * u, yy + 7 * u), vec2(xx + lw + 6 * u, yy + lh + 7 * u), vec2(xx + 6 * u, yy + lh + 7 * u), vec4(0, 0, 0, 0.25f * ie));
-        hud.quad(vec2(xx + sl, yy), vec2(xx + lw + sl, yy), vec2(xx + lw, yy + lh), vec2(xx, yy + lh), bg);
+        vec4 bg = on ? vec4(0.97f, 0.97f, 0.96f, ie) : vec4(0.14f, 0.48f, 0.44f, 0.92f * ie);
+        (void)sl;
+        hud.rect(xx + 6 * u, yy + 7 * u, lw, lh, vec4(0, 0, 0, 0.2f * ie));
+        hud.rect(xx, yy, lw, lh, bg);
         if (on) {
-            hud.quad(vec2(xx + sl, yy), vec2(xx + sl + 10 * u, yy), vec2(xx + 10 * u, yy + lh), vec2(xx, yy + lh), LIME);
+            float b = 5 * u;
+            hud.rect(xx - b, yy - b, lw + 2 * b, b, LIME); hud.rect(xx - b, yy + lh, lw + 2 * b, b, LIME);
+            hud.rect(xx - b, yy, b, lh, LIME); hud.rect(xx + lw, yy, b, lh, LIME);
             float gt = std::fmod(R.time * 0.5f, 1.f);
             if (gt < 0.35f) {
                 float gx = xx + (lw + 80 * u) * (gt / 0.35f) - 40 * u;
                 float g0 = std::max(xx + 20 * u, gx), g1 = std::min(xx + lw - 10 * u, gx + 34 * u);
-                if (g1 > g0) hud.quad(vec2(g0 + sl, yy), vec2(g1 + sl, yy), vec2(g1, yy + lh), vec2(g0, yy + lh), vec4(0.80f, 0.94f, 0.16f, 0.25f));
+                if (g1 > g0) hud.quad(vec2(g0 + 14 * u, yy), vec2(g1 + 14 * u, yy), vec2(g1, yy + lh), vec2(g0, yy + lh), vec4(1, 1, 1, 0.18f));
             }
         }
-        hud.text(xx + 36 * u, yy + 16 * u, 28 * u, items[i], on ? vec4(0.06f, 0.06f, 0.06f, ie) : vec4(1, 1, 1, ie), 0, false);
+        hud.text(xx + 26 * u, yy + 15 * u, 30 * u, items[i], on ? vec4(0.06f, 0.06f, 0.06f, ie) : vec4(0.94f, 0.94f, 0.94f, ie), 0, false);
     }
     // the race so far, on the right
     {
@@ -3732,13 +3915,7 @@ void Game::drawMap() {
         bool sel = i == subSel;
         hud.circle(q, (sel ? 11 : 8) * u, vec4(0.05f, 0.05f, 0.05f, 1), 14);
         hud.circle(q, (sel ? 9 : 6) * u, eventColor(events[i].type), 14);
-        if (sel) {   // the picked race's name on a black tag
-            float nw = hud.textWidth(16 * u, events[i].name) + 20 * u;
-            float nx = std::min(q.x + 14 * u, mx + S - nw - 4 * u);
-            hud.rect(nx, q.y - 34 * u, nw, 26 * u, vec4(0.04f, 0.04f, 0.04f, 0.9f));
-            hud.rect(nx, q.y - 10 * u, nw, 3 * u, eventColor(events[i].type));
-            hud.text(nx + 10 * u, q.y - 30 * u, 16 * u, events[i].name, WHITE, 0, false);
-        }
+
     }
     vec2 hq = toMap(world.hubPos);
     if (inside(hq, 8 * u)) {
@@ -3795,6 +3972,16 @@ void Game::drawMap() {
         hud.triangle(pp + f * (11 * u), pp - f * (7 * u) + r * (7 * u), pp - f * (7 * u) - r * (7 * u), vec4(0, 0, 0, 1));
         hud.triangle(pp + f * (9 * u), pp - f * (5 * u) + r * (5 * u), pp - f * (5 * u) - r * (5 * u), WHITE);
     }
+    if (subSel < int(events.size())) {   // the picked race's name on a black tag, over everything else
+        vec2 q = toMap(events[subSel].markerPos);
+        if (inside(q, 6 * u)) {
+            float nw = hud.textWidth(16 * u, events[subSel].name) + 20 * u;
+            float nx = std::min(q.x + 14 * u, mx + S - nw - 4 * u);
+            hud.rect(nx, q.y - 38 * u, nw, 26 * u, vec4(0.04f, 0.04f, 0.04f, 0.92f));
+            hud.rect(nx, q.y - 14 * u, nw, 3 * u, eventColor(events[subSel].type));
+            hud.text(nx + 10 * u, q.y - 34 * u, 16 * u, events[subSel].name, WHITE, 0, false);
+        }
+    }
     {   // zoom chip
         char zb[24];
         std::snprintf(zb, sizeof(zb), "ZOOM %.1fx", vz);
@@ -3809,8 +3996,8 @@ void Game::drawMap() {
     themePanel(lx - 18 * u, my - 8 * u, lw + 26 * u, S - 20 * u, lin, true);
     {
         float tw = hud.textWidth(24 * u, "WORLD MAP") + 44 * u;
-        hud.quad(vec2(lx + 10 * u, my + 4 * u), vec2(lx + tw + 10 * u, my + 4 * u), vec2(lx + tw, my + 40 * u), vec2(lx, my + 40 * u), vec4(0.04f, 0.04f, 0.04f, 0.95f));
-        hud.text(lx + 5 * u + tw * 0.5f, my + 10 * u, 24 * u, "WORLD MAP", WHITE, 1, false);
+        hud.rect(lx, my + 4 * u, tw, 36 * u, vec4(0.04f, 0.04f, 0.04f, 0.95f));
+        hud.text(lx + tw * 0.5f, my + 10 * u, 24 * u, "WORLD MAP", WHITE, 1, false);
         hud.rect(lx + 4 * u, my + 36 * u, (tw - 8 * u) * lin, 4 * u, vec4(0.80f, 0.94f, 0.16f, 1));
     }
     my += 12 * u;
@@ -3891,9 +4078,9 @@ void Game::drawCarCards(bool garageMode, float y, float h) {
         hud.rect(x + 5 * u, cy + 7 * u, cw, chh, vec4(0, 0, 0, 0.3f * ent));
         float ih = chh - 52 * u;
         // the picture sits on a teal studio wall with a yellow-green diagonal behind the selected car
-        hud.rectV(x, cy, cw, ih, sel ? vec4(0.10f, 0.52f, 0.52f, 1) : vec4(0.06f, 0.34f, 0.36f, 0.95f), vec4(0.02f, 0.20f, 0.22f, 0.95f));
+        hud.rectV(x, cy, cw, ih, sel ? vec4(0.22f, 0.62f, 0.56f, 1) : vec4(0.16f, 0.52f, 0.47f, 0.95f), vec4(0.11f, 0.42f, 0.39f, 0.95f));
         if (sel) hud.quad(vec2(x + cw * 0.35f, cy), vec2(x + cw, cy), vec2(x + cw, cy + ih), vec2(x + cw * 0.62f, cy + ih), vec4(0.80f, 0.94f, 0.16f, 0.9f));
-        if (carThumb[spec]) hud.image(x, cy, cw, ih, carThumb[spec], sel ? vec4(1, 1, 1, 1) : vec4(0.75f, 0.78f, 0.8f, 1), vec2(0.06f, 0.92f), vec2(0.94f, 0.08f));
+        if (carThumb[spec]) hud.image(x, cy, cw, ih, carThumb[spec], sel ? vec4(1, 1, 1, 1) : vec4(0.85f, 0.88f, 0.9f, 1), vec2(0.13f, 0.86f), vec2(0.87f, 0.18f));
         hud.rect(x, cy + ih, cw, chh - ih, sel ? vec4(0.97f, 0.97f, 0.96f, 1) : vec4(0.05f, 0.05f, 0.06f, 0.92f));
         // class badge
         vec4 cc = s.cls == 'S' ? vec4(0.62f, 0.25f, 0.95f, 1) : s.cls == 'A' ? vec4(0.95f, 0.25f, 0.25f, 1) : s.cls == 'B' ? vec4(1.f, 0.55f, 0.1f, 1)
@@ -3929,8 +4116,8 @@ void Game::drawCarCards(bool garageMode, float y, float h) {
         }
     }
     // edge fades so the strip reads as a carousel
-    hud.rectH(0, y - 20 * u, 120 * u, h + 40 * u, vec4(0.02f, 0.16f, 0.18f, 0.9f), vec4(0.02f, 0.16f, 0.18f, 0));
-    hud.rectH(hud.w - 120 * u, y - 20 * u, 120 * u, h + 40 * u, vec4(0.02f, 0.16f, 0.18f, 0), vec4(0.02f, 0.16f, 0.18f, 0.9f));
+    hud.rectH(0, y - 20 * u, 120 * u, h + 40 * u, vec4(0.07f, 0.34f, 0.32f, 0.9f), vec4(0.07f, 0.34f, 0.32f, 0));
+    hud.rectH(hud.w - 120 * u, y - 20 * u, 120 * u, h + 40 * u, vec4(0.07f, 0.34f, 0.32f, 0), vec4(0.07f, 0.34f, 0.32f, 0.9f));
 }
 
 void Game::drawDealer(bool garageMode) {
@@ -3940,7 +4127,7 @@ void Game::drawDealer(bool garageMode) {
     int spec = garageMode ? garage[subSel].spec : dealerSpec();
     const CarSpec& s = kCars[spec];
     // cinematic framing: top and bottom gradients over the live showroom
-    hud.rectV(0, hud.h - 290 * u, hud.w, 290 * u, vec4(0.02f, 0.16f, 0.18f, 0), vec4(0.02f, 0.16f, 0.18f, 0.9f));
+    hud.rectV(0, hud.h - 290 * u, hud.w, 290 * u, vec4(0.07f, 0.34f, 0.32f, 0), vec4(0.07f, 0.34f, 0.32f, 0.9f));
     // header
     float x0 = 48 * u;
     drawMenuHeader(x0, 30 * u, hud.w - 2 * x0, garageMode ? "MY GARAGE" : "AUTOSHOW");
@@ -4092,14 +4279,14 @@ void Game::drawSettings() {
     float cx = x0 + pw + 22 * u + slideR, cw = W - pw - 22 * u, cy = ty + 16 * u;
     float ch = std::min(hud.h - cy - 110 * u, 520 * u);
     hud.rect(cx + 8 * u, cy + 10 * u, cw, ch, vec4(0, 0, 0, 0.2f * open));
-    hud.rectV(cx, cy, cw, ch, vec4(0.03f, 0.27f, 0.29f, 0.94f * open), vec4(0.02f, 0.19f, 0.21f, 0.94f * open));
+    hud.rectV(cx, cy, cw, ch, vec4(0.14f, 0.48f, 0.44f, 0.94f * open), vec4(0.11f, 0.42f, 0.39f, 0.94f * open));
     float ih = std::min(cw * 9.f / 16.f, ch * 0.5f);
     GLuint prev = menuThumb[6] ? menuThumb[6] : menuThumb[5] ? menuThumb[5] : menuThumb[0];
     if (prev) {
         // the 4:3 shot, cover-fitted and drifting slowly
         float ta = cw / ih, ia = 4.f / 3.f, v = std::min(1.f, ia / ta), pan = std::sin(R.time * 0.2f) * 0.04f;
         hud.image(cx, cy, cw, ih, prev, vec4(1, 1, 1, open), vec2(0.04f + pan, 0.5f + v * 0.5f), vec2(0.96f + pan, 0.5f - v * 0.5f));
-        hud.rectV(cx, cy + ih * 0.6f, cw, ih * 0.4f, vec4(0, 0, 0, 0), vec4(0.02f, 0.22f, 0.24f, 0.9f * open));
+        hud.rectV(cx, cy + ih * 0.6f, cw, ih * 0.4f, vec4(0, 0, 0, 0), vec4(0.09f, 0.38f, 0.36f, 0.9f * open));
     }
     hud.rect(cx, cy + ih, cw, 5 * u, vec4(0.80f, 0.94f, 0.16f, open));
     float tx = cx + 26 * u, yy = cy + ih + 22 * u;
@@ -4153,7 +4340,7 @@ void Game::drawResults() {
         Racer* r = racers[i];
         bool me = r->isPlayer;
         vec4 tc = me ? vec4(0.08f, 0.08f, 0.08f, re) : vec4(1, 1, 1, re), dc = me ? vec4(0.25f, 0.3f, 0.3f, re) : vec4(0.75f, 0.9f, 0.88f, re);
-        hud.rect(rx, ry, rw, 32 * u, me ? vec4(0.97f, 0.97f, 0.96f, re) : vec4(0.01f, 0.12f, 0.13f, 0.5f * re));
+        hud.rect(rx, ry, rw, 32 * u, me ? vec4(0.97f, 0.97f, 0.96f, re) : vec4(0.08f, 0.36f, 0.33f, 0.5f * re));
         if (me) hud.rect(rx, ry, 6 * u, 32 * u, vec4(0.80f, 0.94f, 0.16f, re));
         vec4 medal = i == 0 ? vec4(0.98f, 0.82f, 0.2f, re) : i == 1 ? vec4(0.78f, 0.80f, 0.84f, re) : i == 2 ? vec4(0.82f, 0.52f, 0.28f, re) : vec4(0.04f, 0.04f, 0.04f, 0.8f * re);
         hud.rect(rx + 12 * u, ry + 3 * u, 52 * u, 26 * u, medal);
@@ -4182,7 +4369,7 @@ void Game::drawTransition() {
     t = t < 0.5f ? 4.f * t * t * t : 1.f - std::pow(-2.f * t + 2.f, 3.f) / 2.f;
     float sl = hud.h * 0.35f, band = 26 * u;
     float e = -sl + (hud.w + sl * 2.f + band * 3.f) * t;  // reveal edge, top
-    hud.quad(vec2(e, 0), vec2(hud.w + sl + 4, 0), vec2(hud.w + sl + 4, hud.h), vec2(e - sl, hud.h), vec4(0.03f, 0.27f, 0.29f, 1));
+    hud.quad(vec2(e, 0), vec2(hud.w + sl + 4, 0), vec2(hud.w + sl + 4, hud.h), vec2(e - sl, hud.h), vec4(0.14f, 0.48f, 0.44f, 1));
     hud.quad(vec2(e - band, 0), vec2(e, 0), vec2(e - sl, hud.h), vec2(e - sl - band, hud.h), LIME);
     hud.quad(vec2(e - band * 2.6f, 0), vec2(e - band * 1.8f, 0), vec2(e - sl - band * 1.8f, hud.h), vec2(e - sl - band * 2.6f, hud.h),
              vec4(0.96f, 0.10f, 0.50f, 0.95f));
@@ -4209,7 +4396,7 @@ void Game::drawMenuHeader(float x0, float y0, float W, const std::string& sectio
     float t = clampf(stateTime / 0.35f, 0.f, 1.f), in = 1.f - (1.f - t) * (1.f - t) * (1.f - t);
     float dy = (1.f - in) * -40 * u;
     float bandH = y0 + 74 * u;
-    hud.rectV(0, dy, hud.w, bandH, vec4(0.04f, 0.33f, 0.34f, 0.93f), vec4(0.02f, 0.20f, 0.22f, 0.88f));
+    hud.rectV(0, dy, hud.w, bandH, vec4(0.16f, 0.53f, 0.48f, 0.93f), vec4(0.11f, 0.42f, 0.39f, 0.88f));
     // faint triangles drifting through the band
     for (int k = 0; k < 9; k++) {
         float fx = std::fmod(k * 0.173f + R.time * (0.006f + 0.003f * (k % 3)), 1.f) * hud.w;
@@ -4226,8 +4413,9 @@ void Game::drawMenuHeader(float x0, float y0, float W, const std::string& sectio
     float tx = x0 + lw + 22 * u, th = 46 * u, ty = dy + y0;
     float sw = hud.textWidth(25 * u, section) + 56 * u, sl = 14 * u;
     float grow = clampf((stateTime - 0.1f) / 0.3f, 0.f, 1.f);
-    hud.quad(vec2(tx + sl, ty), vec2(tx + sw + sl, ty), vec2(tx + sw, ty + th), vec2(tx, ty + th), vec4(0.04f, 0.04f, 0.04f, 0.95f * in));
-    hud.text(tx + sl * 0.5f + sw * 0.5f, ty + 9 * u, 25 * u, section, vec4(1, 1, 1, in), 1, false);
+    (void)sl;
+    hud.rect(tx, ty, sw, th, vec4(0.04f, 0.04f, 0.04f, 0.95f * in));
+    hud.text(tx + sw * 0.5f, ty + 9 * u, 25 * u, section, vec4(1, 1, 1, in), 1, false);
     hud.rect(tx + 4 * u, ty + th - 4 * u, (sw - 8 * u) * grow, 4 * u, vec4(0.80f, 0.94f, 0.16f, in));
     // driver: level chip, name, credits
     float rx = x0 + W;
@@ -4265,8 +4453,14 @@ void Game::drawMenuHeader(float x0, float y0, float W, const std::string& sectio
 
 void Game::themePanel(float x, float y, float w, float h, float a, bool lit) {
     float u = hud.ui;
+    if (hudGlass) {   // over the live world: dark glass with a bright edge, so the road stays readable
+        hud.rect(x + 4 * u, y + 5 * u, w, h, vec4(0, 0, 0, 0.18f * a));
+        hud.rectV(x, y, w, h, vec4(0.04f, 0.10f, 0.11f, 0.78f * a), vec4(0.02f, 0.06f, 0.07f, 0.82f * a));
+        hud.rect(x, y, w, lit ? 3 * u : 2 * u, lit ? vec4(0.80f, 0.94f, 0.16f, a) : vec4(0.45f, 0.85f, 0.75f, 0.8f * a));
+        return;
+    }
     hud.rect(x + 6 * u, y + 7 * u, w, h, vec4(0, 0, 0, 0.22f * a));
-    hud.rectV(x, y, w, h, vec4(0.04f, 0.31f, 0.33f, 0.94f * a), vec4(0.02f, 0.19f, 0.21f, 0.94f * a));
+    hud.rectV(x, y, w, h, vec4(0.16f, 0.52f, 0.47f, 0.94f * a), vec4(0.11f, 0.42f, 0.39f, 0.94f * a));
     // a lighter diagonal slab in the corner, like the festival tiles
     float d = std::min(w, h) * 0.6f;
     hud.quad(vec2(x + w - d * 1.2f, y), vec2(x + w, y), vec2(x + w, y + d * 0.5f), vec2(x + w - d * 0.4f, y + d * 0.5f), vec4(1, 1, 1, 0.04f * a));
@@ -4275,9 +4469,9 @@ void Game::themePanel(float x, float y, float w, float h, float a, bool lit) {
 
 void Game::themeRow(float x, float y, float w, float h, bool sel, float a) {
     float u = hud.ui;
-    if (!sel) { hud.rect(x, y, w, h, vec4(0.01f, 0.12f, 0.13f, 0.45f * a)); return; }
+    if (!sel) { hud.rect(x, y, w, h, vec4(0.08f, 0.36f, 0.33f, 0.45f * a)); return; }
     float p = 0.5f + 0.5f * std::sin(R.time * 4.f);
-    hud.rectH(x, y, w, h, vec4(0.10f, 0.50f, 0.50f, 0.95f * a), vec4(0.06f, 0.36f, 0.38f, 0.9f * a));
+    hud.rectH(x, y, w, h, vec4(0.22f, 0.62f, 0.56f, 0.95f * a), vec4(0.17f, 0.54f, 0.49f, 0.9f * a));
     hud.rect(x, y, 6 * u, h, vec4(0.80f, 0.94f, 0.16f, a));
     float b = 2 * u;
     vec4 fc(0.80f, 0.94f, 0.16f, (0.55f + 0.45f * p) * a);
@@ -4308,8 +4502,8 @@ void Game::drawThemeBackdrop(float alpha) {
     float u = hud.ui, T = R.time;
     // a gradient that breathes slowly between sea-green and festival teal
     float sh = 0.5f + 0.5f * std::sin(T * 0.15f);
-    vec4 top(lerpf(0.30f, 0.38f, sh), lerpf(0.70f, 0.76f, sh), lerpf(0.66f, 0.58f, sh), alpha);
-    vec4 bot(lerpf(0.06f, 0.10f, sh), lerpf(0.46f, 0.52f, sh), lerpf(0.56f, 0.50f, sh), alpha);
+    vec4 top(lerpf(0.38f, 0.42f, sh), lerpf(0.75f, 0.79f, sh), lerpf(0.64f, 0.60f, sh), alpha);   // bright mint, like the Horizon menus
+    vec4 bot(lerpf(0.12f, 0.15f, sh), lerpf(0.54f, 0.58f, sh), lerpf(0.54f, 0.50f, sh), alpha);
     hud.rectV(0, 0, hud.w, hud.h, top, bot);
     // two soft glows wandering about
     hud.disc(vec2(hud.w * (0.3f + 0.2f * std::sin(T * 0.11f)), hud.h * (0.35f + 0.15f * std::cos(T * 0.13f))), hud.w * 0.45f,
@@ -4330,7 +4524,7 @@ void Game::drawThemeBackdrop(float alpha) {
                 float x = gx * S + (gy % 2 ? S * 0.5f : 0.f) + drift, y = gy * S * 0.87f;
                 bool up = (hsh >> 10) & 1;
                 float a = (layer ? 0.05f : 0.045f) * alpha * r * tw;
-                vec4 c = (hsh >> 11) & 1 ? vec4(1, 1, 1, a) : vec4(0, 0.12f, 0.14f, a * 1.4f);
+                vec4 c = (hsh >> 11) & 1 ? vec4(1, 1, 1, a * 0.8f) : vec4(0, 0.2f, 0.18f, a);
                 if (up) hud.triangle(vec2(x, y + S * 0.87f), vec2(x + S, y + S * 0.87f), vec2(x + S * 0.5f, y), c);
                 else hud.triangle(vec2(x, y), vec2(x + S, y), vec2(x + S * 0.5f, y + S * 0.87f), c);
             }
@@ -4342,15 +4536,8 @@ void Game::drawThemeBackdrop(float alpha) {
         hud.quad(vec2(bx, 0), vec2(bx + bw, 0), vec2(bx + bw - sl, hud.h), vec2(bx - sl, hud.h), vec4(1, 1, 1, 0.035f * alpha));
     }
     // cherry petals drifting down
-    drawPetals(alpha * 0.8f, T);
-    // a ticker along the very bottom
-    {
-        const std::string tick = "RIDGELINE FESTIVAL   //   JAPAN   //   FUJI   //   TOKYO   //   SAKURA SEASON   //   ";
-        float px = 12 * u, tw0 = hud.textWidth(px, tick), off = std::fmod(T * 30.f * u, tw0);
-        hud.rect(0, hud.h - 20 * u, hud.w, 20 * u, vec4(0, 0.1f, 0.12f, 0.35f * alpha));
-        for (float x = -off; x < hud.w; x += tw0) hud.text(x, hud.h - 17 * u, px, tick, vec4(1, 1, 1, 0.45f * alpha), 0, false);
-    }
-    hud.rectV(0, hud.h * 0.72f, hud.w, hud.h * 0.28f, vec4(0, 0, 0, 0), vec4(0, 0.08f, 0.1f, 0.22f * alpha));
+    drawPetals(alpha * 0.5f, T);
+    hud.rectV(0, hud.h * 0.72f, hud.w, hud.h * 0.28f, vec4(0, 0, 0, 0), vec4(0, 0.15f, 0.15f, 0.12f * alpha));
 }
 
 void Game::drawPetals(float alpha, float T) {
@@ -4371,14 +4558,13 @@ float Game::drawThemeHeader(float x0, float y0, float W, float in) {
     float u = hud.ui;
     const CarSpec& sp = *player.car.spec;
     // the car: its studio shot, bobbing gently
-    float iw = 190 * u, ih = iw * 0.62f;
+    float iw = 250 * u, ih = iw * 0.5f;
     int si = current < int(garage.size()) ? garage[current].spec : -1;
     GLuint img = si >= 0 && si < int(carThumb.size()) ? carThumb[si] : 0;
     float bob = std::sin(R.time * 1.6f) * 2 * u;
     float ix = x0 + 40 * u;
     if (img) {
-        hud.rect(ix + 6 * u, y0 + 8 * u + bob, iw, ih, vec4(0, 0, 0, 0.18f * in));
-        hud.image(ix, y0 + bob, iw, ih, img, vec4(1, 1, 1, in));
+        hud.image(ix, y0 - 6 * u + bob, iw, ih, img, vec4(1, 1, 1, in), vec2(0.1f, 0.84f), vec2(0.9f, 0.2f));
     }
     // class badge with the performance index, then year/make and the model
     float bx = ix + iw + 28 * u, by = y0 + 8 * u;
@@ -4466,7 +4652,7 @@ void Game::drawThemePrompts(const std::string& spec, float px) {
     float u = hud.ui;
     float w = hud.prompts(0, 0, 15 * u, spec, 0, 1.f, true);
     float x = px >= 0 ? px : 40 * u, y = hud.h - 58 * u;
-    hud.roundRect(x - 14 * u, y - 10 * u, w + 28 * u, 40 * u, 20 * u, vec4(0.02f, 0.18f, 0.2f, 0.55f));
+    hud.roundRect(x - 14 * u, y - 10 * u, w + 28 * u, 40 * u, 20 * u, vec4(0.05f, 0.27f, 0.27f, 0.55f));
     hud.prompts(x, y, 15 * u, spec, 0);
 }
 
@@ -4483,8 +4669,8 @@ void Game::drawTitle() {
     float att = titleMenu ? 1.f - me : (stateTime < 1.f ? 1.f : at);
     if (titleMenuT > 100.f) att = titleMenu ? 0.f : 1.f;
     // teal wash from the bottom-left; stronger once the menu is up
-    hud.rectV(0, hud.h * 0.40f, hud.w, hud.h * 0.60f, vec4(0.02f, 0.18f, 0.20f, 0), vec4(0.02f, 0.16f, 0.18f, 0.70f + 0.2f * me));
-    hud.rectH(0, 0, hud.w * 0.55f, hud.h, vec4(0.02f, 0.16f, 0.18f, 0.35f), vec4(0.02f, 0.16f, 0.18f, 0));
+    hud.rectV(0, hud.h * 0.40f, hud.w, hud.h * 0.60f, vec4(0.02f, 0.18f, 0.20f, 0), vec4(0.07f, 0.34f, 0.32f, 0.70f + 0.2f * me));
+    hud.rectH(0, 0, hud.w * 0.55f, hud.h, vec4(0.07f, 0.34f, 0.32f, 0.35f), vec4(0.07f, 0.34f, 0.32f, 0));
     // festival stripes sweep in from the left: yellow-green, pink, teal
     {
         const vec4 cols[3] = {{0.80f, 0.94f, 0.16f, 0.92f}, {0.96f, 0.10f, 0.50f, 0.9f}, {0.10f, 0.62f, 0.62f, 0.9f}};
@@ -4533,7 +4719,7 @@ void Game::drawTitle() {
             float t = clampf((stateTime - 0.6f - chipN * 0.1f) / 0.4f, 0.f, 1.f), e = (1.f - (1.f - t) * (1.f - t)) * att;
             float yy = cy + (1.f - e) * 30 * u;
             hud.rect(cx + 5 * u, yy + 6 * u, w1, 54 * u, vec4(0, 0, 0, 0.25f * e));
-            hud.rectV(cx, yy, w1, 54 * u, vec4(0.05f, 0.40f, 0.40f, 0.92f * e), vec4(0.03f, 0.27f, 0.29f, 0.92f * e));
+            hud.rectV(cx, yy, w1, 54 * u, vec4(0.18f, 0.56f, 0.50f, 0.92f * e), vec4(0.14f, 0.48f, 0.44f, 0.92f * e));
             hud.rect(cx, yy, w1, 4 * u, vec4(0.80f, 0.94f, 0.16f, e));
             hud.text(cx + 16 * u, yy + 9 * u, 22 * u, big, vec4(1, 1, 1, e), 0, false);
             hud.text(cx + 16 * u, yy + 36 * u, 11 * u, small, vec4(0.8f, 0.92f, 0.9f, e), 0, false);
@@ -4551,14 +4737,14 @@ void Game::drawTitle() {
         // ---------------- main menu: profile header on a teal band, logo, and a row of big festival tiles
         float x0 = 64 * u, W = hud.w - 128 * u;
         float hy0 = 22 * u - (1.f - me) * 60 * u;
-        hud.rectV(0, 0, hud.w, hy0 + 140 * u, vec4(0.04f, 0.33f, 0.34f, 0.92f * me), vec4(0.02f, 0.20f, 0.22f, 0.85f * me));
+        hud.rectV(0, 0, hud.w, hy0 + 140 * u, vec4(0.16f, 0.53f, 0.48f, 0.92f * me), vec4(0.11f, 0.42f, 0.39f, 0.85f * me));
         drawThemeHeader(x0, hy0, W, me);
         float tileH = std::min(250 * u, hud.h * 0.34f), ty = hud.h - 92 * u - tileH;
         float lw = 330 * u, lh = lw * kLogoH / kLogoW;
         float lx = x0 - (1.f - me) * 80 * u, ly = ty - lh - 44 * u;
         drawLogo(lx, ly, lw, me);
         hud.text(lx + 4 * u, ly + lh + 6 * u, 15 * u, "OPEN-WORLD FESTIVAL RACING", vec4(1, 1, 1, 0.85f * me), 0, false);
-        static const char* const kLabel[5] = {"CONTINUE", "MY GARAGE", "AUTOSHOW", "SETTINGS", "QUIT"};
+        static const char* const kLabel[5] = {"Continue", "My Garage", "Autoshow", "Settings", "Quit"};
         std::string sub[5] = {"Ridgeline Festival  |  Lv " + std::to_string(level),
                               std::to_string(garage.size()) + (garage.size() == 1 ? " car" : " cars"),
                               std::to_string(kCars.size()) + " cars for sale", "Display, audio, controls", "Save and exit"};
@@ -4581,74 +4767,37 @@ void Game::drawTitle() {
             float x = box[i].x, y = box[i].y - lift, h = tileH;
             hud.rect(x + 7 * u, y + 9 * u, w, h, vec4(0, 0, 0, 0.3f * a));
             float T = R.time;
-            switch (i) {
-                case 0: {   // hero: charcoal with a yellow-green diagonal slab and the current car
-                    hud.rect(x, y, w, h, vec4(0.20f, 0.20f, 0.21f, a));
-                    if (img) {   // the current car fills the tile (cover-fit, slow push-in)
-                        float zoom = 0.06f + 0.03f * std::sin(T * 0.4f);
-                        float ar = (w / h) / (1.f / 0.62f), du = 0.5f - zoom, dv = du / ar;
-                        if (dv > 0.5f - zoom) { dv = 0.5f - zoom; du = dv * ar; }
-                        hud.image(x, y, w, h, img, vec4(1, 1, 1, a), vec2(0.5f - du, 0.5f + dv), vec2(0.5f + du, 0.5f - dv));
-                    }
-                    // festival ribbons cutting across the bottom-right corner
-                    hud.triangle(vec2(x + w * 0.52f, y + h), vec2(x + w, y + h * 0.40f), vec2(x + w, y + h), vec4(0.80f, 0.94f, 0.16f, a));
-                    hud.quad(vec2(x + w * 0.40f, y + h), vec2(x + w, y + h * 0.20f), vec2(x + w, y + h * 0.29f), vec2(x + w * 0.47f, y + h), vec4(0.96f, 0.10f, 0.50f, 0.95f * a));
-                    break;
+            if (i == 0) {   // hero: charcoal, a yellow slab on the diagonal and the car cut out on top (Horizon's "Change Car")
+                hud.rectH(x, y, w, h, vec4(0.30f, 0.30f, 0.31f, a), vec4(0.16f, 0.16f, 0.17f, a));
+                hud.quad(vec2(x + w * 0.62f, y), vec2(x + w, y), vec2(x + w, y + h), vec2(x + w * 0.48f, y + h), vec4(1.0f, 0.84f, 0.10f, a));
+                // faint tread pattern on the slab
+                for (int k = 0; k < 7; k++) {
+                    float px0 = x + w * (0.52f + k * 0.07f), py0 = y + h * 0.1f;
+                    if (px0 + 22 * u < x + w) hud.rect(px0, py0 + (k % 2) * 14 * u, 22 * u, h * 0.8f, vec4(1, 1, 1, 0.06f * a));
                 }
-                case 1: {   // garage: teal with drifting triangles
-                    hud.rectV(x, y, w, h, vec4(0.10f, 0.55f, 0.55f, a), vec4(0.04f, 0.36f, 0.38f, a));
-                    for (int k = 0; k < 6; k++) {
-                        float fx = x + 16 * u + std::fmod(k * 0.31f + T * 0.03f * (1 + k % 3), 1.f) * (w - 32 * u);
-                        float fy = y + 16 * u + std::fmod(k * 0.53f, 1.f) * (h * 0.55f), r = (10.f + 6.f * (k % 3)) * u, ang = T * 0.5f + k;
-                        vec2 c(fx, fy);
-                        auto P = [&](float q) { return c + vec2(std::cos(q), std::sin(q)) * r; };
-                        hud.triangle(P(ang), P(ang + 2.094f), P(ang + 4.189f), vec4(1, 1, 1, 0.14f * a));
-                    }
-                    // stacked car silhouettes: three bars like a parking deck
-                    for (int k = 0; k < 3; k++) hud.rect(x + 22 * u, y + h * 0.20f + k * 26 * u, w * 0.45f - k * 12 * u, 14 * u, vec4(1, 1, 1, (0.25f - k * 0.06f) * a));
-                    break;
+                if (img) {
+                    float iw = w * 0.86f, ih = iw * 0.625f, drift = std::sin(T * 0.7f) * 4 * u;
+                    hud.image(x + w - iw + drift, y + h - ih - 4 * u, iw, ih, img, vec4(1, 1, 1, a), vec2(0.04f, 0.96f), vec2(0.96f, 0.04f));
                 }
-                case 2: {   // autoshow: pink with sweeping light bars
-                    hud.rectV(x, y, w, h, vec4(0.98f, 0.20f, 0.56f, a), vec4(0.82f, 0.06f, 0.42f, a));
-                    for (int k = 0; k < 3; k++) {
-                        float s = std::fmod(T * 0.25f + k / 3.f, 1.f), bx = x - 40 * u + s * (w + 80 * u);
-                        float b0 = std::max(x, bx), b1 = std::min(x + w, bx + 18 * u);
-                        if (b1 > b0) hud.quad(vec2(b0, y), vec2(b1, y), vec2(std::max(x, b1 - 30 * u), y + h * 0.62f), vec2(std::max(x, b0 - 30 * u), y + h * 0.62f), vec4(1, 1, 1, 0.12f * a));
-                    }
-                    hud.text(x + w - 18 * u, y + 16 * u, 34 * u, "NEW", vec4(1, 1, 1, 0.85f * a), 2, false);
-                    break;
-                }
-                case 3: {   // settings: charcoal with a turning gear
-                    hud.rectV(x, y, w, h, vec4(0.24f, 0.24f, 0.25f, a), vec4(0.14f, 0.14f, 0.15f, a));
-                    vec2 c(x + w * 0.5f, y + h * 0.36f);
-                    float R0 = std::min(w, h) * 0.18f, ang = T * 0.6f;
-                    for (int k = 0; k < 8; k++) {
-                        float q = ang + k * PI / 4.f;
-                        vec2 d(std::cos(q), std::sin(q)), n(-d.y, d.x);
-                        vec2 b0 = c + d * R0 * 0.9f, b1 = c + d * R0 * 1.35f;
-                        float tw = R0 * 0.22f;
-                        hud.quad(b0 - n * tw, b1 - n * tw * 0.8f, b1 + n * tw * 0.8f, b0 + n * tw, vec4(0.80f, 0.94f, 0.16f, a));
-                    }
-                    hud.circle(c, R0, vec4(0.80f, 0.94f, 0.16f, a), 32);
-                    hud.circle(c, R0 * 0.45f, vec4(0.19f, 0.19f, 0.2f, a), 24);
-                    break;
-                }
-                case 4: {   // quit: deep blue with a door
-                    hud.rectV(x, y, w, h, vec4(0.16f, 0.26f, 0.58f, a), vec4(0.09f, 0.16f, 0.42f, a));
-                    float dw = w * 0.26f, dh = h * 0.42f, dx = x + w * 0.5f - dw * 0.5f, dy = y + h * 0.14f;
-                    hud.rect(dx - 4 * u, dy - 4 * u, dw + 8 * u, dh + 4 * u, vec4(1, 1, 1, 0.85f * a));
-                    float open = on ? 0.5f + 0.5f * std::sin(T * 3.f) : 0.f;
-                    hud.rect(dx, dy, dw, dh, vec4(0.05f, 0.08f, 0.2f, a));
-                    hud.quad(vec2(dx, dy), vec2(dx + dw * (1.f - 0.45f * open), dy + dh * 0.06f * open), vec2(dx + dw * (1.f - 0.45f * open), dy + dh * (1.f - 0.06f * open)), vec2(dx, dy + dh),
-                             vec4(0.96f, 0.10f, 0.50f, a));
-                    break;
-                }
+            } else {
+                vec4 tc = i == 2 ? vec4(1.0f, 0.27f, 0.72f, a) : vec4(0.14f, 0.48f, 0.44f, a);
+                hud.rect(x, y, w, h, tc);
+                hud.rectV(x, y, w, h * 0.5f, vec4(1, 1, 1, 0.05f * a), vec4(1, 1, 1, 0));
+                static const int kAct[5] = {MA_RESUME, MA_GARAGE, MA_AUTOSHOW, MA_SETTINGS, MA_QUIT};
+                float ir = std::min(w * 0.32f, h * 0.24f);
+                vec2 ic(x + w * 0.5f, y + h * 0.40f);
+                vec4 pale(1, 1, 1, (on ? 0.32f : 0.22f) * a);
+                hud.arc(ic, ir - 3 * u, ir + 3 * u, 0, 2 * PI, pale, 56);
+                drawMenuIcon(hud, kAct[i], ic, ir * 0.82f, pale, T);
             }
             // label block along the bottom
-            hud.rectV(x, y + h - 74 * u, w, 74 * u, vec4(0, 0, 0, 0), vec4(0, 0, 0, 0.45f * a));
-            float big = i == 0 ? 38 * u : 24 * u;
-            hud.textFit(x + 16 * u, y + h - (i == 0 ? 76 : 62) * u, big, kLabel[i], vec4(1, 1, 1, a), 0, w - 28 * u, true);
-            hud.textFit(x + 16 * u, y + h - 28 * u, 13 * u, sub[i], vec4(1, 1, 1, 0.82f * a), 0, w - 28 * u);
+            if (i == 0) {
+                hud.textFit(x + 24 * u, y + 20 * u, 56 * u, kLabel[i], vec4(0.9f, 0.9f, 0.9f, a), 0, w * 0.52f, false);
+                hud.textFit(x + 24 * u, y + h - 38 * u, 16 * u, sub[i], vec4(0.9f, 0.9f, 0.9f, a), 0, w * 0.42f);
+            } else {
+                hud.textFit(x + 18 * u, y + h - 70 * u, 28 * u, kLabel[i], vec4(0.94f, 0.94f, 0.94f, a), 0, w - 30 * u, false);
+                hud.textFit(x + 18 * u, y + h - 32 * u, 14 * u, sub[i], vec4(0.92f, 0.92f, 0.92f, 0.9f * a), 0, w - 30 * u);
+            }
             if (on) {
                 float b = 4 * u, p = 0.65f + 0.35f * std::sin(T * 4.f);
                 vec4 fc(0.80f, 0.94f, 0.16f, p * a);

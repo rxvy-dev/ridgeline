@@ -521,7 +521,7 @@ void Game::drawFestivalWorld(const Camera& cam_) {
 void Game::drawFestivalHud() {
     if (festDay < 0) return;
     float u = hud.ui;
-    float x = 18 * u, y = 132 * u, w = std::max(250 * u, hudPanelW);
+    float x = 18 * u, y = 142 * u, w = std::max(250 * u, hudPanelW);
     float a = festShow > 0 ? 1.f : 0.72f;
     // widen to the longest line so progress numbers never run off the panel
     for (int k = 0; k < 3; k++) w = std::max(w, hud.textWidth(13 * u, std::string(kPool[festPick[k]].text) + "   00,000/00,000") + 44 * u);

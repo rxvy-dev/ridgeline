@@ -70,7 +70,7 @@ void Game::drawUpgrades() {
     CarSpec before = kCars[oc.spec];
     CarSpec now = tunedSpec(oc);
     float x0 = 48 * u;
-    hud.rectV(0, hud.h - 160 * u, hud.w, 160 * u, vec4(0.02f, 0.16f, 0.18f, 0), vec4(0.02f, 0.16f, 0.18f, 0.85f));
+    hud.rectV(0, hud.h - 160 * u, hud.w, 160 * u, vec4(0.07f, 0.34f, 0.32f, 0), vec4(0.07f, 0.34f, 0.32f, 0.85f));
     drawMenuHeader(x0, 30 * u, hud.w - 2 * x0, "UPGRADE SHOP");
     float slide = 1.f - clampf(stateTime / 0.4f, 0.f, 1.f);
     slide = slide * slide * slide;
@@ -456,7 +456,7 @@ void Game::drawChain() {
         hud.text(mx + mw * 0.5f, y + 31 * u, 16 * u, m, vec4(0.06f, 0.06f, 0.06f, 1), 1, false);
     }
     float bw = 200 * u;
-    hud.rect(hud.w * 0.5f - bw * 0.5f, y + 62 * u, bw, 5 * u, vec4(0.02f, 0.16f, 0.18f, 0.8f));
+    hud.rect(hud.w * 0.5f - bw * 0.5f, y + 62 * u, bw, 5 * u, vec4(0.07f, 0.34f, 0.32f, 0.8f));
     hud.rect(hud.w * 0.5f - bw * 0.5f, y + 62 * u, bw * t, 5 * u, vec4(0.96f, 0.10f, 0.50f, 1));
     float ly = y + 74 * u;
     for (int i = int(chainSkills.size()) - 1; i >= 0; i--) {
@@ -556,9 +556,9 @@ void Game::updatePhoto(float dt) {
 void Game::drawPhoto() {
     if (photoHideUi) return;
     float u = hud.ui;
-    hud.rectV(0, 0, hud.w, 64 * u, vec4(0.03f, 0.27f, 0.29f, 0.8f), vec4(0.02f, 0.19f, 0.21f, 0.55f));
+    hud.rectV(0, 0, hud.w, 64 * u, vec4(0.14f, 0.48f, 0.44f, 0.8f), vec4(0.11f, 0.42f, 0.39f, 0.55f));
     hud.rect(0, 64 * u, hud.w, 3 * u, vec4(0.80f, 0.94f, 0.16f, 0.9f));
-    hud.rectV(0, hud.h - 72 * u, hud.w, 72 * u, vec4(0.02f, 0.19f, 0.21f, 0.0f), vec4(0.02f, 0.19f, 0.21f, 0.7f));
+    hud.rectV(0, hud.h - 72 * u, hud.w, 72 * u, vec4(0.11f, 0.42f, 0.39f, 0.0f), vec4(0.11f, 0.42f, 0.39f, 0.7f));
     {
         float tw = hud.textWidth(22 * u, "PHOTO MODE") + 44 * u;
         hud.quad(vec2(40 * u + 12 * u, 12 * u), vec2(40 * u + tw + 12 * u, 12 * u), vec2(40 * u + tw, 52 * u), vec2(40 * u, 52 * u), vec4(0.04f, 0.04f, 0.04f, 0.95f));
@@ -719,7 +719,7 @@ void Game::drawWheelspin() {
     float lvw = hud.textWidth(16 * u, lv) + 26 * u;
     hud.rect(bx, by - 10 * u, lvw, 26 * u, vec4(0.92f, 0.92f, 0.92f, 0.95f));
     hud.text(bx + lvw * 0.5f, by - 6 * u, 16 * u, lv, vec4(0.1f, 0.1f, 0.1f, 1), 1, false);
-    hud.rect(bx + lvw, by - 10 * u, bw - lvw, 26 * u, vec4(0.02f, 0.16f, 0.18f, 0.85f));
+    hud.rect(bx + lvw, by - 10 * u, bw - lvw, 26 * u, vec4(0.07f, 0.34f, 0.32f, 0.85f));
     hud.rect(bx + lvw + 8 * u, by + 1 * u, (bw - lvw - 16 * u) * clampf(xp / float(xpToNext()), 0.f, 1.f), 4 * u, F_PINK);
     hud.text(bx + bw, by + 22 * u, 12 * u, fmtThousands(xp) + " / " + fmtThousands(xpToNext()) + " XP", vec4(0.8f, 0.92f, 0.9f, 1), 2, false);
     drawThemePrompts(pad ? "(A) spin   (B) back" : "ENTER spin   ESC back");

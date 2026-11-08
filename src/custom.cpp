@@ -169,7 +169,7 @@ void Game::customInput(Action a) {
 void Game::drawCustomize() {
     float u = hud.ui;
     OwnedCar& oc = garage[std::clamp(subSel, 0, int(garage.size()) - 1)];
-    hud.rectV(0, hud.h - 120 * u, hud.w, 120 * u, vec4(0.02f, 0.16f, 0.18f, 0), vec4(0.02f, 0.16f, 0.18f, 0.85f));
+    hud.rectV(0, hud.h - 120 * u, hud.w, 120 * u, vec4(0.07f, 0.34f, 0.32f, 0), vec4(0.07f, 0.34f, 0.32f, 0.85f));
     float slide = 1.f - clampf(stateTime / 0.4f, 0.f, 1.f);
     slide = slide * slide * slide;
     float x0 = 48 * u;
@@ -269,7 +269,7 @@ void Game::drawCustomize() {
                 bool on = int(i) == cur;
                 if (qx >= sx0 + 16 * u && qx + w[i] <= sx1 - 16 * u) {
                     float a = 1.f;
-                    hud.rect(qx, iy, w[i], ih, on ? vec4(0.97f, 0.97f, 0.96f, a) : vec4(0.01f, 0.12f, 0.13f, 0.6f * a));
+                    hud.rect(qx, iy, w[i], ih, on ? vec4(0.97f, 0.97f, 0.96f, a) : vec4(0.08f, 0.36f, 0.33f, 0.6f * a));
                     if (on) hud.rect(qx, iy + ih - 4 * u, w[i], 4 * u, vec4(0.80f, 0.94f, 0.16f, 1));
                     hud.text(qx + w[i] * 0.5f, iy + 11 * u, 15 * u, opts[i], on ? vec4(0.08f, 0.08f, 0.08f, a) : vec4(1, 1, 1, 0.85f * a), 1, false);
                 }

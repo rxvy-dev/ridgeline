@@ -2,14 +2,14 @@
 """Generates src/font_atlas.h: two fonts baked into one atlas.
 
   font 0 - body text    : Barlow SemiBold
-  font 1 - display text : Barlow Semi Condensed ExtraBold Italic
+  font 1 - display text : Barlow Bold (upright, like the Horizon menus)
 
 Barlow is by Jeremy Tribby, SIL Open Font License 1.1 (assets/fonts/OFL.txt).
 Run from the repo root:  python3 tools/gen_font.py
 """
 from PIL import Image, ImageDraw, ImageFont
 
-FONTS = [("assets/fonts/Barlow-SemiBold.ttf", 48), ("assets/fonts/BarlowSemiCondensed-ExtraBoldItalic.ttf", 56)]
+FONTS = [("assets/fonts/Barlow-SemiBold.ttf", 48), ("assets/fonts/Barlow-Bold.ttf", 56)]
 W, PAD = 1024, 3
 
 glyphs, metrics = [], []
