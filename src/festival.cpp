@@ -246,6 +246,14 @@ void Game::buildFestival() {
                     b.box(q, vec3(0.13f, 0.13f, 0.13f), bulbs[j % 3]);
                 }
             };
+            // red paper lanterns (chochin) hung down the avenue, matsuri style
+            for (float n = -50.f; n < 100.f; n += 3.f)
+                for (int sd = -1; sd <= 1; sd += 2) {
+                    vec3 l = at(sd * 9.5f, n) + vec3(0, 4.2f, 0);
+                    b.sphere(l, 0.42f, 1, vec4(1.f, 0.2f, 0.1f, 15));
+                    b.box(l + vec3(0, 0.45f, 0), vec3(0.2f, 0.06f, 0.2f), vec4(0.1f, 0.1f, 0.1f, 0));
+                    b.box(l - vec3(0, 0.45f, 0), vec3(0.2f, 0.06f, 0.2f), vec4(0.1f, 0.1f, 0.1f, 0));
+                }
             for (float n = -50.f; n < 100.f; n += 25.f) {
                 festoon(at(-14, n), at(-14, n + 25.f));
                 festoon(at(14, n), at(14, n + 25.f));

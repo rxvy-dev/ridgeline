@@ -445,6 +445,7 @@ void World::scatter(uint32_t seed) {
             if (hubD < 95.f) continue;
             if (std::hypot(x - festCenter.x, z - festCenter.z) < 265.f) continue;  // festival grounds
             if (inBox(x, z, 3.f)) continue;                                         // town buildings
+            if (paddyAt(x, z) > 0.5f) continue;                                     // rice paddies
             if (ccDist(x, z) < 20.f) continue;
             vec3 n = normalAt(x, z);
             float forest = forestAt(x, z);
@@ -1241,7 +1242,7 @@ void World::buildMapTexture() {
 // Torii gates over the mountain roads (red pillars, black kasagi with upturned ends) with a pair
 // of stone lanterns: the way into the touge, the Fuji climb and the pass.
 void World::buildShrines() {
-    auto torii = [&](const char* road, float frac) {
+    auto torii = [&](const char* road, float frac, bool lanterns = true) {
         for (auto& r : roads) {
             if (r.name != road || r.pts.size() < 20) continue;
             int i = std::clamp(int(frac * (r.pts.size() - 1)), 2, int(r.pts.size()) - 3);
@@ -1255,6 +1256,7 @@ void World::buildShrines() {
                 props.cylinder(b, 0.55f, 0.6f, 12, black);  // base ring
                 int cx = std::clamp(int((b.x + HALF) / TGRID), 0, tgN - 1), cz = std::clamp(int((b.z + HALF) / TGRID), 0, tgN - 1);
                 trunkGrid[cz * tgN + cx].push_back({b.x, b.z, 0.5f});
+                if (!lanterns) continue;
                 // stone lantern in front of each pillar
                 vec3 l = b + side * (s2 * 2.2f) - t * 3.f;
                 l.y = heightAt(l.x, l.z);
@@ -1275,6 +1277,8 @@ void World::buildShrines() {
             props.box(vec3(0, H - 0.75f, 0), vec3(0.35f, 0.55f, 0.18f), black, &xf);  // gakuzuka (name plaque)
         }
     };
+    // Fushimi Inari: a tunnel of hundreds of vermilion gates along the forest trail
+    for (float f = 0.02f; f < 0.13f; f += 0.0042f) torii("Okutama Trail", f, false);
     torii("Akagi Touge", 0.04f);
     torii("Irohazaka", 0.05f);
     torii("Fuji Road", 0.93f);
@@ -1487,6 +1491,104 @@ void World::buildJapan() {
         SDL_Log("Japan: %d towns", towns);
     }
 
+    // bamboo groves behind some of the towns' houses and along quiet roads
+    {
+        Rng br(515);
+        int groves = 0;
+        for (auto& rd : roads) {
+            if (rd.surface != SURF_ASPHALT || rd.pts.size() < 60 || rd.name.find("-dori") != std::string::npos || rd.name.find("Street") != std::string::npos) continue;
+            for (size_t i = 30; i + 30 < rd.pts.size(); i += 90) {
+                if (br.f() > 0.35f) continue;
+                vec3 p = rd.pts[i], t = rd.tan[i], side(-t.z, 0, t.x);
+                float sg = br.f() < 0.5f ? -1.f : 1.f;
+                vec3 c = p + side * (sg * (rd.width * 0.5f + 16.f));
+                if (heightAt(c.x, c.z) < waterLevel + 2.f || urban(c.x, c.z, 30.f) || inBox(c.x, c.z, 6.f) || roadDistAt(c.x, c.z) < 9.f) continue;
+                if (std::hypot(c.x - festCenter.x, c.z - festCenter.z) < 320.f) continue;
+                for (int k = 0; k < 70; k++) {
+                    float a = br.f() * 6.283f, r = std::sqrt(br.f()) * 11.f;
+                    vec3 q = c + vec3(std::cos(a) * r, 0, std::sin(a) * r);
+                    if (roadDistAt(q.x, q.z) < 3.f) continue;
+                    q.y = heightAt(q.x, q.z) - 0.2f;
+                    float H = br.range(8.f, 13.f), lean = br.range(-0.4f, 0.4f);
+                    vec3 top = q + vec3(lean, H, lean * 0.6f);
+                    vec4 culm(0.42f + br.range(-0.05f, 0.05f), 0.55f, 0.24f, 0);
+                    props.tube(q, top, 0.07f, 0.045f, 4, culm);
+                    // feathery leaf sprays near the top
+                    for (int j = 0; j < 3; j++) {
+                        vec3 lc = lerp(q, top, 0.7f + j * 0.12f);
+                        float la = br.f() * 6.283f;
+                        vec3 d(std::cos(la), -0.25f, std::sin(la));
+                        vec4 leaf(0.30f, 0.46f, 0.16f, 0);
+                        props.flatTri(lc, lc + d * 1.6f + vec3(0, 0.25f, 0), lc + d * 1.4f + vec3(-d.z * 0.5f, -0.2f, d.x * 0.5f), leaf);
+                        props.flatTri(lc, lc + d * 1.4f + vec3(-d.z * 0.5f, -0.2f, d.x * 0.5f), lc + d * 1.6f + vec3(0, 0.25f, 0), leaf);
+                    }
+                }
+                groves++;
+            }
+        }
+        SDL_Log("Japan: %d bamboo groves", groves);
+    }
+    // a white castle (Himeji style) on its stone base, above the valley towns
+    {
+        vec3 c(1180.f, 0, 320.f);
+        float best = -1e9f;
+        for (float dx = -250; dx <= 250; dx += 50)
+            for (float dz = -250; dz <= 250; dz += 50) {  // the highest knoll nearby that isn't on a road
+                float hh = heightAt(1180 + dx, 320 + dz);
+                if (roadDistAt(1180 + dx, 320 + dz) > 45.f && hh > best && std::fabs(heightAt(1180 + dx + 20, 320 + dz) - hh) < 6.f) { best = hh; c = vec3(1180 + dx, 0, 320 + dz); }
+            }
+        float g = heightAt(c.x, c.z);
+        // level the top
+        for (int iz = 0; iz < N; iz++) {
+            float wz = -HALF + iz * CELL;
+            if (std::fabs(wz - c.z) > 60) continue;
+            for (int ix = 0; ix < N; ix++) {
+                float wx = -HALF + ix * CELL;
+                if (std::fabs(wx - c.x) > 60) continue;
+                if (roadDist[iz * N + ix] < 3.f) continue;
+                float d = std::max(std::fabs(wx - c.x), std::fabs(wz - c.z));
+                height[iz * N + ix] = lerpf(height[iz * N + ix], g, 1.f - smoothstepf(30.f, 55.f, d));
+            }
+        }
+        vec4 stone(0.55f, 0.53f, 0.49f, 0), white(0.93f, 0.92f, 0.89f, 0), roof(0.24f, 0.28f, 0.32f, 0), dark(0.14f, 0.14f, 0.16f, 0);
+        // battered stone base: stacked slabs stepping in
+        for (int k = 0; k < 6; k++) {
+            float s2 = 24.f - k * 1.1f;
+            props.box(vec3(c.x, g + k * 1.5f + 0.75f, c.z), vec3(s2, 0.75f, s2 * 0.8f), stone);
+        }
+        float y = g + 9.f;
+        float sx = 17.f, sz = 13.f;
+        for (int k = 0; k < 5; k++) {
+            float hgt = k == 0 ? 6.f : 4.2f;
+            props.box(vec3(c.x, y + hgt * 0.5f, c.z), vec3(sx, hgt * 0.5f, sz), white);
+            for (int w2 = -2; w2 <= 2; w2++)  // dark windows
+                props.box(vec3(c.x + w2 * sx * 0.35f, y + hgt * 0.55f, c.z - sz - 0.02f), vec3(0.6f, 0.5f, 0.04f), dark);
+            y += hgt;
+            vec3 cc(c.x, 0, c.z);
+            // roof: hip roof plus a gable (chidori-hafu) on the front
+            float ro = 1.6f;
+            {
+                vec3 f(0, 0, 1), r(1, 0, 0);
+                float hw = sx + ro, hd = sz + ro;
+                vec3 e0 = cc + r * -hw + f * -hd, e1 = cc + r * hw + f * -hd, e2 = cc + r * hw + f * hd, e3 = cc + r * -hw + f * hd;
+                e0.y = e1.y = e2.y = e3.y = y;
+                float rl = std::max(0.f, hw - hd);
+                vec3 r0 = cc + r * -rl, r1 = cc + r * rl;
+                r0.y = r1.y = y + 3.2f;
+                props.flatQuad(e1, e0, r0, r1, roof); props.flatQuad(e3, e2, r1, r0, roof);
+                props.flatTri(e0, e3, r0, roof); props.flatTri(e2, e1, r1, roof);
+                vec3 gA = cc + vec3(-4.f, y, -hd), gB = cc + vec3(4.f, y, -hd), gT = cc + vec3(0, y + 3.6f, -hd + 1.5f);
+                props.flatTri(gB, gA, gT, roof);
+                props.flatTri(gA + vec3(0.3f, 0.4f, 0.05f), gB + vec3(-0.3f, 0.4f, 0.05f), gT + vec3(0, -0.4f, -0.05f), white);
+            }
+            y += 1.8f;
+            sx *= 0.78f; sz *= 0.78f;
+        }
+        props.box(vec3(c.x, y + 1.2f, c.z), vec3(sx * 0.9f, 1.2f, sz * 0.5f), roof);
+        for (int s2 = -1; s2 <= 1; s2 += 2) props.box(vec3(c.x + s2 * sx * 0.9f, y + 2.6f, c.z), vec3(0.25f, 0.6f, 0.15f), vec4(0.85f, 0.65f, 0.2f, 7));  // golden shachihoko
+        boxes.push_back({c.x - 24, c.z - 19, c.x + 24, c.z + 19, y});
+        SDL_Log("Japan: castle at (%.0f, %.0f)", c.x, c.z);
+    }
     // the five-storey pagoda on the hill above the lake, Fuji behind it
     {
         vec3 c(-1730.f, 0, 640.f);
@@ -1513,4 +1615,14 @@ void World::buildJapan() {
     }
     rebuildBoxGrid();
     SDL_Log("Japan: %d buildings, %d utility poles", houses, poles);
+}
+
+// rice paddies: flat low ground in the western countryside (the terrain shader draws the plots)
+float World::paddyAt(float x, float z) const {
+    if (x > -1250.f || x < -3350.f || z < -1450.f || z > 760.f) return 0.f;
+    float h = heightAt(x, z);
+    if (h > 150.f || h < waterLevel + 1.f) return 0.f;
+    if (normalAt(x, z).y < 0.985f || roadDistAt(x, z) < 6.f) return 0.f;
+    float edge = std::min(std::min(x + 3350.f, -1250.f - x), std::min(z + 1450.f, 760.f - z));
+    return smoothstepf(0.f, 60.f, edge);
 }

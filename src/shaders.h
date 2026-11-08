@@ -372,6 +372,25 @@ void main(){
     } else
     c = mix(c, vCol.rgb * (0.8 + 0.4 * macro3) * (texture(tDirt, p.xz / 3.0).rgb * 1.6), vCol.a);
 
+    // rice paddies in the western countryside: level plots of golden autumn rice (some still green,
+    // some harvested to stubble, some flooded), separated by narrow grassy dikes
+    if (vCol.a < 0.5 && p.x < -1250.0 && p.x > -3350.0 && p.z > -1450.0 && p.z < 760.0 && p.y < 150.0 && n.y > 0.985) {
+        float edge = min(min(p.x + 3350.0, -1250.0 - p.x), min(p.z + 1450.0, 760.0 - p.z));
+        float pk = smoothstep(0.0, 60.0, edge) * smoothstep(0.985, 0.992, n.y) * (1.0 - smoothstep(0.25, 0.45, vCol.a));
+        vec2 q = p.xz / vec2(36.0, 24.0);
+        vec2 id = floor(q), f = fract(q);
+        float hsh = fract(sin(dot(id, vec2(41.3, 289.1))) * 43758.5);
+        float dk = min(min(f.x, 1.0 - f.x) * 36.0, min(f.y, 1.0 - f.y) * 24.0);
+        float dike = 1.0 - smoothstep(0.5, 1.1, dk);
+        float rows = 0.5 + 0.5 * sin((hsh < 0.5 ? p.x : p.z) * 6.0);
+        vec3 golden = vec3(0.62, 0.50, 0.17) * (0.9 + 0.2 * vnoise(p.xz * 0.5));
+        vec3 greenR = vec3(0.30, 0.44, 0.13);
+        vec3 stubble = vec3(0.42, 0.33, 0.20);
+        vec3 water = vec3(0.10, 0.14, 0.18);
+        vec3 crop = hsh < 0.55 ? golden : hsh < 0.75 ? greenR : stubble;
+        vec3 plot = mix(water * 1.3, crop, hsh > 0.9 ? 0.15 : 0.6 + 0.4 * rows);
+        c = mix(c, mix(plot, grass * 0.9, dike), pk);
+    }
     n = normalize(n + detailN * (1.0 - slope));
     vec3 w = pow(abs(n), vec3(5.0)); w /= (w.x + w.y + w.z);
     float rs = uPhoto == 1 ? 1.0 / 7.0 : 1.0 / 11.0;
@@ -921,6 +940,8 @@ void main(){
     vec3 gn = normalize(vec3(hgt(xz - vec2(e, 0)) - hgt(xz + vec2(e, 0)), 2.0 * e, hgt(xz - vec2(0, e)) - hgt(xz + vec2(0, e))));
     float d = length(xz - uCamPos.xz);
     float keep = step(1.0 + 0.6 * uScaleMul, rd) * step(uWaterLevel + 0.8, h) * step(0.82, gn.y) * step(52.0, length(xz - uHub.xz));
+    // no wild grass in the rice paddies (same rule as the terrain shader)
+    if (xz.x < -1250.0 && xz.x > -3350.0 && xz.y > -1450.0 && xz.y < 760.0 && h < 150.0 && gn.y > 0.988 && rd > 5.0) keep = 0.0;
     float dens = smoothstep(0.25, 0.55, h1(floor(xz / 9.0)) * 0.6 + h1(floor(xz / 2.3)) * 0.4);
     keep *= step(h1(cell + 3.1), 0.35 + dens * 0.65);
     float band = uSpacing * 9.0;

@@ -52,6 +52,7 @@ struct World {
     vec3 hubPos;           // festival hub centre
     vec3 festCenter;       // the festival grounds, beside the hub
     void rebuildBoxGrid();
+    float paddyAt(float x, float z) const;
     bool inBox(float x, float z, float pad) const;
     float hubYaw = 0.f;    // spawn heading at hub
     vec3 hubSpawn;
