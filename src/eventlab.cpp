@@ -133,7 +133,7 @@ void Game::drawRouteMap(float mx, float my, float S, const Route* rt, vec4 col) 
     float u = hud.ui;
     vec2 p[4] = {{mx, my}, {mx + S, my}, {mx + S, my + S}, {mx, my + S}};
     vec2 uv[4] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
-    hud.rect(mx + 8 * u, my + 8 * u, S, S, wa::A(wa::INK, 0.9f));
+    hud.rect(mx + 8 * u, my + 8 * u, S, S, wa::A(wa::SHADOW, 0.9f));
     hud.rect(mx, my, S, S, wa::PAPER);
     hud.mapQuad(p, uv, vec4(0.93f, 0.84f, 0.68f, 0.85f));
     auto toM = [&](vec3 w) { return vec2(mx + (w.x + World::HALF) / (2 * World::HALF) * S, my + (World::HALF - w.z) / (2 * World::HALF) * S); };

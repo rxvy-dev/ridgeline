@@ -7,12 +7,12 @@
 #include <cstdio>
 
 // washi and ink: text is sumi on paper, accents vermilion
-static const vec4 F_ACCENT = wa::VERM;
-static const vec4 F_WHITE = wa::INK;
-static const vec4 F_DIM = wa::MUTED;
-static const vec4 F_PINK = wa::VERM;
-static const vec4 F_TRAP = wa::GOLD;
-static const vec4 F_ZONE = wa::INDIGO;
+static const vec4& F_ACCENT = wa::VERM;
+static const vec4& F_WHITE = wa::INK;
+static const vec4& F_DIM = wa::MUTED;
+static const vec4& F_PINK = wa::VERM;
+static const vec4& F_TRAP = wa::GOLD;
+static const vec4& F_ZONE = wa::INDIGO;
 
 static std::string fname(const CarSpec& s) { return s.make + " " + s.model; }
 static int stockPaint_(const CarSpec& s) {
@@ -437,32 +437,26 @@ void Game::updateSkills(float dt) {
 }
 
 void Game::drawChain() {
-    // the skill chain on a slip of paper: the score in ink, a vermilion seal for the multiplier
+    // the skill chain: one small slip under the top of the screen - the score, the multiplier on a
+    // little seal, the latest skill and a brush line for the time left
     using namespace wa;
     if (chainScore < 1.f) return;
     float u = hud.ui;
-    float y = hud.h * 0.22f;
-    float pulse = 1.f + std::max(0.f, chainFlash) * 0.4f;
+    float pulse = 1.f + std::max(0.f, chainFlash) * 0.25f;
     float t = clampf(1.f - chainTimer / 2.2f, 0.f, 1.f);
     char m[16];
-    std::snprintf(m, sizeof(m), "x%.2f", chainMult);
+    std::snprintf(m, sizeof(m), "x%.1f", chainMult);
     std::string sc = fmtThousands(int(chainScore));
-    int nsk = std::min(int(chainSkills.size()), 4);
-    float w = std::max(260 * u, hud.textWidth(36 * u, sc) + 140 * u), h = 92 * u + nsk * 20 * u;
-    float x = hud.w * 0.5f - w * 0.5f;
-    card(x, y, w, h, 0.97f, false, 131);
-    hud.text(x + 18 * u, y + 10 * u, 12 * u, "SKILL CHAIN", VERM, 0, false);
-    hud.text(x + 18 * u, y + 24 * u, 36 * u * pulse, sc, INK, 0, false);
-    hanko(vec2(x + w - 44 * u, y + 44 * u), 54 * u, "技", VERM, -0.1f + 0.05f * std::sin(R.time * 3.f), 1.f);
-    hud.text(x + w - 44 * u, y + 76 * u, 13 * u, m, INK, 1, false);
-    // the time left, as ink running dry
-    brush(vec2(x + 18 * u, y + 76 * u), vec2(x + 18 * u + (w - 110 * u) * (1.f - t), y + 76 * u), 6 * u, INK, 33, 1.f);
-    float ly = y + 92 * u;
-    for (int i = int(chainSkills.size()) - 1, k = 0; i >= 0 && k < nsk; i--, k++) {
-        auto& sk = chainSkills[i];
-        hud.text(x + 18 * u, ly, 14 * u, sk.first + "  +" + fmtThousands(sk.second), k == 0 ? INK : MUTED, 0, false);
-        ly += 20 * u;
-    }
+    std::string last = chainSkills.empty() ? "" : chainSkills.back().first + " +" + fmtThousands(chainSkills.back().second);
+    float sw = hud.textWidth(22 * u, sc), lw = hud.textWidth(12 * u, last);
+    float w = std::max(sw, lw) + 96 * u, h = 52 * u;
+    float x = hud.w * 0.5f - w * 0.5f, y = 18 * u;
+    card(x, y, w, h, 0.95f, false, 131);
+    hanko(vec2(x + 24 * u, y + h * 0.5f), 30 * u, "技", VERM, -0.1f, 1.f);
+    hud.text(x + 46 * u, y + 5 * u, 22 * u * pulse, sc, INK, 0, false);
+    hud.text(x + w - 10 * u, y + 9 * u, 14 * u, m, VERM, 2, false);
+    if (!last.empty()) hud.text(x + 46 * u, y + 31 * u, 12 * u, last, MUTED, 0, false);
+    brush(vec2(x + 6 * u, y + h - 3 * u), vec2(x + 6 * u + (w - 12 * u) * (1.f - t), y + h - 3 * u), 4 * u, VERM, 33, 1.f);
 }
 
 // ====================================================================== rewind

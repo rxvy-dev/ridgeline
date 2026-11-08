@@ -14,6 +14,7 @@ using namespace wa;
 // Paper: a flat sheet with fibres and the odd fleck pressed into it.
 void Game::paper(float x, float y, float w, float h, float a, int seed, vec4 tone) {
     float u = hud.ui;
+    if (tone.x < 0) tone = PAPER;
     hud.rect(x, y, w, h, A(tone, a));
     int n = std::min(260, int(w * h / (2600.f * u * u)));
     for (int i = 0; i < n; i++) {
@@ -120,7 +121,7 @@ void Game::vtext(float x, float y, float px, const std::string& s, vec4 col) {
 // A card laid on the paper: lighter stock, an ink border and a hard offset shadow like a woodblock print.
 void Game::card(float x, float y, float w, float h, float a, bool sel, int seed) {
     float u = hud.ui, off = (sel ? 8.f : 5.f) * u;
-    hud.rect(x + off, y + off, w, h, A(sel ? VERM : INK, 0.9f * a));
+    hud.rect(x + off, y + off, w, h, A(sel ? VERM : SHADOW, 0.9f * a));
     paper(x, y, w, h, a, seed, CARD);
     inkBox(x, y, w, h, (sel ? 3.f : 2.f) * u, A(INK, a));
 }
@@ -202,9 +203,9 @@ void Game::drawThemeBackdrop(float alpha) {
     }
     // the ink column down the left edge, with the section in vertical kanji
     float cw = 58 * u;
-    hud.rect(0, 0, cw, hud.h, A(INK, alpha));
+    hud.rect(0, 0, cw, hud.h, A(COLUMN, alpha));
     hud.rect(cw, 0, 2 * u, hud.h, A(VERM, alpha));
-    if (!washiSide.empty()) vtext(cw * 0.5f, 40 * u, 30 * u, washiSide, A(PAPER, alpha));
+    if (!washiSide.empty()) vtext(cw * 0.5f, 40 * u, 30 * u, washiSide, A(COLTEXT, alpha));
     hanko(vec2(cw * 0.5f, hud.h - 60 * u), 34 * u, "峠", A(VERM, 1.f), -0.08f, alpha);
     drawPetals(alpha * 0.6f, T);
 }

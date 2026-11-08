@@ -64,6 +64,7 @@ struct Settings {
     int colorBlind = 0;   // 0 off, 1 protanopia, 2 deuteranopia, 3 tritanopia
     int steerLock = 2;
     int racingLine = 1;   // Forza-style driving line in races
+    bool darkMode = false;  // menus and HUD in sumi night instead of washi paper
     bool carReflections = true;  // cars reflect the world around them (environment probe)  // cockpit wheel rotation lock to lock: 0 180, 1 360, 2 540, 3 900 degrees
 };
 
@@ -372,7 +373,7 @@ private:
     void themePanel(float x, float y, float w, float h, float a = 1.f, bool lit = false);  // festival teal card
     void drawMenuToasts(float y);
     // washi and ink kit (washi.cpp)
-    void paper(float x, float y, float w, float h, float a = 1.f, int seed = 0, vec4 tone = vec4(0.949f, 0.925f, 0.875f, 1));
+    void paper(float x, float y, float w, float h, float a = 1.f, int seed = 0, vec4 tone = vec4(-1, 0, 0, 0));
     void inkBox(float x, float y, float w, float h, float th, vec4 col);
     void brush(vec2 a, vec2 b, float wid, vec4 col, int seed, float prog = 1.f);
     void brushSwipe(float x, float y, float w, float h, vec4 col, int seed, float prog = 1.f);

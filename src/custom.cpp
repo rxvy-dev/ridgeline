@@ -270,7 +270,6 @@ void Game::drawCustomize() {
             for (size_t i = 0; i < opts.size(); i++) {
                 bool on = int(i) == cur;
                 if (qx >= sx0 + 16 * u && qx + w[i] <= sx1 - 16 * u) {
-                    float a = 1.f;
                     if (on) hud.rect(qx, iy, w[i], ih, wa::INK);
                     else inkBox(qx, iy, w[i], ih, 1.5f * u, wa::A(wa::INK, 0.5f));
                     if (on) hud.rect(qx, iy + ih - 4 * u, w[i], 4 * u, wa::VERM);
