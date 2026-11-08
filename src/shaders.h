@@ -362,12 +362,15 @@ void main(){
     vec3 c = mix(grass, dirt, dirtW * 0.75);
     if (vCol.a > 1.5) {
         // town ground: concrete slabs, kerbs and stains
-        vec2 q = p.xz / 3.0;
+        bool brick = vCol.r > vCol.b + 0.1;  // shopping-street pavement: small red pavers
+        vec2 q = p.xz / (brick ? vec2(0.6, 0.3) : vec2(3.0));
+        if (brick) q.x += mod(floor(q.y), 2.0) * 0.5;
         vec2 f = fract(q), id = floor(q);
         float joint = 1.0 - smoothstep(0.0, 0.03, min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)));
         float tone = 0.88 + 0.2 * fract(sin(dot(id, vec2(12.9898, 78.233))) * 43758.5453);
         vec3 con = vec3(0.36, 0.355, 0.345) * tone * (1.0 - joint * 0.35) * (0.85 + 0.25 * vnoise(p.xz * 0.6));
         if (uPhoto == 1) con = mix(con, texture(tDirt, p.xz / 6.0).rgb * 0.0 + con, 1.0);
+        con *= vCol.rgb / vec3(0.50, 0.49, 0.47);
         c = mix(con, con * 0.7, smoothstep(0.65, 0.85, fbm2(p.xz * 0.08)) * 0.6);
     } else
     c = mix(c, vCol.rgb * (0.8 + 0.4 * macro3) * (texture(tDirt, p.xz / 3.0).rgb * 1.6), vCol.a);

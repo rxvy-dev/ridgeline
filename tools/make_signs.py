@@ -6,6 +6,8 @@ Layout (2048 x 3072, RGBA):
   vertical cells   128 x 512, 16 per row, rows at y = 0 and 512   -> V0..V31
   horizontal cells 512 x 128,  4 per row, 8 rows from y = 1024    -> H0..H31
   road sign cells  512 x 256,  4 per row, 4 rows from y = 2048    -> G0..G15
+  vertical cells   128 x 512, 16 per row, row at y = 3072         -> W0..W15 (banners, pole ads)
+  street cells     512 x 256,  4 per row, 2 rows from y = 3584    -> G16..G23
   (G cells with a transparent background are road markings painted on the asphalt)
 The cell groups are mirrored in src/signs.h; keep them in step.
 
@@ -86,6 +88,25 @@ GUIDE = [
     ([("ようこそ富士山へ", 0.32), ("Welcome to Mt. Fuji", 0.15)], (120, 30, 30), WHITE, "guide"),
 ]
 
+SKY = (150, 205, 235)
+# hanging street banners (light blue, like Honcho's) and the narrow ads strapped to utility poles
+VERT2 = [
+    ("本町通り", SKY, NAVY, False), ("富士山", SKY, NAVY, False), ("火祭り", SKY, RED, False), ("名店街", SKY, NAVY, False),
+    ("ふじよしだ", SKY, NAVY, False), ("祭", SKY, RED, True), ("桜まつり", (255, 205, 220), RED, False), ("商店街", SKY, NAVY, False),
+    ("アキモト", YELLOW, BLACK, False), ("クリーニング", WHITE, (30, 120, 200), False), ("たばこ", RED, WHITE, False), ("お米", WHITE, BROWN, True),
+    ("電器", NAVY, YELLOW, False), ("精肉店", WHITE, RED, False), ("牛乳", (30, 120, 200), WHITE, False), ("新聞", WHITE, BLACK, True),
+]
+STREET = [
+    ([("本町名店街", 0.46), ("HONCYO", 0.16)], WHITE, BLACK, "guide"),
+    ([("本町名店街", 0.46), ("HONCYO", 0.16)], (250, 248, 240), (40, 40, 44), "guide"),
+    ([("月極駐車場", 0.40), ("P  空あり", 0.24)], WHITE, (20, 70, 160), "guide"),
+    ([("たばこ", 0.56)], RED, WHITE, "guide"),
+    ([("スナック 富士", 0.40)], (60, 20, 60), (255, 200, 230), "guide"),
+    ([("クリーニング", 0.40), ("CLEANING", 0.16)], (30, 120, 200), WHITE, "guide"),
+    ([("月江寺駅", 0.42), ("Gekkoji Sta.", 0.17)], WHITE, (20, 30, 60), "guide"),
+    ([("交番", 0.46), ("KOBAN", 0.18)], WHITE, RED, "guide"),
+]
+
 VW, VH, HW, HH = 128, 512, 512, 128
 GW, GH = 512, 256
 
@@ -124,8 +145,8 @@ def glow(img, box, fg):
     img.paste(out, (x0, y0))
 
 
-def vertical(img, d, i, text, bg, fg, serif):
-    x0, y0 = (i % 16) * VW, (i // 16) * VH
+def vertical(img, d, i, text, bg, fg, serif, ybase=0):
+    x0, y0 = (i % 16) * VW, ybase + (i // 16) * VH
     neon = bg == NEON_BG
     frame(d, x0, y0, x0 + VW, y0 + VH, bg, fg, neon)
     n = len(text)
@@ -169,7 +190,7 @@ def horizontal(img, d, i, text, bg, fg, serif, sub):
 
 
 def road_sign(img, d, i, lines, bg, fg, kind):
-    x0, y0 = (i % 4) * GW, 2048 + (i // 4) * GH
+    x0, y0 = (i % 4) * GW, (2048 + (i // 4) * GH) if i < 16 else (3584 + ((i - 16) // 4) * GH)
     if kind == "mark":
         # painted on the road: white letters, stretched long so they read at a glance from a car
         tmp = Image.new("RGBA", (GW, GH // 2), (255, 255, 255, 0))
@@ -201,14 +222,16 @@ def main():
     out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), "..", "assets", "signs", "signs.png")
     assert len(VERTICAL) == 32 and len(HORIZONTAL) == 32
     assert len(GUIDE) == 16
-    img = Image.new("RGBA", (2048, 3072), (255, 255, 255, 0))
+    img = Image.new("RGBA", (2048, 4096), (255, 255, 255, 0))
     d = ImageDraw.Draw(img)
     for i, (t, bg, fg, serif) in enumerate(VERTICAL):
         vertical(img, d, i, t, bg, fg, serif)
     for i, (t, bg, fg, serif, sub) in enumerate(HORIZONTAL):
         horizontal(img, d, i, t, bg, fg, serif, sub)
-    for i, (lines, bg, fg, kind) in enumerate(GUIDE):
+    for i, (lines, bg, fg, kind) in enumerate(GUIDE + STREET):
         road_sign(img, d, i, lines, bg, fg, kind)
+    for i, (t, bg, fg, serif) in enumerate(VERT2):
+        vertical(img, d, i, t, bg, fg, serif, 3072)
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     img.save(out, optimize=True)
     print("wrote", out)
@@ -221,8 +244,12 @@ def main():
             for r in rows:
                 h.write("    {%.3ff, %.3ff, %.3ff},  // %s\n" % (r[1][0] / 255, r[1][1] / 255, r[1][2] / 255, r[0]))
             h.write("};\n")
-        h.write("static const float kSignBgG[16][3] = {\n")
-        for lines, bg, fg, kind in GUIDE:
+        h.write("static const float kSignBgW[16][3] = {\n")
+        for r in VERT2:
+            h.write("    {%.3ff, %.3ff, %.3ff},  // %s\n" % (r[1][0] / 255, r[1][1] / 255, r[1][2] / 255, r[0]))
+        h.write("};\n")
+        h.write("static const float kSignBgG[24][3] = {\n")
+        for lines, bg, fg, kind in GUIDE + STREET:
             c = bg if bg else (0.5 * 255, 0.5 * 255, 0.5 * 255)
             h.write("    {%.3ff, %.3ff, %.3ff},  // %s\n" % (c[0] / 255, c[1] / 255, c[2] / 255, lines[0][0]))
         h.write("};\n")

@@ -934,7 +934,7 @@ void World::buildGPU() {
                     vec4 col(0.30f, 0.25f, 0.15f, f * 0.45f);
                     // dusty verge beside roads
                     if (rd < 4.f) col = vec4(0.52f, 0.46f, 0.33f, 0.55f * (1.f - smoothstepf(1.f, 4.f, rd)));
-                    if (urban(wx, wz, 2.f)) col = vec4(0.50f, 0.49f, 0.47f, 2.f);  // paving (terrain shader)
+                    if (urban(wx, wz, 2.f)) col = stripPaved(wx, wz, 0.f) ? vec4(0.6f, 0.43f, 0.32f, 2.f) : vec4(0.50f, 0.49f, 0.47f, 2.f);  // paving (terrain shader); red brick on shopping streets
                     v.push_back({vec3(wx, height[iz * N + ix], wz), nrm[iz * N + ix], col});
                 }
             for (int z = 0; z < CS; z++)
@@ -959,7 +959,7 @@ void World::buildGPU() {
                 int ix = x * S, iz = z * S;
                 float wx = -HALF + ix * CELL, wz = -HALF + iz * CELL;
                 vec4 col(0.30f, 0.25f, 0.15f, forestAt(wx, wz) * 0.45f);
-                if (urban(wx, wz, 2.f)) col = vec4(0.50f, 0.49f, 0.47f, 2.f);
+                if (urban(wx, wz, 2.f)) col = stripPaved(wx, wz, 0.f) ? vec4(0.6f, 0.43f, 0.32f, 2.f) : vec4(0.50f, 0.49f, 0.47f, 2.f);
                 v.push_back({vec3(wx, height[iz * N + ix] - 2.5f, wz), nrm[iz * N + ix], col});
             }
         for (int z = 0; z + 1 < M; z++)
@@ -1580,7 +1580,7 @@ void World::buildJapan() {
         pendingTrunks.push_back({base.x, base.z, 0.18f});
     };
     // round regulatory sign: red ring, white face, blue "40" (seven-segment strokes)
-    auto speedSign = [&](vec3 base, vec3 face) {
+    auto speedSign = [&](vec3 base, vec3 face, int extra = 0) {
         base.y = heightAt(base.x, base.z) - 0.05f;
         b.cylinder(base, 0.045f, 2.75f, 6, vec4(0.75f, 0.75f, 0.76f, 7));
         vec3 c = base + vec3(0, 2.6f, 0), rt = normalize(cross(up, face));
@@ -1606,6 +1606,21 @@ void World::buildJapan() {
         float x0 = 0.075f;
         seg(x0, Hh, W, T); seg(x0, -Hh, W, T);
         for (int s2 = -1; s2 <= 1; s2 += 2) { seg(x0 + s2 * W, Hh * 0.5f, T, Hh * 0.5f); seg(x0 + s2 * W, -Hh * 0.5f, T, Hh * 0.5f); }
+        // below it: no parking (blue, red ring, one slash) and no stopping (two slashes)
+        for (int e = 0; e < extra; e++) {
+            vec3 cc = c - up * (0.72f * (e + 1));
+            vec3 keep = c;
+            c = cc;
+            disc(0.3f, 0.0f, vec4(0.85f, 0.08f, 0.08f, 0), face);
+            disc(0.24f, 0.008f, vec4(0.1f, 0.25f, 0.7f, 0), face);
+            disc(0.3f, -0.01f, vec4(0.6f, 0.6f, 0.62f, 0), -face);
+            for (int k = 0; k <= e; k++) {
+                vec3 dgn = normalize(rt * (k ? -1.f : 1.f) + up);
+                vec3 o = cc + face * 0.016f, pr = normalize(cross(face, dgn));
+                quad(o - dgn * 0.24f - pr * 0.03f, o + dgn * 0.24f - pr * 0.03f, o + dgn * 0.24f + pr * 0.03f, o - dgn * 0.24f + pr * 0.03f, face, vec4(0.85f, 0.08f, 0.08f, 0));
+            }
+            c = keep;
+        }
         pendingTrunks.push_back({base.x, base.z, 0.1f});
     };
 
@@ -1724,6 +1739,13 @@ void World::buildJapan() {
                     tri(FL + f * o, FR + f * o, RF + f * o, -f, wall);
                     tri(BL - f * o, BR - f * o, RB - f * o, f, wall);
                 }
+                // kanban-style false front rising past the roof: copper-green sheet or tiles, a cornice on top
+                if (rng.f() < 0.3f) {
+                    vec4 fc = rng.f() < 0.5f ? vec4(0.34f, 0.5f, 0.45f, 7) : vec4(wall.x * 0.9f, wall.y * 0.9f, wall.z * 0.9f, 0);
+                    b.box(vec3(0, H + 0.85f, -hd + 0.15f), vec3(hw, 0.9f, 0.15f), fc, &xf);
+                    b.box(vec3(0, H + 1.8f, -hd + 0.1f), vec3(hw + 0.1f, 0.09f, 0.32f), vec4(0.25f, 0.25f, 0.26f, 0), &xf);
+                    for (int k = -1; k <= 1; k += 2) b.box(vec3(k * (hw - 0.15f), H * 0.5f + 0.5f, -hd - 0.05f), vec3(0.15f, H * 0.5f + 0.5f, 0.06f), fc, &xf);  // pilasters
+                }
                 // vertical projecting signboard
                 if (rng.f() < 0.7f) {
                     float sx = (rng.f() < 0.5f ? -1.f : 1.f) * (hw - 0.35f);
@@ -1793,28 +1815,110 @@ void World::buildJapan() {
                 houses++; shops++;
             }
         }
-        // kerbside: lantern lamps every 20 m both sides, poles every 34 m both sides with wires
-        // along the street and across it, round "40" signs facing each way, a zebra crossing
+        // kerbside, as on the real street: lamp posts every 12 m both sides, each with a pair of
+        // lanterns, a 本町名店街 plaque under a little roof and (every other one) a sky-blue banner;
+        // concrete poles every 30 m with ads strapped on, six power lines, phone cables and drops
+        // into the shops, wires across the street; signals at the crossing; sign stacks
         {
-            float along = 0, nextLamp = 6, nextPole = 2;
-            vec3 prevTops[2][6];
+            auto honchoLamp = [&](vec3 base, vec3 t, vec3 toRoad, bool banner, int idx) {
+                base.y = heightAt(base.x, base.z) - 0.05f;
+                vec4 iron(0.12f, 0.11f, 0.10f, 7), glowC(1.f, 0.82f, 0.52f, 15), roofC(0.2f, 0.21f, 0.23f, 0);
+                b.cylinder(base, 0.085f, 5.75f, 8, iron);
+                b.cylinder(base, 0.16f, 0.7f, 8, iron);
+                vec3 top = base + up * 5.55f;
+                b.tube(top - t * 0.95f, top + t * 0.95f, 0.035f, 0.035f, 4, iron);
+                for (int k = -1; k <= 1; k += 2) {  // hexagonal lanterns hanging off the bar ends
+                    vec3 l = top + t * (k * 0.92f);
+                    b.tube(l, l - up * 0.12f, 0.02f, 0.02f, 3, iron);
+                    vec3 cap = l - up * 0.12f;
+                    b.tube(cap, cap - up * 0.16f, 0.05f, 0.3f, 6, iron);
+                    b.tube(cap - up * 0.16f, cap - up * 0.72f, 0.25f, 0.16f, 6, glowC);
+                    b.cylinder(cap - up * 0.78f, 0.17f, 0.06f, 6, iron);
+                    b.tube(cap, cap + up * 0.14f, 0.03f, 0.01f, 4, iron);  // finial
+                }
+                // plaque on an arm towards the road, under a tiny gable roof
+                vec3 arm0 = base + up * 4.75f, arm1 = arm0 + toRoad * 1.05f;
+                b.tube(arm0, arm1, 0.03f, 0.03f, 4, iron);
+                vec3 pc = arm1 - toRoad * 0.38f - up * 0.48f;
+                mat4 px = basis(toRoad, up, -t, pc);
+                b.box(vec3(0, 0, 0), vec3(0.64f, 0.33f, 0.03f), signBoard(SG_HONCYO, false), &px);
+                signFace(b, pc - t * 0.034f, -t, 0.62f, 0.31f, SG_HONCYO, false);
+                signFace(b, pc + t * 0.034f, t, 0.62f, 0.31f, SG_HONCYO2, false);
+                vec3 rL = pc - toRoad * 0.76f + up * 0.4f, rR = pc + toRoad * 0.76f + up * 0.4f, rT = pc + up * 0.62f;
+                quad(rL - t * 0.12f, rL + t * 0.12f, rT + t * 0.12f, rT - t * 0.12f, -toRoad + up, roofC);
+                quad(rR - t * 0.12f, rT - t * 0.12f, rT + t * 0.12f, rR + t * 0.12f, toRoad + up, roofC);
+                b.tube(arm1 - toRoad * 0.38f, rT, 0.012f, 0.012f, 3, iron);
+                if (banner) {  // sky-blue street banner on a bracket, readable up and down the street
+                    vec3 bc = base + toRoad * 0.36f + up * 2.95f;
+                    b.tube(base + up * 3.78f, base + up * 3.78f + toRoad * 0.6f, 0.018f, 0.018f, 3, iron);
+                    int cell = SW_BANNER0 + idx % SW_BANNER_N;
+                    signFace(b, bc - t * 0.006f, -t, 0.2f, 0.8f, cell, true);
+                    signFace(b, bc + t * 0.006f, t, 0.2f, 0.8f, cell, true);
+                }
+                pendingTrunks.push_back({base.x, base.z, 0.18f});
+            };
+            float along = 0, nextLamp = 5, nextPole = 2, nextStack = 30;
+            vec3 prevTops[2][6], prevLow[2][2];
             bool have = false;
+            int lampN = 0, stackN = 0;
             for (int i = i0; i < i1; i++) {
                 along += length(rd.pts[i + 1] - rd.pts[i]);
                 vec3 p = rd.pts[i], t = rd.tan[i], side(-t.z, 0, t.x);
                 if (along >= nextLamp) {
-                    nextLamp += 20.f;
-                    for (int s = -1; s <= 1; s += 2) lanternLamp(p + side * (s * (hwR + 0.7f)), side * (float)-s);
+                    nextLamp += 12.f;
+                    for (int s = -1; s <= 1; s += 2) honchoLamp(p + side * (s * (hwR + 0.65f)), t, side * (float)-s, lampN % 2 == 0, lampN + (s > 0 ? 3 : 0));
+                    lampN++;
+                }
+                if (along >= nextStack && along < (i1 - i0) * 4.f - 30.f) {
+                    nextStack += 85.f;
+                    int s = stackN % 2 ? 1 : -1;
+                    vec3 q = p + t * 6.f + side * (s * (hwR + 0.4f));
+                    speedSign(q, s > 0 ? t : -t, 1 + stackN % 2);
+                    stackN++;
                 }
                 if (along >= nextPole) {
-                    nextPole += 34.f;
-                    vec3 tops[2][6];
-                    for (int s = 0; s < 2; s++) bigPole(p + t * 3.f + side * ((s ? 1.f : -1.f) * (hwR + walk - 0.5f)), t, side, tops[s]);
-                    for (int s = 0; s < 2; s++)
-                        for (int k = 0; k < 6; k++)
-                            if (have) wire(prevTops[s][k], tops[s][k], 0.55f + 0.08f * k);
-                    if (have && rng.f() < 0.7f) wire(tops[0][rng.irange(0, 1)], tops[1][rng.irange(2, 3)], 0.9f);  // across the street
+                    nextPole += 30.f;
+                    vec3 tops[2][6], low[2][2];
+                    for (int s = 0; s < 2; s++) {
+                        float sg = s ? 1.f : -1.f;
+                        vec3 pp = p + t * 3.f + side * (sg * (hwR + walk - 0.5f));
+                        bigPole(pp, t, side, tops[s]);
+                        pp.y = heightAt(pp.x, pp.z);
+                        // ads strapped to the pole, facing up and down the street
+                        int cell = SW_AD0 + rng.irange(0, SW_AD_N - 1);
+                        vec3 ac = pp + up * 2.75f - side * (sg * 0.19f);
+                        b.box(ac, vec3(0.03f, 0.7f, 0.03f), vec4(0.3f, 0.3f, 0.3f, 7));
+                        signFace(b, ac - t * 0.02f, -t, 0.17f, 0.68f, cell, true);
+                        signFace(b, ac + t * 0.02f, t, 0.17f, 0.68f, cell, true);
+                        // phone cables lower down, and service drops into the shops either side
+                        low[s][0] = pp + up * 6.3f; low[s][1] = pp + up * 5.8f;
+                        for (int k = -1; k <= 1; k += 2) {
+                            vec3 fac = pp + side * (sg * 0.55f) + t * (k * rng.range(4.f, 8.f)) + up * rng.range(5.6f, 6.6f);
+                            wire(tops[s][4], fac, 0.35f);
+                        }
+                        b.box(pp + up * 6.0f - side * (sg * 0.2f), vec3(0.12f, 0.35f, 0.12f), vec4(0.45f, 0.46f, 0.45f, 7));  // terminal box
+                    }
+                    if (have)
+                        for (int s = 0; s < 2; s++) {
+                            for (int k = 0; k < 6; k++) wire(prevTops[s][k], tops[s][k], 0.55f + 0.08f * k);
+                            for (int k = 0; k < 2; k++) {
+                                vec3 a = prevLow[s][k], c2 = low[s][k];
+                                vec3 prev = a;
+                                for (int sgm = 1; sgm <= 6; sgm++) {
+                                    float u = sgm / 6.f;
+                                    vec3 q = lerp(a, c2, u) - vec3(0, 0.8f * 4.f * u * (1.f - u), 0);
+                                    b.tube(prev, q, 0.04f, 0.04f, 3, vec4(0.03f, 0.03f, 0.035f, 0));
+                                    prev = q;
+                                }
+                            }
+                        }
+                    if (have) {  // across the street, two or three each time
+                        wire(tops[0][rng.irange(0, 1)], tops[1][rng.irange(2, 3)], 0.9f);
+                        if (rng.f() < 0.7f) wire(tops[1][rng.irange(0, 1)], tops[0][rng.irange(4, 5)], 1.1f);
+                        if (rng.f() < 0.5f) wire(low[0][0], low[1][1], 0.7f);
+                    }
                     std::memcpy(prevTops, tops, sizeof(tops));
+                    std::memcpy(prevLow, low, sizeof(low));
                     have = true;
                 }
             }
@@ -1822,13 +1926,43 @@ void World::buildJapan() {
                 int i = k ? i1 - 8 : i0 + 8;
                 vec3 p = rd.pts[i], t = rd.tan[i], side(-t.z, 0, t.x);
                 float sg = k ? 1.f : -1.f;
-                speedSign(p + side * (sg * (hwR + 0.45f)), k ? t : -t);
+                speedSign(p + side * (sg * (hwR + 0.45f)), k ? t : -t, 1);
             }
-            int im = (i0 + i1) / 2;
-            vec3 p = rd.pts[im], t = rd.tan[im], side(-t.z, 0, t.x);
-            for (int k = -4; k <= 4; k++) {
-                mat4 zx = basis(side, up, t, p + side * (k * 1.0f) + vec3(0, 0.06f, 0));
-                b.box(vec3(0, 0, 0), vec3(0.25f, 0.02f, 2.f), vec4(0.92f, 0.92f, 0.9f, 0), &zx);
+            // zebra crossings with traffic signals, halfway up and near the top
+            for (int ci : {(i0 + i1) / 2, i1 - 30}) {
+                vec3 p = rd.pts[ci], t = rd.tan[ci], side(-t.z, 0, t.x);
+                for (int k = -4; k <= 4; k++) {
+                    mat4 zx = basis(side, up, t, p + side * (k * 1.0f) + vec3(0, 0.06f, 0));
+                    b.box(vec3(0, 0, 0), vec3(0.25f, 0.02f, 2.f), vec4(0.92f, 0.92f, 0.9f, 0), &zx);
+                }
+                for (int s = -1; s <= 1; s += 2) {
+                    // stop line for the traffic coming towards this crossing
+                    vec3 fwd = s > 0 ? t : -t;
+                    vec3 right = normalize(cross(fwd, up));
+                    mat4 sl = basis(right, up, fwd, p - fwd * 3.5f - right * (hwR * 0.5f) + up * 0.06f);
+                    b.box(vec3(0, 0, 0), vec3(hwR * 0.48f, 0.015f, 0.2f), vec4(0.92f, 0.92f, 0.9f, 0), &sl);
+                    // signal post on the left kerb, arm out over the lane, horizontal lamp housing
+                    vec3 q = p - fwd * 3.f - right * (hwR + 0.5f);
+                    q.y = heightAt(q.x, q.z) - 0.1f;
+                    vec4 grey(0.55f, 0.56f, 0.58f, 7), housing(0.32f, 0.33f, 0.35f, 7);
+                    b.cylinder(q, 0.13f, 5.6f, 8, grey);
+                    vec3 a0 = q + up * 5.4f, a1 = a0 + right * (hwR * 0.9f);
+                    b.tube(a0, a1, 0.07f, 0.06f, 6, grey);
+                    vec3 hc = a1 - right * 0.5f - up * 0.05f;
+                    mat4 hx = basis(right, up, -fwd, hc);
+                    b.box(vec3(0, 0, 0), vec3(0.68f, 0.21f, 0.14f), housing, &hx);
+                    const vec4 lampC[3] = {{0.1f, 0.35f, 0.25f, 0}, {0.35f, 0.3f, 0.1f, 0}, {1.f, 0.12f, 0.08f, 15}};
+                    for (int k = 0; k < 3; k++) {
+                        vec3 lc = hc + right * ((k - 1) * 0.43f) - fwd * 0.15f;
+                        b.sphere(lc, 0.15f, 1, lampC[k]);
+                        b.box(hx.transformPoint(vec3((k - 1) * 0.43f, 0.17f, 0.26f)), vec3(0.18f, 0.02f, 0.13f), housing);  // visor
+                    }
+                    // pedestrian signal across the road, on the near post
+                    vec3 ped = q + up * 2.6f - right * 0.05f;
+                    b.box(ped, vec3(0.2f, 0.32f, 0.2f), housing);
+                    b.box(ped + right * 0.21f + up * 0.13f, vec3(0.01f, 0.12f, 0.15f), vec4(1.f, 0.15f, 0.1f, 15));
+                    pendingTrunks.push_back({q.x, q.z, 0.18f});
+                }
             }
         }
         // the great torii (Kanadorii) spanning the foot of the street, dark bronze
