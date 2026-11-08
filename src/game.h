@@ -368,7 +368,13 @@ private:
     void drawThemeBackdrop(float alpha);
     float drawThemeHeader(float x0, float y0, float W, float in);   // returns the bottom edge
     float drawThemeTabs(float x0, float y0, float W, const char* const* names, int count, int sel, float in);
-    void drawThemePrompts(const std::string& spec);
+    void drawThemePrompts(const std::string& spec, float x = -1.f);
+    void themePanel(float x, float y, float w, float h, float a = 1.f, bool lit = false);  // festival teal card
+    void themeRow(float x, float y, float w, float h, bool sel, float a = 1.f);         // list row with a sliding highlight
+    bool titleMenu = false;   // title: false = attract screen, true = main menu tiles
+    int titleSel = 0;
+    float titleMenuT = 0;
+    State settingsReturn = ST_PAUSE;
     void drawPetals(float alpha, float t);
     int tabDir = 1;  // which way the tiles slide when the tab changes
     State lastState = ST_TITLE;

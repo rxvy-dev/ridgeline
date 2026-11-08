@@ -299,12 +299,17 @@ void Game::openSwitcher() {
 
 void Game::drawSwitcher() {
     float u = hud.ui;
-    hud.rectV(0, hud.h - 330 * u, hud.w, 330 * u, vec4(0, 0, 0, 0), vec4(0.01f, 0.01f, 0.02f, 0.9f));
+    hud.rectV(0, hud.h - 330 * u, hud.w, 330 * u, vec4(0.02f, 0.16f, 0.18f, 0), vec4(0.02f, 0.16f, 0.18f, 0.92f));
     const CarSpec& s = kCars[garage[std::clamp(subSel, 0, int(garage.size()) - 1)].spec];
-    hud.text(48 * u, hud.h - 300 * u, 13 * u, "QUICK SWITCH", S_DIM, 0, false);
-    hud.text(48 * u, hud.h - 282 * u, 30 * u, carName(s), S_WHITE);
+    float t = clampf(stateTime / 0.3f, 0.f, 1.f), in = 1.f - (1.f - t) * (1.f - t);
+    float tx = 48 * u - (1.f - in) * 60 * u, ty = hud.h - 312 * u;
+    float tw = hud.textWidth(16 * u, "QUICK SWITCH") + 36 * u;
+    hud.quad(vec2(tx + 10 * u, ty), vec2(tx + tw + 10 * u, ty), vec2(tx + tw, ty + 30 * u), vec2(tx, ty + 30 * u), vec4(0.04f, 0.04f, 0.04f, 0.95f * in));
+    hud.text(tx + 5 * u + tw * 0.5f, ty + 6 * u, 16 * u, "QUICK SWITCH", vec4(1, 1, 1, in), 1, false);
+    hud.rect(tx + 4 * u, ty + 27 * u, (tw - 8 * u) * in, 3 * u, vec4(0.80f, 0.94f, 0.16f, in));
+    hud.text(tx + tw + 24 * u, ty - 4 * u, 30 * u, carName(s), vec4(1, 1, 1, in));
     drawCarCards(true, hud.h - 236 * u, 160 * u);
-    hud.prompts(hud.w * 0.5f, hud.h - 38 * u, 14 * u, pad ? "LEFT/RIGHT choose   (A) drive   (B) cancel" : "LEFT/RIGHT choose   ENTER drive   G / ESC cancel", 1);
+    drawThemePrompts(pad ? "LEFT/RIGHT choose   (A) drive   (B) cancel" : "LEFT/RIGHT choose   ENTER drive   G / ESC cancel");
 }
 
 void Game::switcherAction(Action a) {

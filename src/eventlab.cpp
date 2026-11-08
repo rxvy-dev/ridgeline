@@ -165,20 +165,20 @@ void Game::drawRouteMap(float mx, float my, float S, const Route* rt, vec4 col) 
 
 void Game::drawEventLab() {
     float u = hud.ui;
-    hud.rectV(0, 0, hud.w, hud.h, vec4(0.02f, 0.03f, 0.04f, 0.95f), vec4(0.03f, 0.02f, 0.04f, 0.95f));
+    drawThemeBackdrop(0.95f);
     float x0 = 48 * u;
     drawMenuHeader(x0, 30 * u, hud.w - 2 * x0, "EVENTLAB");
     const CustomEvent& c = labEv;
     bool closed = c.road >= 0 && c.road < int(world.roads.size()) && world.roads[c.road].closed;
-    float pw = 500 * u, px = x0, py = 118 * u, rh = (hud.h - py - 100 * u) / LR_COUNT;
+    float pw = 500 * u, px = x0, py = 128 * u, rh = (hud.h - py - 110 * u) / LR_COUNT;
     rh = std::min(rh, 48 * u);
+    themePanel(px - 10 * u, py - 10 * u, pw + 20 * u, LR_COUNT * rh + 28 * u, 1.f, true);
     for (int i = 0; i < LR_COUNT; i++) {
         float ry = py + i * rh + (i >= LR_TEST ? 14 * u : 0);
         bool sel = i == labSel;
         bool action = i >= LR_TEST;
-        if (sel) hud.rectH(px, ry, pw, rh - 5 * u, vec4(0.96f, 0.10f, 0.50f, 0.28f), vec4(0.96f, 0.10f, 0.50f, 0.04f));
-        else hud.rectH(px, ry, pw, rh - 5 * u, vec4(1, 1, 1, 0.05f), vec4(1, 1, 1, 0.01f));
-        hud.rect(px, ry, 4 * u, rh - 5 * u, sel ? L_ACCENT : action ? L_CYAN : vec4(1, 1, 1, 0.15f));
+        themeRow(px, ry, pw, rh - 5 * u, sel);
+        if (action && !sel) hud.rect(px, ry, 4 * u, rh - 5 * u, vec4(0.96f, 0.10f, 0.50f, 1));
         float ty = ry + (rh - 5 * u) * 0.5f - 9 * u;
         if (action) {
             hud.text(px + 20 * u, ty, 17 * u, kLabRows[i], sel ? L_WHITE : vec4(1, 1, 1, 0.8f), 0, false);
@@ -203,13 +203,14 @@ void Game::drawEventLab() {
         }
         hud.textFit(px + 190 * u, ty - 1 * u, 18 * u, val, L_WHITE, 0, pw - 250 * u);
         if (sel) {
-            hud.text(px + pw - 52 * u, ty - 2 * u, 20 * u, "<", L_ACCENT, 1, false);
-            hud.text(px + pw - 22 * u, ty - 2 * u, 20 * u, ">", L_ACCENT, 1, false);
+            hud.text(px + pw - 52 * u, ty - 2 * u, 20 * u, "<", vec4(0.80f, 0.94f, 0.16f, 1), 1, false);
+            hud.text(px + pw - 22 * u, ty - 2 * u, 20 * u, ">", vec4(0.80f, 0.94f, 0.16f, 1), 1, false);
         }
     }
     // preview
-    float S = std::min(hud.h - 230 * u, hud.w - pw - x0 * 3);
-    float mx = hud.w - S - x0, my = 118 * u;
+    float S = std::min(hud.h - 250 * u, hud.w - pw - x0 * 3);
+    float mx = hud.w - S - x0, my = 128 * u;
+    themePanel(mx - 10 * u, my - 10 * u, S + 20 * u, S + 76 * u, 1.f, true);
     drawRouteMap(mx, my, S, labOk ? &labPreview.route : nullptr, L_CYAN);
     float iy = my + S + 14 * u;
     if (labOk) {
@@ -221,8 +222,7 @@ void Game::drawEventLab() {
     } else {
         hud.text(mx, iy, 16 * u, "Route too short from here - move the start or shorten it", vec4(1, 0.45f, 0.4f, 1), 0, false);
     }
-    hud.prompts(hud.w * 0.5f, hud.h - 38 * u, 14 * u,
-                pad ? "D-pad up/down choose   left/right change   (A) select   (B) back" : "UP/DOWN choose   LEFT/RIGHT change   ENTER select   ESC back", 1);
+    drawThemePrompts(pad ? "D-pad up/down choose   left/right change   (A) select   (B) back" : "UP/DOWN choose   LEFT/RIGHT change   ENTER select   ESC back");
     float ty = hud.h * 0.78f;
     for (auto& t : toasts) { hud.text(hud.w * 0.5f, ty, 18 * u, t.text, t.col, 1); ty += 26 * u; }
 }
@@ -264,33 +264,34 @@ void Game::myEventsInput(Action a) {
 
 void Game::drawMyEvents() {
     float u = hud.ui;
-    hud.rectV(0, 0, hud.w, hud.h, vec4(0.02f, 0.03f, 0.04f, 0.95f), vec4(0.03f, 0.02f, 0.04f, 0.95f));
+    drawThemeBackdrop(0.95f);
     float x0 = 48 * u;
     drawMenuHeader(x0, 30 * u, hud.w - 2 * x0, "MY EVENTS");
     int n = int(customEvents.size());
-    float pw = 560 * u, px = x0, py = 118 * u, rh = 58 * u;
+    float pw = 560 * u, px = x0, py = 128 * u, rh = 58 * u;
     if (n == 0) {
         hud.text(px, py + 10 * u, 22 * u, "No saved events yet", L_WHITE, 0, false);
         hud.text(px, py + 44 * u, 15 * u, "Build one in EventLab, or copy a friend's share code and use Import Event.", L_DIM, 0, false);
-        hud.prompts(hud.w * 0.5f, hud.h - 38 * u, 14 * u, pad ? "(A) open EventLab   (B) back" : "ENTER open EventLab   ESC back", 1);
+        drawThemePrompts(pad ? "(A) open EventLab   (B) back" : "ENTER open EventLab   ESC back");
         return;
     }
-    int rows = std::max(3, int((hud.h - py - 100 * u) / rh));
+    int rows = std::max(3, int((hud.h - py - 110 * u) / rh));
+    themePanel(px - 10 * u, py - 10 * u, pw + 20 * u, std::min(n, rows) * rh + 14 * u, 1.f, true);
     int first = std::clamp(subSel - rows / 2, 0, std::max(0, n - rows));
     const EventDef* selEv = nullptr;
     for (int i = builtinEvents; i < int(events.size()); i++) if (events[i].custom == subSel) selEv = &events[i];
     for (int i = first; i < std::min(n, first + rows); i++) {
         float ry = py + (i - first) * rh;
         bool sel = i == subSel;
-        hud.rectH(px, ry, pw, rh - 6 * u, sel ? vec4(0.96f, 0.10f, 0.50f, 0.28f) : vec4(1, 1, 1, 0.05f), vec4(1, 1, 1, 0.01f));
-        hud.rect(px, ry, 4 * u, rh - 6 * u, sel ? L_ACCENT : L_CYAN);
+        themeRow(px, ry, pw, rh - 6 * u, sel);
         hud.textFit(px + 20 * u, ry + 8 * u, 18 * u, autoEventName(world, customEvents[i]), L_WHITE, 0, pw - 40 * u);
         std::string meta = encodeEvent(customEvents[i]);
         if (sellConfirm == i) meta = "Press again to delete";
         hud.text(px + 20 * u, ry + 32 * u, 12 * u, meta, sellConfirm == i ? vec4(1, 0.45f, 0.4f, 1) : L_DIM, 0, false);
     }
-    float S = std::min(hud.h - 230 * u, hud.w - pw - x0 * 3);
+    float S = std::min(hud.h - 250 * u, hud.w - pw - x0 * 3);
     float mx = hud.w - S - x0;
+    themePanel(mx - 10 * u, py - 10 * u, S + 20 * u, S + 76 * u, 1.f, true);
     drawRouteMap(mx, py, S, selEv ? &selEv->route : nullptr, L_CYAN);
     if (selEv) {
         char buf[200];
@@ -298,8 +299,7 @@ void Game::drawMyEvents() {
         hud.text(mx, py + S + 14 * u, 16 * u, buf, L_WHITE, 0, false);
         hud.textFit(mx, py + S + 38 * u, 14 * u, selEv->blurb, L_DIM, 0, S, false);
     }
-    hud.prompts(hud.w * 0.5f, hud.h - 38 * u, 14 * u,
-                pad ? "(A) race   (X) copy code   (Y) edit   LB delete   (B) back" : "ENTER race   X copy share code   E edit   V delete   ESC back", 1);
+    drawThemePrompts(pad ? "(A) race   (X) copy code   (Y) edit   LB delete   (B) back" : "ENTER race   X copy share code   E edit   V delete   ESC back");
     float ty = hud.h * 0.8f;
     for (auto& t : toasts) { hud.text(hud.w * 0.5f, ty, 18 * u, t.text, t.col, 1); ty += 26 * u; }
 }

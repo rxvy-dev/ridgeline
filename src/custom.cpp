@@ -169,21 +169,20 @@ void Game::customInput(Action a) {
 void Game::drawCustomize() {
     float u = hud.ui;
     OwnedCar& oc = garage[std::clamp(subSel, 0, int(garage.size()) - 1)];
-    hud.rectV(0, 0, hud.w, 150 * u, vec4(0.01f, 0.01f, 0.02f, 0.85f), vec4(0, 0, 0, 0));
-    hud.rectV(0, hud.h - 120 * u, hud.w, 120 * u, vec4(0, 0, 0, 0), vec4(0.01f, 0.01f, 0.02f, 0.85f));
+    hud.rectV(0, hud.h - 120 * u, hud.w, 120 * u, vec4(0.02f, 0.16f, 0.18f, 0), vec4(0.02f, 0.16f, 0.18f, 0.85f));
+    float slide = 1.f - clampf(stateTime / 0.4f, 0.f, 1.f);
+    slide = slide * slide * slide;
     float x0 = 48 * u;
     drawMenuHeader(x0, 30 * u, hud.w - 2 * x0, "CUSTOMIZE");
 
-    float pw = 470 * u, px = x0, py = 124 * u, rh = 58 * u;
-    hud.rectH(px, py - 10 * u, pw, CR_COUNT * rh + 20 * u, vec4(0.02f, 0.02f, 0.03f, 0.55f), vec4(0.02f, 0.02f, 0.03f, 0.85f));
+    float pw = 470 * u, px = x0 - slide * 140 * u, py = 128 * u, rh = 56 * u;
+    themePanel(px - 10 * u, py - 10 * u, pw + 20 * u, CR_COUNT * rh + 14 * u, 1.f, true);
     int num = oc.number > 0 ? oc.number : 1 + (oc.spec * 37 + 11) % 98;
     for (int i = 0; i < CR_COUNT; i++) {
         float ry = py + i * rh;
         bool sel = i == custSel;
-        float k = sel ? std::min(1.f, stateTime * 6.f) : 0.f;
-        if (sel) hud.rectH(px, ry, pw, rh - 6 * u, vec4(0.96f, 0.10f, 0.50f, 0.22f * k), vec4(0.96f, 0.10f, 0.50f, 0.04f));
-        hud.rect(px, ry, 4 * u, rh - 6 * u, sel ? C_ACCENT : vec4(1, 1, 1, 0.12f));
-        hud.text(px + 20 * u, ry + 6 * u, 11 * u, kRowNames[i], sel ? C_WHITE : C_DIM, 0, false);
+        themeRow(px, ry, pw, rh - 6 * u, sel);
+        hud.text(px + 20 * u, ry + 6 * u, 11 * u, kRowNames[i], sel ? vec4(0.80f, 0.94f, 0.16f, 1) : vec4(0.75f, 0.9f, 0.88f, 1), 0, false);
         std::string val;
         vec3 swatch(-1, -1, -1);
         switch (i) {
@@ -208,11 +207,11 @@ void Game::drawCustomize() {
         hud.text(vx, ry + 23 * u, 19 * u, val, C_WHITE, 0, false);
         if (sel) {
             float ax = px + pw - 22 * u;
-            hud.text(ax - 34 * u, ry + 20 * u, 22 * u, "<", C_ACCENT, 1, false);
-            hud.text(ax, ry + 20 * u, 22 * u, ">", C_ACCENT, 1, false);
+            float nudge = std::sin(R.time * 6.f) * 2 * u;
+            hud.text(ax - 34 * u - nudge, ry + 18 * u, 22 * u, "<", vec4(0.80f, 0.94f, 0.16f, 1), 1, false);
+            hud.text(ax + nudge, ry + 18 * u, 22 * u, ">", vec4(0.80f, 0.94f, 0.16f, 1), 1, false);
         }
     }
-    hud.prompts(hud.w * 0.5f, hud.h - 38 * u, 14 * u,
-                pad ? "D-pad up/down choose   left/right change   (A) done   (B) back"
-                    : "UP/DOWN choose   LEFT/RIGHT change   ENTER done   ESC back", 1);
+    drawThemePrompts(pad ? "D-pad up/down choose   left/right change   (A) done   (B) back"
+                         : "UP/DOWN choose   LEFT/RIGHT change   ENTER done   ESC back");
 }

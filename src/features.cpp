@@ -69,23 +69,25 @@ void Game::drawUpgrades() {
     OwnedCar& oc = garage[subSel];
     CarSpec before = kCars[oc.spec];
     CarSpec now = tunedSpec(oc);
-    hud.rectV(0, 0, hud.w, 150 * u, vec4(0.01f, 0.01f, 0.02f, 0.85f), vec4(0, 0, 0, 0));
     float x0 = 48 * u;
+    hud.rectV(0, hud.h - 160 * u, hud.w, 160 * u, vec4(0.02f, 0.16f, 0.18f, 0), vec4(0.02f, 0.16f, 0.18f, 0.85f));
     drawMenuHeader(x0, 30 * u, hud.w - 2 * x0, "UPGRADE SHOP");
+    float slide = 1.f - clampf(stateTime / 0.4f, 0.f, 1.f);
+    slide = slide * slide * slide;
 
-    float pw = 520 * u, px = x0, py = 140 * u;
+    float pw = 520 * u, px = x0 - slide * 140 * u, py = 140 * u;
+    themePanel(px - 12 * u, py - 12 * u, pw + 24 * u, 3 * 104 * u + 12 * u, 1.f, true);
     const char* names[3] = {"ENGINE", "WEIGHT REDUCTION", "TYRES & SUSPENSION"};
     const char* desc[3] = {"Intake, exhaust, ECU and forced induction", "Lightweight panels, seats and glass", "Stickier compound, stiffer springs"};
     for (int i = 0; i < 3; i++) {
         float ry = py + i * 104 * u;
         bool sel = i == upSel;
-        hud.rectH(px, ry, pw, 92 * u, sel ? vec4(0.12f, 0.12f, 0.13f, 0.95f) : vec4(0.05f, 0.05f, 0.06f, 0.85f), vec4(0.05f, 0.05f, 0.06f, 0.5f));
-        hud.rect(px, ry, 5 * u, 92 * u, sel ? F_ACCENT : vec4(1, 1, 1, 0.15f));
+        themeRow(px, ry, pw, 92 * u, sel);
         hud.text(px + 22 * u, ry + 12 * u, 20 * u, names[i], F_WHITE, 0, false);
         hud.text(px + 22 * u, ry + 38 * u, 13 * u, desc[i], F_DIM, 0, false);
         for (int k = 0; k < 3; k++) {
             float bx = px + 22 * u + k * 46 * u;
-            hud.rect(bx, ry + 64 * u, 40 * u, 8 * u, k < oc.up[i] ? F_ACCENT : vec4(1, 1, 1, 0.15f));
+            hud.rect(bx, ry + 64 * u, 40 * u, 8 * u, k < oc.up[i] ? vec4(0.80f, 0.94f, 0.16f, 1) : vec4(0, 0, 0, 0.3f));
         }
         std::string price = oc.up[i] >= 3 ? "MAXED" : "CR " + fmtThousands(upgradeCost(oc, i));
         vec4 pc = oc.up[i] >= 3 ? vec4(0.4f, 1, 0.5f, 1) : (credits >= upgradeCost(oc, i) ? F_WHITE : vec4(1, 0.45f, 0.4f, 1));
@@ -98,9 +100,8 @@ void Game::drawUpgrades() {
     if (next.up[upSel] < 3) next.up[upSel]++;
     CarSpec ns = tunedSpec(next);
     CarRatings rx = rateCar(ns);
-    float qx = hud.w - 430 * u, qy = 140 * u, qw = 382 * u;
-    hud.rectH(qx, qy, qw, 300 * u, vec4(0.03f, 0.03f, 0.04f, 0.55f), vec4(0.03f, 0.03f, 0.04f, 0.9f));
-    hud.rect(qx, qy, 4 * u, 300 * u, F_ACCENT);
+    float qx = hud.w - 430 * u + slide * 140 * u, qy = 140 * u, qw = 382 * u;
+    themePanel(qx, qy, qw, 300 * u, 1.f, true);
     char buf[96];
     std::snprintf(buf, sizeof(buf), "%c %d", now.cls, rn.pi);
     hud.text(qx + 22 * u, qy + 16 * u, 13 * u, "PERFORMANCE INDEX", F_DIM, 0, false);
@@ -117,14 +118,14 @@ void Game::drawUpgrades() {
         float ry = qy + 96 * u + i * 36 * u;
         hud.text(qx + 22 * u, ry, 12 * u, labels[i], F_DIM, 0, false);
         float bx = qx + 22 * u, by = ry + 18 * u, bw = qw - 44 * u;
-        hud.rect(bx, by, bw, 7 * u, vec4(1, 1, 1, 0.1f));
-        hud.rect(bx, by, bw * vx[i] / 10.f, 7 * u, vec4(0.3f, 1, 0.45f, 0.9f));
-        hud.rect(bx, by, bw * vn[i] / 10.f, 7 * u, F_ACCENT);
+        hud.rect(bx, by, bw, 7 * u, vec4(0, 0, 0, 0.3f));
+        hud.rect(bx, by, bw * vx[i] / 10.f, 7 * u, vec4(0.80f, 0.94f, 0.16f, 0.95f));
+        hud.rect(bx, by, bw * vn[i] / 10.f, 7 * u, vec4(0.98f, 0.86f, 0.2f, 1));
         hud.rect(bx, by, bw * vb[i] / 10.f, 7 * u, F_WHITE);
     }
     std::snprintf(buf, sizeof(buf), "%d HP   %d KG   grip %.2f", int(now.powerKW * 1.341f), int(now.massKg), now.grip);
     hud.text(qx + 22 * u, qy + 252 * u, 14 * u, buf, F_WHITE, 0, false);
-    hud.prompts(hud.w * 0.5f, hud.h - 38 * u, 14 * u, pad ? "D-pad select   (A) buy upgrade   (B) back" : "UP/DOWN select   ENTER buy upgrade   ESC back", 1);
+    drawThemePrompts(pad ? "D-pad select   (A) buy upgrade   (B) back" : "UP/DOWN select   ENTER buy upgrade   ESC back");
     float ty = hud.h * 0.72f;
     for (auto& t : toasts) { hud.text(hud.w * 0.5f, ty, 22 * u, t.text, t.col, 1); ty += 30 * u; }
 }
@@ -610,13 +611,19 @@ void Game::updateWheelspin(float dt) {
 
 void Game::drawWheelspin() {
     float u = hud.ui;
-    hud.rectV(0, 0, hud.w, hud.h, vec4(0.08f, 0.02f, 0.06f, 0.88f), vec4(0.02f, 0.01f, 0.03f, 0.94f));
+    drawThemeBackdrop(0.94f);
+    drawPetals(0.6f, R.time);
     float x0 = 48 * u;
     drawMenuHeader(x0, 30 * u, hud.w - 2 * x0, "WHEELSPIN");
-    hud.text(hud.w - x0, 80 * u, 12 * u, std::to_string(wheelspins) + (wheelspins == 1 ? " SPIN READY" : " SPINS READY"), F_DIM, 2, false);
+    {
+        std::string sr = std::to_string(wheelspins) + (wheelspins == 1 ? " SPIN READY" : " SPINS READY");
+        float sw2 = hud.textWidth(14 * u, sr) + 28 * u;
+        hud.rect(x0, 122 * u, sw2, 30 * u, vec4(0.96f, 0.10f, 0.50f, 0.95f));
+        hud.text(x0 + 14 * u, 129 * u, 14 * u, sr, F_WHITE, 0, false);
+    }
     // reel
     float cy = hud.h * 0.5f, rowH = 92 * u, w = 560 * u, x = hud.w * 0.5f - w * 0.5f;
-    hud.rect(x - 12 * u, cy - rowH * 2.5f, w + 24 * u, rowH * 5, vec4(0, 0, 0, 0.45f));
+    themePanel(x - 12 * u, cy - rowH * 2.5f, w + 24 * u, rowH * 5, 1.f, true);
     if (!spinReel.empty()) {
         hud.clip(0, 0, 0);
         int first = int(spinPos) - 3;
@@ -639,8 +646,8 @@ void Game::drawWheelspin() {
     hud.rect(x + w + 12 * u, cy - rowH * 0.5f, 4 * u, rowH, F_PINK);
     hud.triangle(vec2(x - 30 * u, cy - 12 * u), vec2(x - 30 * u, cy + 12 * u), vec2(x - 18 * u, cy), F_PINK);
     hud.triangle(vec2(x + w + 30 * u, cy - 12 * u), vec2(x + w + 30 * u, cy + 12 * u), vec2(x + w + 18 * u, cy), F_PINK);
-    hud.rectV(x - 12 * u, cy - rowH * 2.5f, w + 24 * u, rowH * 1.2f, vec4(0.03f, 0.01f, 0.03f, 0.95f), vec4(0.03f, 0.01f, 0.03f, 0));
-    hud.rectV(x - 12 * u, cy + rowH * 1.3f, w + 24 * u, rowH * 1.2f, vec4(0.03f, 0.01f, 0.03f, 0), vec4(0.03f, 0.01f, 0.03f, 0.95f));
+    hud.rectV(x - 12 * u, cy - rowH * 2.5f + 4 * u, w + 24 * u, rowH * 1.2f, vec4(0.03f, 0.27f, 0.29f, 0.95f), vec4(0.03f, 0.27f, 0.29f, 0));
+    hud.rectV(x - 12 * u, cy + rowH * 1.3f, w + 24 * u, rowH * 1.2f, vec4(0.02f, 0.20f, 0.22f, 0), vec4(0.02f, 0.19f, 0.21f, 0.95f));
     if (spinReel.empty()) hud.text(hud.w * 0.5f, cy - 14 * u, 22 * u, wheelspins > 0 ? "Press ENTER to spin" : "Level up to earn wheelspins", F_WHITE, 1);
     // xp bar
     float bw = 420 * u, bx = hud.w * 0.5f - bw * 0.5f, by = hud.h - 110 * u;
@@ -648,7 +655,7 @@ void Game::drawWheelspin() {
     hud.text(bx + bw, by - 22 * u, 13 * u, fmtThousands(xp) + " / " + fmtThousands(xpToNext()) + " XP", F_DIM, 2, false);
     hud.rect(bx, by, bw, 8 * u, vec4(1, 1, 1, 0.12f));
     hud.rect(bx, by, bw * xp / float(xpToNext()), 8 * u, F_PINK);
-    hud.prompts(hud.w * 0.5f, hud.h - 38 * u, 14 * u, pad ? "(A) spin   (B) back" : "ENTER spin   ESC back", 1);
+    drawThemePrompts(pad ? "(A) spin   (B) back" : "ENTER spin   ESC back");
     if (spinT >= 4.2f && spinResult >= 0 && spinResult < int(spinReel.size())) {
         const SpinPrize& p = spinReel[spinResult];
         float a = clampf((spinT - 4.2f) * 3.f, 0.f, 1.f);
