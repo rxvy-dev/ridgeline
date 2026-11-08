@@ -175,7 +175,7 @@ void Game::drawCustomize() {
     float x0 = 48 * u;
     drawMenuHeader(x0, 30 * u, hud.w - 2 * x0, "CUSTOMIZE");
 
-    float pw = 470 * u, px = x0 - slide * 140 * u, py = 128 * u, rh = 56 * u;
+    float pw = 400 * u, px = x0 - slide * 140 * u, py = 128 * u, rh = 52 * u;
     themePanel(px - 10 * u, py - 10 * u, pw + 20 * u, CR_COUNT * rh + 14 * u, 1.f, true);
     int num = oc.number > 0 ? oc.number : 1 + (oc.spec * 37 + 11) % 98;
     for (int i = 0; i < CR_COUNT; i++) {
@@ -210,6 +210,74 @@ void Game::drawCustomize() {
             float nudge = std::sin(R.time * 6.f) * 2 * u;
             hud.text(ax - 34 * u - nudge, ry + 18 * u, 22 * u, "<", vec4(0.80f, 0.94f, 0.16f, 1), 1, false);
             hud.text(ax + nudge, ry + 18 * u, 22 * u, ">", vec4(0.80f, 0.94f, 0.16f, 1), 1, false);
+        }
+    }
+    // ---- the car's name, top right
+    {
+        const CarSpec& cs = kCars[oc.spec];
+        float cw = std::max(hud.textWidth(15 * u, cs.make), hud.textWidth(26 * u, cs.model)) + 44 * u;
+        float cx = hud.w - x0 - cw + slide * 140 * u, cy = 124 * u;
+        themePanel(cx, cy, cw, 76 * u, 1.f, true);
+        hud.text(cx + 22 * u, cy + 12 * u, 15 * u, cs.make, vec4(0.98f, 0.86f, 0.2f, 1), 0, false);
+        hud.text(cx + 22 * u, cy + 32 * u, 26 * u, cs.model, C_WHITE);
+    }
+    // ---- every choice for the selected row, laid out under the car so you can see what's next
+    {
+        std::vector<std::string> opts;
+        std::vector<vec3> sw;
+        int cur = 0;
+        auto names = [&](const char* const* arr, int n, int c) { for (int i = 0; i < n; i++) opts.push_back(arr[i]); cur = c; };
+        switch (custSel) {
+            case CR_PAINT: for (int i = 0; i < kPaintCount; i++) sw.push_back(kPaints[i]); cur = oc.paint; break;
+            case CR_LIVCOL: for (int i = 0; i < kPaintCount; i++) sw.push_back(kPaints[i]); cur = oc.livCol; break;
+            case CR_LIVERY: names(kLiveryNames, kLiveryCount, oc.livery); break;
+            case CR_TINT: names(kTintNames, kTintCount, oc.tint); break;
+            case CR_AERO: names(kAeroNames, kAeroCount, oc.aero); break;
+            case CR_RIDE: names(kRideNames, kRideCount, oc.ride); break;
+            case CR_CAMBER: names(kCamberNames, kCamberCount, oc.camber); break;
+            case CR_STRIPES: opts = {"None", "Fitted"}; cur = oc.stripes ? 1 : 0; break;
+            case CR_NUMBER: for (int k = -3; k <= 3; k++) opts.push_back("#" + std::to_string((num - 1 + k + 99) % 99 + 1)); cur = 3; break;
+        }
+        float sx0 = px + pw + 40 * u + slide * 200 * u, sx1 = hud.w - x0, sy = hud.h - 150 * u;
+        float sw0 = sx1 - sx0;
+        float ent = 1.f - std::min(1.f, (R.time - custStripT) * 5.f);
+        if (custStripRow != custSel) { custStripRow = custSel; custStripT = R.time; }
+        float rise = std::max(0.f, ent) * 16 * u;
+        themePanel(sx0, sy + rise, sw0, 88 * u, 1.f, true);
+        hud.text(sx0 + 18 * u, sy + rise + 10 * u, 12 * u, kRowNames[custSel], vec4(0.80f, 0.94f, 0.16f, 1), 0, false);
+        hud.text(sx1 - 18 * u, sy + rise + 10 * u, 12 * u, std::to_string(cur + 1) + " / " + std::to_string(std::max(opts.size(), sw.size())), vec4(0.8f, 0.92f, 0.9f, 1), 2, false);
+        float iy = sy + rise + 34 * u, ih = 40 * u;
+        if (!sw.empty()) {
+            float cell = std::min(40 * u, (sw0 - 36 * u) / sw.size());
+            for (int i = 0; i < int(sw.size()); i++) {
+                float qx = sx0 + 18 * u + i * cell;
+                bool on = i == cur;
+                if (on) hud.rect(qx - 3 * u, iy - 3 * u, cell - 2 * u, ih + 6 * u, vec4(0.80f, 0.94f, 0.16f, 1));
+                hud.rect(qx, iy, cell - 8 * u, ih, vec4(sw[i].x, sw[i].y, sw[i].z, 1));
+            }
+        } else {
+            // chips, scrolled so the current one is in view
+            std::vector<float> w(opts.size());
+            float total = 0;
+            for (size_t i = 0; i < opts.size(); i++) { w[i] = hud.textWidth(15 * u, opts[i]) + 30 * u; total += w[i] + 8 * u; }
+            float before = 0;
+            for (int i = 0; i < cur; i++) before += w[i] + 8 * u;
+            float avail = sw0 - 36 * u;
+            float off = total <= avail ? 0.f : clampf(before + w[cur] * 0.5f - avail * 0.5f, 0.f, total - avail);
+            float qx = sx0 + 18 * u - off;
+            for (size_t i = 0; i < opts.size(); i++) {
+                bool on = int(i) == cur;
+                if (qx >= sx0 + 16 * u && qx + w[i] <= sx1 - 16 * u) {
+                    float a = 1.f;
+                    hud.rect(qx, iy, w[i], ih, on ? vec4(0.97f, 0.97f, 0.96f, a) : vec4(0.01f, 0.12f, 0.13f, 0.6f * a));
+                    if (on) hud.rect(qx, iy + ih - 4 * u, w[i], 4 * u, vec4(0.80f, 0.94f, 0.16f, 1));
+                    hud.text(qx + w[i] * 0.5f, iy + 11 * u, 15 * u, opts[i], on ? vec4(0.08f, 0.08f, 0.08f, a) : vec4(1, 1, 1, 0.85f * a), 1, false);
+                }
+                qx += w[i] + 8 * u;
+            }
+            // more choices off either end
+            if (off > 1.f) hud.text(sx0 + 6 * u, iy + 9 * u, 18 * u, "<", vec4(0.80f, 0.94f, 0.16f, 1), 0, false);
+            if (total - off > avail + 1.f) hud.text(sx1 - 6 * u, iy + 9 * u, 18 * u, ">", vec4(0.80f, 0.94f, 0.16f, 1), 2, false);
         }
     }
     drawThemePrompts(pad ? "D-pad up/down choose   left/right change   (A) done   (B) back"

@@ -370,7 +370,12 @@ private:
     float drawThemeTabs(float x0, float y0, float W, const char* const* names, int count, int sel, float in);
     void drawThemePrompts(const std::string& spec, float x = -1.f);
     void themePanel(float x, float y, float w, float h, float a = 1.f, bool lit = false);  // festival teal card
+    void drawMenuToasts(float y);
     void themeRow(float x, float y, float w, float h, bool sel, float a = 1.f);         // list row with a sliding highlight
+    int custStripRow = -1;
+    float shoOff = 0;
+    float mapZoomTarget = 2.2f;  // world map zoom (Q/E)  // showroom camera's sideways framing
+    float custStripT = 0;
     bool titleMenu = false;   // title: false = attract screen, true = main menu tiles
     int titleSel = 0;
     float titleMenuT = 0;

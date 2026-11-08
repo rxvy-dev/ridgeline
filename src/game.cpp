@@ -1014,9 +1014,9 @@ void Game::handleEvent(const SDL_Event& e) {
             else if (k == SDLK_X) a = A_TOGGLE;
             else if ((k == SDLK_V || k == SDLK_DELETE) && !driving) a = A_SELL;
             else if (k == SDLK_P) a = A_PHOTO;
-            else if (k == SDLK_Q && state == ST_PAUSE) a = A_CAMERA;
+            else if (k == SDLK_Q && (state == ST_PAUSE || state == ST_MAP)) a = A_CAMERA;
             else if (k == SDLK_E && state == ST_MYEVENTS) a = A_INTERACT;
-            else if (k == SDLK_E && state == ST_PAUSE) a = A_UPGRADE;
+            else if (k == SDLK_E && (state == ST_PAUSE || state == ST_MAP)) a = A_UPGRADE;
             else if (k == SDLK_U && !driving) a = A_UPGRADE;
             else if (k == SDLK_H && state == ST_PHOTO) a = A_HIDE;
             else if (k == SDLK_G && (state == ST_FREEROAM || state == ST_SWITCH)) a = A_SWITCH;
@@ -1266,6 +1266,8 @@ void Game::handleAction(Action a) {
             int nh = int(world.estates.size());
             int n = ne + 1 + nh + int(world.landmarks.size());
             nav(subSel, n);
+            if (a == A_CAMERA) { mapZoomTarget = std::max(1.f, mapZoomTarget / 1.5f); audio.beep(700, 0.04f); break; }
+            if (a == A_UPGRADE) { mapZoomTarget = std::min(5.f, mapZoomTarget * 1.5f); audio.beep(900, 0.04f); break; }
             int home = subSel - ne - 1;
             int lmk = subSel - ne - 1 - nh;
             if (a == A_BACK || a == A_MAP || a == A_PAUSE) state = ST_FREEROAM;
@@ -1498,6 +1500,7 @@ void Game::update(float dt) {
     stateTime += dt;
     titleMenuT += dt;
     menuOpenT = ((state == ST_PAUSE || state == ST_SETTINGS) && lastState != state) ? 0.f : menuOpenT + dt;
+    if (state == ST_PAUSE && lastState != ST_PAUSE && (returnState == ST_RACE || returnState == ST_RACE_INTRO)) menuSel = 0;
     hintT = (state == ST_FREEROAM && lastState != ST_FREEROAM && lastState != ST_PAUSE) ? 0.f : hintT + dt;
     if (state != lastState) {
         // menu screens replay their entrance animations whenever they are opened
@@ -1855,7 +1858,7 @@ vec3 Game::showroomSpot() const {
 
 int Game::cameraContext() const {
     if (state == ST_TITLE) return 2;
-    if (state == ST_DEALER || state == ST_GARAGE || state == ST_CUSTOM) return 1;
+    if (state == ST_DEALER || state == ST_GARAGE || state == ST_CUSTOM || state == ST_UPGRADE) return 1;
     if (state == ST_RACE_INTRO && stateTime < 2.5f) return 3;
     if (state == ST_RESULTS) return 4;
     return 10 + (lookBack ? 9 : camMode);
@@ -1909,7 +1912,7 @@ void Game::updateCameraRaw(float dt) {
     cam.roll = 0;
     cam.aspect = float(pw) / float(ph);
     cam.nearZ = 0.25f;
-    bool showroom = state == ST_DEALER || state == ST_GARAGE || state == ST_CUSTOM;
+    bool showroom = state == ST_DEALER || state == ST_GARAGE || state == ST_CUSTOM || state == ST_UPGRADE;
     Racer& tr = state == ST_TITLE ? titleCar : player;
     Vehicle& car = tr.car;
     vec3 fwd = car.forward();
@@ -1924,6 +1927,15 @@ void Game::updateCameraRaw(float dt) {
         float hgt = 1.55f + 0.55f * std::sin(stateTime * 0.13f + 1.f);
         cam.pos = c + vec3(std::cos(a) * rad, hgt, std::sin(a) * rad);
         cam.target = c + vec3(0, 0.6f, 0);
+        if (state == ST_CUSTOM || state == ST_UPGRADE) {
+            // the list fills the left of the screen: look a little left of the car so it sits right of centre
+            vec3 d = normalize(vec3(cam.target.x - cam.pos.x, 0, cam.target.z - cam.pos.z));
+            vec3 left(d.z, 0, -d.x);
+            float sh = state == ST_UPGRADE ? 0.f : 1.7f;
+            shoOff += (sh - shoOff) * damp(4.f, dt);
+            cam.target = cam.target + left * shoOff;
+            cam.pos = cam.pos + left * (shoOff * 0.5f);
+        } else shoOff += (0.f - shoOff) * damp(4.f, dt);
         cam.fov = 0.80f + 0.03f * std::sin(stateTime * 0.17f);
         cam.update();
         return;
@@ -2737,7 +2749,7 @@ int Game::sellValue(const OwnedCar& oc) const {
 }
 
 void Game::render() {
-    bool showroom = state == ST_DEALER || state == ST_GARAGE || state == ST_CUSTOM;
+    bool showroom = state == ST_DEALER || state == ST_GARAGE || state == ST_CUSTOM || state == ST_UPGRADE;
     {
         // terrain streams in around the camera; after a jump (spawn, fast travel) load the view at once
         const float dists[] = {800.f, 1200.f, 1800.f, 2600.f};
@@ -3194,8 +3206,14 @@ void Game::drawHud() {
         hud.triangle(vec2(hud.w * 0.5f + 22 * u, hud.h * 0.4f - 18 * u), vec2(hud.w * 0.5f + 22 * u, hud.h * 0.4f + 18 * u), vec2(hud.w * 0.5f - 6 * u, hud.h * 0.4f), vec4(1, 1, 1, pulse));
         hud.text(hud.w * 0.5f, hud.h * 0.4f + 28 * u, 18 * u, "REWIND", WHITE, 1);
     }
-    // toasts
-    float ty = hud.h * 0.13f;
+    drawMenuToasts(hud.h * 0.13f);
+    drawSpeedo();
+    drawMinimap();
+}
+
+void Game::drawMenuToasts(float ty) {
+    // themed toasts: a teal pill that springs in with the toast's colour down the side and a timer
+    float u = hud.ui;
     for (auto& t : toasts) {
         float age = 3.f - t.t;
         float in = clampf(age / 0.3f, 0.f, 1.f);
@@ -3204,15 +3222,12 @@ void Game::drawHud() {
         float tw = hud.textWidth(20 * u, t.text) + 44 * u;
         float x = hud.w * 0.5f - tw * 0.5f, y = ty - (1.f - back) * 24 * u;
         hud.rect(x + 4 * u, y - 2 * u, tw, 36 * u, vec4(0, 0, 0, 0.2f * a));
-        hud.rectV(x, y - 6 * u, tw, 36 * u, vec4(0.04f, 0.31f, 0.33f, 0.92f * a), vec4(0.02f, 0.20f, 0.22f, 0.92f * a));
+        hud.rectV(x, y - 6 * u, tw, 36 * u, vec4(0.04f, 0.31f, 0.33f, 0.94f * a), vec4(0.02f, 0.20f, 0.22f, 0.94f * a));
         hud.rect(x, y - 6 * u, 6 * u, 36 * u, vec4(t.col.x, t.col.y, t.col.z, a));
         hud.rect(x, y + 27 * u, tw * clampf(t.t / 3.f, 0.f, 1.f), 3 * u, vec4(LIME.x, LIME.y, LIME.z, 0.8f * a));
-        vec4 col = vec4(1, 1, 1, a);
-        hud.text(hud.w * 0.5f + 2 * u, y, 20 * u, t.text, col, 1, false);
+        hud.text(hud.w * 0.5f + 2 * u, y, 20 * u, t.text, vec4(1, 1, 1, a), 1, false);
         ty += 44 * u;
     }
-    drawSpeedo();
-    drawMinimap();
 }
 
 void Game::drawRaceHud() {
@@ -3504,19 +3519,107 @@ void Game::drawPause() {
             }
         }
         drawThemePrompts(pad ? "LB/RB tabs   D-pad move   (A) select   (B) back" : "Q/E tabs   Arrows move   ENTER select   ESC back");
-        float tyy2 = hud.h * 0.8f;
-        for (auto& t : toasts) { hud.text(hud.w * 0.5f, tyy2, 20 * u, t.text, t.col, 1); tyy2 += 28 * u; }
+        if (!gTiles.empty()) {
+            // what the selected tile does, along the bottom right, sliding in when the selection changes
+            static const char* kWhat[MA_HOUSE + 1] = {
+                "Close the menu and carry on driving", "Every race, house and landmark - fast travel or set a GPS route",
+                "Spin the prize wheel for credits and cars", "Browse and buy new cars, delivered to your garage",
+                "Swap cars, sell, customise and upgrade the ones you own", "Fast travel straight to the next race you haven't won",
+                "Display, audio, driving assists and controls", "Save your progress and go back to the title screen", "Save and quit to the desktop",
+                "Paint, liveries, aero, ride height and more for this car", "Engine, weight and grip upgrades - watch the PI climb",
+                "Freeze time and frame the perfect shot", "Build your own race on any road and share it with a code",
+                "Race the events you've saved", "Paste a friend's share code to add their event", "Houses: fast travel points with a garage"};
+            int act = std::clamp(gTiles[std::clamp(menuSel, 0, int(gTiles.size()) - 1)].act, 0, int(MA_HOUSE));
+            static int lastAct = -1;
+            static float actT = 0;
+            if (act != lastAct) { lastAct = act; actT = R.time; }
+            float e = clampf((R.time - actT) / 0.25f, 0.f, 1.f);
+            e = 1.f - (1.f - e) * (1.f - e);
+            float dw = hud.textWidth(15 * u, kWhat[act]) + 40 * u;
+            float dx = hud.w - 64 * u - dw + (1.f - e) * 30 * u, dy = hud.h - 68 * u;
+            hud.rect(dx, dy, dw, 40 * u, vec4(0.02f, 0.18f, 0.2f, 0.6f * e));
+            hud.rect(dx, dy, 4 * u, 40 * u, vec4(LIME.x, LIME.y, LIME.z, e));
+            hud.text(dx + 20 * u, dy + 11 * u, 15 * u, kWhat[act], vec4(1, 1, 1, e), 0, false);
+        }
+        drawMenuToasts(hud.h * 0.72f);
         return;
     }
-    hud.rect(0, 0, hud.w, hud.h, vec4(0, 0, 0, 0.35f));
-    bool racing = returnState == ST_RACE || returnState == ST_RACE_INTRO;
-    drawMenuPanel(racing ? "PAUSED" : "FESTIVAL", pauseItems(racing), menuSel, 60 * u, 120 * u, 360 * u);
-    hud.rect(hud.w - 330 * u, 120 * u, 270 * u, 150 * u, PANEL);
-    hud.text(hud.w - 310 * u, 134 * u, 26 * u, "CR " + fmtThousands(credits), WHITE);
-    hud.text(hud.w - 310 * u, 172 * u, 15 * u, "Cars owned: " + std::to_string(garage.size()), DIM, 0, false);
-    hud.text(hud.w - 310 * u, 196 * u, 15 * u, "Race wins: " + std::to_string(racesWon), DIM, 0, false);
-    hud.text(hud.w - 310 * u, 220 * u, 15 * u, carName(*player.car.spec), DIM, 0, false);
-    hud.prompts(hud.w * 0.5f, hud.h - 40 * u, 14 * u, pad ? "(A) select   (B) back" : "ENTER select   ESC back", 1);
+    // ---- paused mid-race: the frozen race stays visible behind a teal wash
+    float open = smoothstepf(0.f, 1.f, clampf(menuOpenT / 0.3f, 0.f, 1.f));
+    hud.rectH(0, 0, hud.w, hud.h, vec4(0.02f, 0.20f, 0.22f, 0.86f * open), vec4(0.02f, 0.20f, 0.22f, 0.45f * open));
+    drawPetals(0.5f * open, R.time);
+    const EventDef& E = events[raceEvent];
+    vec4 ec = eventColor(E.type);
+    float x0 = 64 * u;
+    // event title on a slanted black tab, with the type and distance under it
+    {
+        float ty = 48 * u - (1.f - open) * 30 * u;
+        float tw = hud.textWidth(30 * u, E.name) + 60 * u;
+        hud.quad(vec2(x0 + 16 * u, ty), vec2(x0 + tw + 16 * u, ty), vec2(x0 + tw, ty + 52 * u), vec2(x0, ty + 52 * u), vec4(0.04f, 0.04f, 0.04f, 0.95f * open));
+        hud.text(x0 + 8 * u + tw * 0.5f, ty + 9 * u, 30 * u, E.name, vec4(1, 1, 1, open), 1, false);
+        hud.rect(x0 + 4 * u, ty + 48 * u, (tw - 8 * u) * open, 4 * u, vec4(ec.x, ec.y, ec.z, open));
+        char buf[128];
+        std::snprintf(buf, sizeof(buf), "%s   |   %.1f km   |   %s", eventTypeName(E.type), E.totalLength() / 1000.f,
+                      E.route.closed ? (std::to_string(E.laps) + (E.laps > 1 ? " LAPS" : " LAP")).c_str() : "POINT TO POINT");
+        hud.text(x0 + 4 * u, ty + 64 * u, 15 * u, buf, vec4(0.85f, 0.95f, 0.93f, open), 0, false);
+        hud.text(hud.w - x0, ty + 6 * u, 40 * u, "PAUSED", vec4(1, 1, 1, 0.9f * open), 2, false);
+    }
+    // the choices: big slanted bars that slide in one after another
+    auto items = pauseItems(true);
+    float ly = 190 * u, lh = 64 * u, lw = std::min(520 * u, hud.w * 0.42f);
+    for (int i = 0; i < int(items.size()); i++) {
+        float it = clampf((menuOpenT - 0.05f - i * 0.05f) / 0.25f, 0.f, 1.f), ie = 1.f - (1.f - it) * (1.f - it) * (1.f - it);
+        bool on = i == menuSel;
+        float yy = ly + i * (lh + 10 * u), xx = x0 - (1.f - ie) * 120 * u + (on ? 14 * u : 0.f), sl = 16 * u;
+        vec4 bg = on ? vec4(0.97f, 0.97f, 0.96f, ie) : vec4(0.03f, 0.27f, 0.29f, 0.92f * ie);
+        hud.quad(vec2(xx + sl + 6 * u, yy + 7 * u), vec2(xx + lw + sl + 6 * u, yy + 7 * u), vec2(xx + lw + 6 * u, yy + lh + 7 * u), vec2(xx + 6 * u, yy + lh + 7 * u), vec4(0, 0, 0, 0.25f * ie));
+        hud.quad(vec2(xx + sl, yy), vec2(xx + lw + sl, yy), vec2(xx + lw, yy + lh), vec2(xx, yy + lh), bg);
+        if (on) {
+            hud.quad(vec2(xx + sl, yy), vec2(xx + sl + 10 * u, yy), vec2(xx + 10 * u, yy + lh), vec2(xx, yy + lh), LIME);
+            float gt = std::fmod(R.time * 0.5f, 1.f);
+            if (gt < 0.35f) {
+                float gx = xx + (lw + 80 * u) * (gt / 0.35f) - 40 * u;
+                float g0 = std::max(xx + 20 * u, gx), g1 = std::min(xx + lw - 10 * u, gx + 34 * u);
+                if (g1 > g0) hud.quad(vec2(g0 + sl, yy), vec2(g1 + sl, yy), vec2(g1, yy + lh), vec2(g0, yy + lh), vec4(0.80f, 0.94f, 0.16f, 0.25f));
+            }
+        }
+        hud.text(xx + 36 * u, yy + 16 * u, 28 * u, items[i], on ? vec4(0.06f, 0.06f, 0.06f, ie) : vec4(1, 1, 1, ie), 0, false);
+    }
+    // the race so far, on the right
+    {
+        float pw = 330 * u, px = hud.w - x0 - pw + (1.f - open) * 80 * u, py = 190 * u;
+        std::vector<Racer*> order = racers;
+        std::sort(order.begin(), order.end(), [](Racer* a, Racer* b) {
+            if (a->finished != b->finished) return a->finished;
+            if (a->finished) return a->finishTime < b->finishTime;
+            return a->progress > b->progress;
+        });
+        float ph = 132 * u + order.size() * 30 * u;
+        themePanel(px, py, pw, ph, open, true);
+        if (E.type == EV_DRIFT) {
+            hud.text(px + 22 * u, py + 18 * u, 12 * u, "DRIFT SCORE", vec4(0.8f, 0.92f, 0.9f, open), 0, false);
+            hud.text(px + 22 * u, py + 34 * u, 40 * u, fmtThousands(int(driftTotal)), vec4(1, 1, 1, open));
+        } else {
+            hud.text(px + 22 * u, py + 18 * u, 12 * u, "POSITION", vec4(0.8f, 0.92f, 0.9f, open), 0, false);
+            hud.text(px + 22 * u, py + 30 * u, 52 * u, ordinal(playerPlace), playerPlace == 1 ? vec4(LIME.x, LIME.y, LIME.z, open) : vec4(1, 1, 1, open));
+        }
+        hud.text(px + pw - 22 * u, py + 18 * u, 12 * u, "TIME", vec4(0.8f, 0.92f, 0.9f, open), 2, false);
+        hud.text(px + pw - 22 * u, py + 34 * u, 22 * u, fmtTime(raceTime), vec4(1, 1, 1, open), 2, false);
+        if (E.route.closed) {
+            int lap = std::clamp(player.lap + 1, 1, E.laps);
+            hud.text(px + pw - 22 * u, py + 66 * u, 16 * u, "LAP " + std::to_string(lap) + " / " + std::to_string(E.laps), vec4(LIME.x, LIME.y, LIME.z, open), 2, false);
+        }
+        for (size_t i = 0; i < order.size(); i++) {
+            float ry = py + 118 * u + i * 30 * u;
+            bool me = order[i]->isPlayer;
+            if (me) { hud.rect(px + 10 * u, ry - 4 * u, pw - 20 * u, 28 * u, vec4(0.97f, 0.97f, 0.96f, 0.95f * open)); hud.rect(px + 10 * u, ry - 4 * u, 5 * u, 28 * u, vec4(LIME.x, LIME.y, LIME.z, open)); }
+            vec4 tc = me ? vec4(0.08f, 0.08f, 0.08f, open) : vec4(1, 1, 1, open);
+            hud.text(px + 26 * u, ry, 16 * u, std::to_string(i + 1), tc, 0, false);
+            hud.textFit(px + 54 * u, ry, 16 * u, order[i]->name, tc, 0, pw - 170 * u);
+            hud.textFit(px + pw - 22 * u, ry + 2 * u, 13 * u, carName(*order[i]->car.spec), me ? vec4(0.25f, 0.3f, 0.3f, open) : vec4(0.8f, 0.92f, 0.9f, open), 2, 110 * u);
+        }
+    }
+    drawThemePrompts(pad ? "D-pad choose   (A) select   (B) resume" : "UP/DOWN choose   ENTER select   ESC resume");
 }
 
 void Game::drawMap() {
@@ -3524,31 +3627,66 @@ void Game::drawMap() {
     drawThemeBackdrop(0.97f);
     float S = std::min(hud.h - 120 * u, hud.w * 0.58f);
     float mx = 50 * u, my = (hud.h - S) * 0.5f;
+    // ---- the view glides and zooms to whatever is picked in the list
+    static vec2 vf(0.5f, 0.5f);
+    static float vz = 1.f;
+    {
+        vec3 fw = player.car.pos;
+        int ne = int(events.size()), nh = int(world.estates.size());
+        if (subSel < ne) fw = events[subSel].markerPos;
+        else if (subSel == ne) fw = world.hubPos;
+        else if (subSel <= ne + nh) fw = world.estates[subSel - ne - 1].pos;
+        else if (subSel - ne - 1 - nh < int(world.landmarks.size())) fw = world.landmarks[subSel - ne - 1 - nh].pos;
+        vec2 tf((fw.x + World::HALF) / (2 * World::HALF), (World::HALF - fw.z) / (2 * World::HALF));
+        if (stateTime < 0.05f) { vf = vec2(0.5f, 0.5f); vz = 1.f; }
+        float k = stateTime < 0.25f ? 0.f : 0.12f;  // a beat of the whole island first, then zoom in
+        vz += (mapZoomTarget - vz) * k;
+        vf = vf + (tf - vf) * k;
+        float hlf = 0.5f / vz;
+        vf.x = clampf(vf.x, hlf, 1.f - hlf);
+        vf.y = clampf(vf.y, hlf, 1.f - hlf);
+    }
     vec2 p[4] = {{mx, my}, {mx + S, my}, {mx + S, my + S}, {mx, my + S}};
-    vec2 uv[4] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+    float hv = 0.5f / vz;
+    vec2 uv[4] = {{vf.x - hv, vf.y - hv}, {vf.x + hv, vf.y - hv}, {vf.x + hv, vf.y + hv}, {vf.x - hv, vf.y + hv}};
+    auto inside = [&](vec2 q, float m) { return q.x > mx + m && q.x < mx + S - m && q.y > my + m && q.y < my + S - m; };
+    auto cline = [&](vec2 a2, vec2 b2, float th, vec4 col) {  // a line clipped to the map square
+        float t0 = 0, t1 = 1;
+        vec2 dd = b2 - a2;
+        float pp[4] = {-dd.x, dd.x, -dd.y, dd.y}, qq[4] = {a2.x - mx, mx + S - a2.x, a2.y - my, my + S - a2.y};
+        for (int k = 0; k < 4; k++) {
+            if (std::fabs(pp[k]) < 1e-6f) { if (qq[k] < 0) return; continue; }
+            float r2 = qq[k] / pp[k];
+            if (pp[k] < 0) t0 = std::max(t0, r2); else t1 = std::min(t1, r2);
+            if (t0 > t1) return;
+        }
+        hud.line(a2 + dd * t0, a2 + dd * t1, th, col);
+    };
     hud.rect(mx + 8 * u, my + 10 * u, S, S, vec4(0, 0, 0, 0.5f));
     hud.mapQuad(p, uv, vec4(0.82f, 0.84f, 0.84f, 1));
     hud.rectV(mx, my, S, S * 0.25f, vec4(0, 0, 0, 0.25f), vec4(0, 0, 0, 0));
     {
-        auto toM = [&](vec3 w) { return vec2(mx + (w.x + World::HALF) / (2 * World::HALF) * S, my + (World::HALF - w.z) / (2 * World::HALF) * S); };
+        auto toM = [&](vec3 w) { return vec2(mx + S * (0.5f + ((w.x + World::HALF) / (2 * World::HALF) - vf.x) * vz), my + S * (0.5f + ((World::HALF - w.z) / (2 * World::HALF) - vf.y) * vz)); };
         for (const Road& rd : world.roads) {
             bool dirt = rd.surface != SURF_ASPHALT;
             for (size_t k = 3; k < rd.pts.size() + (rd.closed ? 3 : 0); k += 3) {
                 vec2 a2 = toM(rd.pts[k - 3]), b2 = toM(rd.pts[std::min(k, rd.pts.size() - 1) % rd.pts.size()]);
                 if (rd.closed && k >= rd.pts.size()) b2 = toM(rd.pts[0]);
-                hud.line(a2, b2, (dirt ? 4.f : 6.f) * u, vec4(0, 0, 0, 0.35f));
-                hud.line(a2, b2, (dirt ? 2.f : 3.2f) * u, dirt ? vec4(0.92f, 0.82f, 0.62f, 0.9f) : vec4(1, 1, 1, 0.95f));
+                float zw = std::sqrt(vz);
+                cline(a2, b2, (dirt ? 4.f : 6.f) * u * zw, vec4(0, 0, 0, 0.35f));
+                cline(a2, b2, (dirt ? 2.f : 3.2f) * u * zw, dirt ? vec4(0.92f, 0.82f, 0.62f, 0.9f) : vec4(1, 1, 1, 0.95f));
             }
         }
     }
-    auto toMap = [&](vec3 w) { return vec2(mx + (w.x + World::HALF) / (2 * World::HALF) * S, my + (World::HALF - w.z) / (2 * World::HALF) * S); };
+    auto toMap = [&](vec3 w) { return vec2(mx + S * (0.5f + ((w.x + World::HALF) / (2 * World::HALF) - vf.x) * vz), my + S * (0.5f + ((World::HALF - w.z) / (2 * World::HALF) - vf.y) * vz)); };
     // the sakura canal: a long ribbon of water with its stone banks, and its name
     if (world.canalPath.size() > 1) {
         const auto& cp = world.canalPath;
-        for (size_t k = 1; k < cp.size(); k++) hud.line(toMap(cp[k - 1]), toMap(cp[k]), 9.f * u, vec4(0.78f, 0.76f, 0.70f, 0.95f));
-        for (size_t k = 1; k < cp.size(); k++) hud.line(toMap(cp[k - 1]), toMap(cp[k]), 5.f * u, vec4(0.25f, 0.55f, 0.75f, 1.f));
+        float zw = std::sqrt(vz);
+        for (size_t k = 1; k < cp.size(); k++) cline(toMap(cp[k - 1]), toMap(cp[k]), 9.f * u * zw, vec4(0.78f, 0.76f, 0.70f, 0.95f));
+        for (size_t k = 1; k < cp.size(); k++) cline(toMap(cp[k - 1]), toMap(cp[k]), 5.f * u * zw, vec4(0.25f, 0.55f, 0.75f, 1.f));
         vec2 lab = toMap(cp[cp.size() / 2]);
-        hud.text(lab.x, lab.y + 8 * u, 13 * u, "Sakura Canal", vec4(0.75f, 0.9f, 1.f, 0.95f), 1, false);
+        if (inside(lab, 50 * u)) hud.text(lab.x, lab.y + 8 * u, 13 * u, "Sakura Canal", vec4(0.75f, 0.9f, 1.f, 0.95f), 1, false);
     }
     // landmarks: a small gold diamond and the name (bigger when picked in the list)
     std::vector<vec4> labelRects;
@@ -3560,6 +3698,7 @@ void Game::drawMap() {
     for (int li = 0; li < int(world.landmarks.size()); li++) {
         const auto& lm = world.landmarks[li];
         vec2 q = toMap(lm.pos);
+        if (!inside(q, 4 * u)) continue;
         bool lsel = subSel == int(events.size()) + 1 + int(world.estates.size()) + li;
         float d = (lsel ? 9.f : 5.f) * u;
         hud.triangle(q + vec2(0, -d - u), q + vec2(d + u, 0), q + vec2(-d - u, 0), vec4(0, 0, 0, 0.8f));
@@ -3586,21 +3725,31 @@ void Game::drawMap() {
             placed = true;
         }
     }
-    for (size_t i = 1; i < gps.path.size(); i++) hud.line(toMap(gps.path[i - 1]), toMap(gps.path[i]), 4 * u, vec4(0.78f, 0.38f, 1.f, 0.95f));
+    for (size_t i = 1; i < gps.path.size(); i++) cline(toMap(gps.path[i - 1]), toMap(gps.path[i]), 4 * u, vec4(0.78f, 0.38f, 1.f, 0.95f));
     for (int i = 0; i < int(events.size()); i++) {
         vec2 q = toMap(events[i].markerPos);
+        if (!inside(q, 6 * u)) continue;
         bool sel = i == subSel;
         hud.circle(q, (sel ? 11 : 8) * u, vec4(0.05f, 0.05f, 0.05f, 1), 14);
         hud.circle(q, (sel ? 9 : 6) * u, eventColor(events[i].type), 14);
-        if (sel) hud.text(q.x + 14 * u, q.y - 10 * u, 16 * u, events[i].name, WHITE);
+        if (sel) {   // the picked race's name on a black tag
+            float nw = hud.textWidth(16 * u, events[i].name) + 20 * u;
+            float nx = std::min(q.x + 14 * u, mx + S - nw - 4 * u);
+            hud.rect(nx, q.y - 34 * u, nw, 26 * u, vec4(0.04f, 0.04f, 0.04f, 0.9f));
+            hud.rect(nx, q.y - 10 * u, nw, 3 * u, eventColor(events[i].type));
+            hud.text(nx + 10 * u, q.y - 30 * u, 16 * u, events[i].name, WHITE, 0, false);
+        }
     }
     vec2 hq = toMap(world.hubPos);
-    hud.circle(hq, 10 * u, vec4(0.05f, 0.05f, 0.05f, 1), 14);
-    hud.circle(hq, 8 * u, vec4(1.f, 0.25f, 0.55f, 1), 14);
-    if (subSel == int(events.size())) hud.text(hq.x + 14 * u, hq.y - 10 * u, 16 * u, "Festival Hub", WHITE);
+    if (inside(hq, 8 * u)) {
+        hud.circle(hq, 10 * u, vec4(0.05f, 0.05f, 0.05f, 1), 14);
+        hud.circle(hq, 8 * u, vec4(1.f, 0.25f, 0.55f, 1), 14);
+        if (subSel == int(events.size())) hud.text(hq.x + 14 * u, hq.y - 10 * u, 16 * u, "Festival Hub", WHITE);
+    }
     const vec4 homeCol(0.35f, 0.85f, 1.f, 1), saleCol(1.f, 0.78f, 0.25f, 1);
     for (int i = 0; i < int(world.estates.size()); i++) {
         vec2 q = toMap(world.estates[i].pos);
+        if (!inside(q, 10 * u)) continue;
         bool sel = subSel == int(events.size()) + 1 + i;
         float s = (sel ? 10.f : 8.f) * u;
         vec4 c = ownsEstate(i) ? homeCol : saleCol;
@@ -3640,8 +3789,19 @@ void Game::drawMap() {
     vec2 pp = toMap(player.car.pos);
     vec2 f(std::sin(player.car.yaw), -std::cos(player.car.yaw));
     vec2 r(-f.y, f.x);
-    hud.triangle(pp + f * (11 * u), pp - f * (7 * u) + r * (7 * u), pp - f * (7 * u) - r * (7 * u), vec4(0, 0, 0, 1));
-    hud.triangle(pp + f * (9 * u), pp - f * (5 * u) + r * (5 * u), pp - f * (5 * u) - r * (5 * u), WHITE);
+    if (inside(pp, 10 * u)) {
+        float ping = std::fmod(R.time, 1.6f) / 1.6f;
+        hud.arc(pp, 8 * u + ping * 20 * u, 10 * u + ping * 20 * u, 0, 2 * PI, vec4(1, 1, 1, (1.f - ping) * 0.7f), 32);
+        hud.triangle(pp + f * (11 * u), pp - f * (7 * u) + r * (7 * u), pp - f * (7 * u) - r * (7 * u), vec4(0, 0, 0, 1));
+        hud.triangle(pp + f * (9 * u), pp - f * (5 * u) + r * (5 * u), pp - f * (5 * u) - r * (5 * u), WHITE);
+    }
+    {   // zoom chip
+        char zb[24];
+        std::snprintf(zb, sizeof(zb), "ZOOM %.1fx", vz);
+        float zw2 = hud.textWidth(12 * u, zb) + 20 * u;
+        hud.rect(mx + S - zw2 - 10 * u, my + 10 * u, zw2, 22 * u, vec4(0.04f, 0.04f, 0.04f, 0.8f));
+        hud.text(mx + S - zw2 * 0.5f - 10 * u, my + 14 * u, 12 * u, zb, vec4(LIME.x, LIME.y, LIME.z, 1), 1, false);
+    }
     // list
     float lx = mx + S + 40 * u, lw = hud.w - lx - 40 * u;
     float lt = clampf(stateTime / 0.35f, 0.f, 1.f), lin = 1.f - (1.f - lt) * (1.f - lt) * (1.f - lt);
@@ -3705,7 +3865,7 @@ void Game::drawMap() {
         hud.text(lx, iy, 15 * u, ownsEstate(h) ? "YOUR HOUSE  |  fast travel & garage" : "FOR SALE  |  CR " + fmtThousands(world.estates[h].price), ownsEstate(h) ? homeCol : saleCol, 0, false);
         hud.textFit(lx, iy + 24 * u, 15 * u, world.estateBlurb(h), vec4(0.8f, 0.92f, 0.9f, 1), 0, lw - 10 * u);
     }
-    drawThemePrompts(pad ? "(A) fast travel   (X) set GPS route   (B) close" : "ENTER fast travel   X set GPS route   ESC close", lx);
+    drawThemePrompts(pad ? "(A) travel   (X) GPS   LB/RB zoom   (B) close" : "ENTER travel   X GPS   Q/E zoom   ESC close", lx);
 }
 
 void Game::drawCarCards(bool garageMode, float y, float h) {
@@ -3884,8 +4044,7 @@ void Game::drawDealer(bool garageMode) {
                                : "LEFT/RIGHT car   UP/DOWN paint   ENTER drive   C customize   U upgrade   V sell   ESC back";
     else hint = pad ? "LEFT/RIGHT car   UP/DOWN paint   (A) buy   (B) back" : "LEFT/RIGHT car   UP/DOWN paint   ENTER buy   ESC back";
     drawThemePrompts(hint);
-    float ty = hud.h * 0.42f;
-    for (auto& t : toasts) { hud.text(hud.w * 0.5f, ty, 22 * u, t.text, t.col, 1); ty += 30 * u; }
+    drawMenuToasts(hud.h * 0.42f);
     if (!garageMode) drawCheatBox();
     drawPopup();
 }
@@ -4023,10 +4182,10 @@ void Game::drawTransition() {
     t = t < 0.5f ? 4.f * t * t * t : 1.f - std::pow(-2.f * t + 2.f, 3.f) / 2.f;
     float sl = hud.h * 0.35f, band = 26 * u;
     float e = -sl + (hud.w + sl * 2.f + band * 3.f) * t;  // reveal edge, top
-    hud.quad(vec2(e, 0), vec2(hud.w + sl + 4, 0), vec2(hud.w + sl + 4, hud.h), vec2(e - sl, hud.h), vec4(0.03f, 0.03f, 0.05f, 1));
-    hud.quad(vec2(e - band, 0), vec2(e, 0), vec2(e - sl, hud.h), vec2(e - sl - band, hud.h), ACCENT);
+    hud.quad(vec2(e, 0), vec2(hud.w + sl + 4, 0), vec2(hud.w + sl + 4, hud.h), vec2(e - sl, hud.h), vec4(0.03f, 0.27f, 0.29f, 1));
+    hud.quad(vec2(e - band, 0), vec2(e, 0), vec2(e - sl, hud.h), vec2(e - sl - band, hud.h), LIME);
     hud.quad(vec2(e - band * 2.6f, 0), vec2(e - band * 1.8f, 0), vec2(e - sl - band * 1.8f, hud.h), vec2(e - sl - band * 2.6f, hud.h),
-             vec4(1.f, 0.47f, 0.1f, 0.9f));
+             vec4(0.96f, 0.10f, 0.50f, 0.95f));
     if (t < 0.35f && logoTex) drawLogo(e + 80 * u, hud.h * 0.5f - 40 * u, 260 * u, 1.f - t / 0.35f);
 }
 

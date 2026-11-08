@@ -223,8 +223,7 @@ void Game::drawEventLab() {
         hud.text(mx, iy, 16 * u, "Route too short from here - move the start or shorten it", vec4(1, 0.45f, 0.4f, 1), 0, false);
     }
     drawThemePrompts(pad ? "D-pad up/down choose   left/right change   (A) select   (B) back" : "UP/DOWN choose   LEFT/RIGHT change   ENTER select   ESC back");
-    float ty = hud.h * 0.78f;
-    for (auto& t : toasts) { hud.text(hud.w * 0.5f, ty, 18 * u, t.text, t.col, 1); ty += 26 * u; }
+    drawMenuToasts(hud.h * 0.74f);
 }
 
 // ---------------------------------------------------------------- My Events
@@ -300,6 +299,5 @@ void Game::drawMyEvents() {
         hud.textFit(mx, py + S + 38 * u, 14 * u, selEv->blurb, L_DIM, 0, S, false);
     }
     drawThemePrompts(pad ? "(A) race   (X) copy code   (Y) edit   LB delete   (B) back" : "ENTER race   X copy share code   E edit   V delete   ESC back");
-    float ty = hud.h * 0.8f;
-    for (auto& t : toasts) { hud.text(hud.w * 0.5f, ty, 18 * u, t.text, t.col, 1); ty += 26 * u; }
+    drawMenuToasts(hud.h * 0.74f);
 }
