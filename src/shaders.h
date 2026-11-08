@@ -405,7 +405,7 @@ void main(){
     // landform from the height field: gullies (concave) collect water and loose stones,
     // ridges and spurs (convex) are bare and lighter
     vec2 huv = (p.xz + uHalf) / (2.0 * uHalf);
-    float tx = 1.0 / 3200.0;
+    float tx = 1.0 / 4480.0;  // one height texel (World::N - 1)
     float h0 = texture(tHeight, huv).r;
     float lap = texture(tHeight, huv + vec2(tx * 3.0, 0)).r + texture(tHeight, huv - vec2(tx * 3.0, 0)).r
               + texture(tHeight, huv + vec2(0, tx * 3.0)).r + texture(tHeight, huv - vec2(0, tx * 3.0)).r - 4.0 * h0;

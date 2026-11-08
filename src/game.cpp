@@ -607,6 +607,7 @@ void Game::setupTitle() {
 
 void Game::shutdown() {
     if (opt.scene.empty()) save();
+    world.stopStreaming();
     audio.shutdown();
     if (pad) SDL_CloseGamepad(pad);
     if (ctx) SDL_GL_DestroyContext(ctx);
@@ -2339,15 +2340,16 @@ void Game::renderWorld(const Camera& c, bool showroom) {
     for (auto& ch : world.chunks) {
         // chunks are 300 m across: judge them by their nearest point and their corners, not the centre,
         // or the ground right under a camera looking down can belong to a chunk "behind" it and vanish
-        float nx = clampf(c.pos.x, ch.mesh.bmin.x, ch.mesh.bmax.x) - c.pos.x;
-        float nz = clampf(c.pos.z, ch.mesh.bmin.z, ch.mesh.bmax.z) - c.pos.z;
+        if (ch.state != 2) continue;
+        float nx = clampf(c.pos.x, ch.bmin.x, ch.bmax.x) - c.pos.x;
+        float nz = clampf(c.pos.z, ch.bmin.z, ch.bmax.z) - c.pos.z;
         float d2 = nx * nx + nz * nz;
         float lim = drawDist + 110.f;
         if (d2 > lim * lim) continue;
         if (d2 > 120.f * 120.f) {
             bool behind = true;
             for (int k = 0; k < 4 && behind; k++) {
-                vec3 q((k & 1) ? ch.mesh.bmax.x : ch.mesh.bmin.x, 0, (k & 2) ? ch.mesh.bmax.z : ch.mesh.bmin.z);
+                vec3 q((k & 1) ? ch.bmax.x : ch.bmin.x, 0, (k & 2) ? ch.bmax.z : ch.bmin.z);
                 vec3 dq(q.x - c.pos.x, 0, q.z - c.pos.z);
                 if (dot(normalize(dq), camFwd) > -0.35f) behind = false;
             }
@@ -2690,6 +2692,16 @@ int Game::sellValue(const OwnedCar& oc) const {
 
 void Game::render() {
     bool showroom = state == ST_DEALER || state == ST_GARAGE || state == ST_CUSTOM;
+    {
+        // terrain streams in around the camera; after a jump (spawn, fast travel) load the view at once
+        const float dists[] = {800.f, 1200.f, 1800.f, 2600.f};
+        float keep = dists[settings.drawDist] + 250.f;
+        vec3 cp = cam.pos;
+        bool jumped = length(vec3(cp.x - lastStreamPos.x, 0, cp.z - lastStreamPos.z)) > 300.f;
+        world.loadChunksNow(cp, jumped ? keep : 450.f);
+        world.streamChunks(cp, keep, 3);
+        lastStreamPos = cp;
+    }
     if (state == ST_PAUSE && !menuThumbsBuilt) buildMenuThumbs();
     if (state == ST_DEALER || state == ST_GARAGE || state == ST_CUSTOM) {
         // render missing car cards: all at once for screenshots, otherwise one per frame

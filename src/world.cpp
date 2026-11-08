@@ -3,6 +3,11 @@
 #include <SDL3/SDL.h>
 #include <algorithm>
 #include <cstring>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <deque>
+#include <array>
 
 // ---------------------------------------------------------------- helpers
 static vec3 catmull(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float t) {
@@ -102,9 +107,16 @@ float World::baseHeight(float x, float z) const {
     bool quay = x > kDocks.x0 && x < kDocks.x1;
     float seaS = quay ? smoothstepf(kDocks.z0 - 2.f, kDocks.z0 - 22.f, z) : smoothstepf(-2330.f, -2620.f, z);
     float seaE = smoothstepf(2830.f, 2960.f, x);
-    float seaW = smoothstepf(-3480.f, -3650.f, x);  // the Sea of Japan along the west coast
+    float seaW = smoothstepf(-5080.f, -5250.f, x);  // the Sea of Japan along the west coast
     float sea = std::max(std::max(seaS, seaE), seaW);
     h = lerpf(h, waterLevel - 16.f, sea);
+    // the Five Lakes lie in broad basins among the northern mountains
+    for (const Lake& L : lakes) {
+        if (L.seed < 10.f) continue;
+        float dl = std::hypot(x - L.c.x, z - L.c.z);
+        float k = 1.f - smoothstepf(L.r * 1.25f, L.r * 3.4f, dl);
+        if (k > 0) h = lerpf(h, waterLevel + 7.f + fbm(x / 260.f, z / 260.f, 2, 91) * 6.f, k);
+    }
     // lake bowls with irregular shorelines
     for (const Lake& L : lakes) {
         float dx = x - L.c.x, dz = z - L.c.z;
@@ -515,7 +527,8 @@ void World::scatter(uint32_t seed) {
 
     // ---- roadside props: marker posts and guardrails (built straight into a static mesh)
     // (props already holds the towns from buildJapan: keep adding to it)
-    vec4 white(0.92f, 0.92f, 0.88f, 0), red(0.9f, 0.18f, 0.08f, 3), wood(0.30f, 0.24f, 0.18f, 0), steel(1, 1, 1, 7);
+    // Japanese guardrails are painted white, rails and posts alike
+    vec4 white(0.92f, 0.92f, 0.88f, 0), red(0.9f, 0.18f, 0.08f, 3), wood(0.88f, 0.88f, 0.86f, 21), steel(0.93f, 0.93f, 0.91f, 21);
     int railSegs = 0;
     for (int ri = 0; ri < int(roads.size()); ri++) {
         const Road& r = roads[ri];
@@ -742,8 +755,55 @@ void World::generate(uint32_t seed) {
         // Sea of Japan Road: up the west coast from the Wangan Highway to the Skyline
         vec3 a = snapTo("Wangan Highway", vec3(-2480, 0, -800));
         vec3 b = snapTo("Fuji Skyline", kFuji + vec3(-1100, 0, 0));
-        addRoad("Sea of Japan Road", {a, a + vec3(-80, 0, 40), vec3(-3050, 0, -560), vec3(-3330, 0, 0), vec3(-3360, 0, 800), vec3(-3320, 0, 1600),
-                                      vec3(-3200, 0, 2300), vec3(-2900, 0, 2780), b + vec3(-60, 0, -60), b}, false, 13.f, SURF_ASPHALT);
+        addRoad("Sea of Japan Road", {a, a + vec3(-80, 0, 40), vec3(-3300, 0, -760), vec3(-4300, 0, -620), vec3(-4900, 0, -150), vec3(-4960, 0, 700),
+                                      vec3(-4950, 0, 1600), vec3(-4820, 0, 2400), vec3(-4400, 0, 3000), vec3(-3500, 0, 3200), b + vec3(-60, 0, -60), b}, false, 13.f, SURF_ASPHALT);
+    }
+    // ---- the new west and north (2026-11): canal roads, the lakeshore, the Five Lakes, tea country
+    {
+        // Canal Road North / South: either bank of the canal that runs from the coast road to the lake
+        std::vector<vec3> cl = {vec3(-4870, 0, 1120), vec3(-4300, 0, 1060), vec3(-3700, 0, 1010), vec3(-3100, 0, 960), vec3(-2600, 0, 920), vec3(-2330, 0, 905)};
+        cl.front() = snapTo("Sea of Japan Road", cl.front());
+        cl.front().x += 30.f;
+        for (int sgi = 0; sgi < 2; sgi++) {
+            std::vector<vec3> pts;
+            for (size_t k = 0; k < cl.size(); k++) {
+                vec3 d = cl[std::min(k + 1, cl.size() - 1)] - cl[k > 0 ? k - 1 : 0];
+                d.y = 0;
+                d = normalize(d);
+                vec3 nrm(-d.z, 0, d.x);
+                pts.push_back(cl[k] + nrm * (sgi ? -14.f : 14.f));
+            }
+            pts.front() = snapTo("Sea of Japan Road", pts.front());
+            addRoad(sgi ? "Canal Road South" : "Canal Road North", pts, false, 8.f, SURF_ASPHALT);
+        }
+    }
+    {
+        // Lakeshore Road: from the canal mouth round the lake's west and north shores to the Fuji Road
+        vec3 lc(-1950, 0, 900);
+        vec3 a = snapTo("Canal Road South", vec3(-2340, 0, 885));
+        vec3 b = snapTo("Fuji Road", vec3(-1560, 0, 1180));
+        std::vector<vec3> pts = {a};
+        for (float ang : {190.f, 165.f, 140.f, 115.f, 90.f, 65.f, 45.f}) {
+            float r = ang > 170.f ? 420.f : 440.f;
+            pts.push_back(lc + vec3(std::cos(ang * PI / 180.f), 0, std::sin(ang * PI / 180.f)) * r);
+        }
+        pts.push_back(b + vec3(-50, 0, 0));
+        pts.push_back(b);
+        addRoad("Lakeshore Road", pts, false, 10.f, SURF_ASPHALT);
+    }
+    {
+        // Fuji Five Lakes Road: along the north foot of Fuji past the three northern lakes
+        vec3 a = snapTo("Sea of Japan Road", vec3(-4450, 0, 3000));
+        vec3 b = snapTo("Akagi Touge", vec3(260, 0, 2380));
+        addRoad("Five Lakes Road", {a, vec3(-4200, 0, 3550), vec3(-3700, 0, 4100), vec3(-3000, 0, 4120), vec3(-2300, 0, 4250), vec3(-1500, 0, 4380),
+                                    vec3(-700, 0, 4380), vec3(-100, 0, 4420), vec3(600, 0, 4300), vec3(1250, 0, 4100), vec3(1900, 0, 4050), vec3(2300, 0, 3600),
+                                    vec3(1700, 0, 3100), vec3(1000, 0, 2750), b + vec3(60, 0, 60), b}, false, 11.f, SURF_ASPHALT);
+    }
+    {
+        // Tea country lane: through the rolling western hills from the coast road to the canal
+        vec3 a = snapTo("Sea of Japan Road", vec3(-4850, 0, -250));
+        vec3 b = snapTo("Canal Road South", vec3(-3500, 0, 980));
+        addRoad("Chaba Lane", {a, vec3(-4500, 0, -100), vec3(-4250, 0, 150), vec3(-3950, 0, 300), vec3(-3700, 0, 600), b + vec3(0, 0, -60), b}, false, 8.f, SURF_ASPHALT);
     }
 
     // cross-country checkpoints through the north-west meadows
@@ -910,42 +970,148 @@ static void buildLeafy(MeshBuilder& b, bool lod) {
     }
 }
 
-void World::buildGPU() {
-    // ---- terrain chunks
-    const int CH = 20, CS = (N - 1) / CH;
-    std::vector<vec3> nrm(N * N);
-    for (int iz = 0; iz < N; iz++)
-        for (int ix = 0; ix < N; ix++) {
+struct World::ChunkJob {
+    std::thread th;
+    std::mutex mu;
+    std::condition_variable cv;
+    std::deque<int> queue;
+    struct Done { int ci; std::vector<Vertex> v; std::vector<uint32_t> idx; };
+    std::deque<Done> done;
+    bool quit = false;
+};
+
+void World::buildChunkData(int ci, std::vector<Vertex>& v, std::vector<uint32_t>& idx) const {
+    const int CS = chunkCells;
+    int cx = ci % chunkGrid, cz = ci / chunkGrid;
+    v.clear();
+    idx.clear();
+    v.reserve((CS + 1) * (CS + 1));
+    for (int z = 0; z <= CS; z++)
+        for (int x = 0; x <= CS; x++) {
+            int ix = cx * CS + x, iz = cz * CS + z;
+            float wx = -HALF + ix * CELL, wz = -HALF + iz * CELL;
             float hl = height[iz * N + std::max(ix - 1, 0)], hr = height[iz * N + std::min(ix + 1, N - 1)];
             float hd = height[std::max(iz - 1, 0) * N + ix], hu = height[std::min(iz + 1, N - 1) * N + ix];
-            nrm[iz * N + ix] = normalize(vec3(hl - hr, 2 * CELL, hd - hu));
+            vec3 nrm = normalize(vec3(hl - hr, 2 * CELL, hd - hu));
+            float f = forestAt(wx, wz);
+            float rd = roadDist[iz * N + ix];
+            vec4 col(0.30f, 0.25f, 0.15f, f * 0.45f);
+            if (rd < 4.f) col = vec4(0.52f, 0.46f, 0.33f, 0.55f * (1.f - smoothstepf(1.f, 4.f, rd)));  // dusty verge beside roads
+            if (urban(wx, wz, 2.f)) col = stripPaved(wx, wz, 0.f) ? vec4(0.6f, 0.43f, 0.32f, 2.f) : vec4(0.50f, 0.49f, 0.47f, 2.f);  // paving; red brick on shopping streets
+            v.push_back({vec3(wx, height[iz * N + ix], wz), nrm, col});
         }
+    idx.reserve(CS * CS * 6);
+    for (int z = 0; z < CS; z++)
+        for (int x = 0; x < CS; x++) {
+            uint32_t a = z * (CS + 1) + x, b = a + 1, c = a + (CS + 1), d = c + 1;
+            idx.insert(idx.end(), {a, d, b, a, c, d});  // diagonal a-d (matches heightAt)
+        }
+}
+
+void World::loadChunksNow(vec3 cam, float radius) {
+    std::vector<Vertex> v;
+    std::vector<uint32_t> idx;
+    for (int ci = 0; ci < int(chunks.size()); ci++) {
+        Chunk& ch = chunks[ci];
+        if (ch.state == 2) continue;
+        float nx = clampf(cam.x, ch.bmin.x, ch.bmax.x) - cam.x, nz = clampf(cam.z, ch.bmin.z, ch.bmax.z) - cam.z;
+        if (nx * nx + nz * nz > radius * radius) continue;
+        // (if the worker also has it queued, its copy is ignored when it lands)
+        buildChunkData(ci, v, idx);
+        ch.mesh.upload(v, idx);
+        ch.state = 2;
+    }
+}
+
+void World::streamChunks(vec3 cam, float keep, int maxUploads) {
+    if (!job) {
+        job = new ChunkJob();
+        job->th = std::thread([this] {
+            std::vector<Vertex> v;
+            std::vector<uint32_t> idx;
+            for (;;) {
+                int ci;
+                {
+                    std::unique_lock<std::mutex> lk(job->mu);
+                    job->cv.wait(lk, [&] { return job->quit || !job->queue.empty(); });
+                    if (job->quit) return;
+                    ci = job->queue.front();
+                    job->queue.pop_front();
+                }
+                buildChunkData(ci, v, idx);
+                std::lock_guard<std::mutex> lk(job->mu);
+                job->done.push_back({ci, std::move(v), std::move(idx)});
+                v = {}; idx = {};
+            }
+        });
+    }
+    // upload what the worker finished
+    for (int k = 0; k < maxUploads; k++) {
+        ChunkJob::Done d;
+        {
+            std::lock_guard<std::mutex> lk(job->mu);
+            if (job->done.empty()) break;
+            d = std::move(job->done.front());
+            job->done.pop_front();
+        }
+        Chunk& ch = chunks[d.ci];
+        if (ch.state == 1) { ch.mesh.upload(d.v, d.idx); ch.state = 2; }
+    }
+    // queue what is coming into range (nearest first), drop what is well out of it
+    std::vector<std::pair<float, int>> want;
+    for (int ci = 0; ci < int(chunks.size()); ci++) {
+        Chunk& ch = chunks[ci];
+        float nx = clampf(cam.x, ch.bmin.x, ch.bmax.x) - cam.x, nz = clampf(cam.z, ch.bmin.z, ch.bmax.z) - cam.z;
+        float d = std::sqrt(nx * nx + nz * nz);
+        if (ch.state == 0 && d < keep) want.push_back({d, ci});
+        else if (ch.state == 2 && d > keep + 700.f) { ch.mesh.destroy(); ch.state = 0; }
+    }
+    if (!want.empty()) {
+        std::sort(want.begin(), want.end());
+        std::lock_guard<std::mutex> lk(job->mu);
+        for (auto& w : want) { chunks[w.second].state = 1; job->queue.push_back(w.second); }
+        job->cv.notify_one();
+    }
+}
+
+void World::stopStreaming() {
+    if (!job) return;
+    {
+        std::lock_guard<std::mutex> lk(job->mu);
+        job->quit = true;
+    }
+    job->cv.notify_all();
+    if (job->th.joinable()) job->th.join();
+    delete job;
+    job = nullptr;
+}
+
+void World::buildGPU() {
+    // ---- terrain chunks: only their bounds now; the meshes stream in around the camera
+    const int CH = (N - 1) / 160, CS = (N - 1) / CH;
+    auto nrmAt = [&](int ix, int iz) {
+        float hl = height[iz * N + std::max(ix - 1, 0)], hr = height[iz * N + std::min(ix + 1, N - 1)];
+        float hd = height[std::max(iz - 1, 0) * N + ix], hu = height[std::min(iz + 1, N - 1) * N + ix];
+        return normalize(vec3(hl - hr, 2 * CELL, hd - hu));
+    };
+    chunkGrid = CH;
+    chunkCells = CS;
+    chunks.clear();
     chunks.resize(CH * CH);
     for (int cz = 0; cz < CH; cz++)
         for (int cx = 0; cx < CH; cx++) {
-            std::vector<Vertex> v;
-            std::vector<uint32_t> idx;
-            for (int z = 0; z <= CS; z++)
-                for (int x = 0; x <= CS; x++) {
-                    int ix = cx * CS + x, iz = cz * CS + z;
-                    float wx = -HALF + ix * CELL, wz = -HALF + iz * CELL;
-                    float f = forestAt(wx, wz);
-                    float rd = roadDist[iz * N + ix];
-                    vec4 col(0.30f, 0.25f, 0.15f, f * 0.45f);
-                    // dusty verge beside roads
-                    if (rd < 4.f) col = vec4(0.52f, 0.46f, 0.33f, 0.55f * (1.f - smoothstepf(1.f, 4.f, rd)));
-                    if (urban(wx, wz, 2.f)) col = stripPaved(wx, wz, 0.f) ? vec4(0.6f, 0.43f, 0.32f, 2.f) : vec4(0.50f, 0.49f, 0.47f, 2.f);  // paving (terrain shader); red brick on shopping streets
-                    v.push_back({vec3(wx, height[iz * N + ix], wz), nrm[iz * N + ix], col});
-                }
-            for (int z = 0; z < CS; z++)
-                for (int x = 0; x < CS; x++) {
-                    uint32_t a = z * (CS + 1) + x, b = a + 1, c = a + (CS + 1), d = c + 1;
-                    // diagonal a-d (matches heightAt)
-                    idx.insert(idx.end(), {a, d, b, a, c, d});
-                }
             Chunk& ch = chunks[cz * CH + cx];
-            ch.mesh.upload(v, idx);
-            ch.center = vec3(-HALF + (cx + 0.5f) * CS * CELL, 0, -HALF + (cz + 0.5f) * CS * CELL);
+            float lo = 1e9f, hi = -1e9f;
+            for (int z = 0; z <= CS; z += 4)
+                for (int x = 0; x <= CS; x += 4) {
+                    float hh = height[(cz * CS + z) * N + cx * CS + x];
+                    lo = std::min(lo, hh); hi = std::max(hi, hh);
+                }
+            ch.bmin = vec3(-HALF + cx * CS * CELL, lo - 1.f, -HALF + cz * CS * CELL);
+            ch.bmax = vec3(-HALF + (cx + 1) * CS * CELL, hi + 1.f, -HALF + (cz + 1) * CS * CELL);
+            ch.center = (ch.bmin + ch.bmax) * 0.5f;
+            ch.center.y = 0;
+            ch.state = 0;
         }
 
     // ---- far terrain: every 8th vertex, sunk a little so the detailed chunks always win
@@ -960,7 +1126,7 @@ void World::buildGPU() {
                 float wx = -HALF + ix * CELL, wz = -HALF + iz * CELL;
                 vec4 col(0.30f, 0.25f, 0.15f, forestAt(wx, wz) * 0.45f);
                 if (urban(wx, wz, 2.f)) col = stripPaved(wx, wz, 0.f) ? vec4(0.6f, 0.43f, 0.32f, 2.f) : vec4(0.50f, 0.49f, 0.47f, 2.f);
-                v.push_back({vec3(wx, height[iz * N + ix] - 2.5f, wz), nrm[iz * N + ix], col});
+                v.push_back({vec3(wx, height[iz * N + ix] - 2.5f, wz), nrmAt(ix, iz), col});
             }
         for (int z = 0; z + 1 < M; z++)
             for (int x = 0; x + 1 < M; x++) {
@@ -1048,7 +1214,7 @@ void World::buildGPU() {
         };
         sea(-HALF - 400, -HALF - 400, HALF + 400, -2280.f, 128, 24);
         sea(2760.f, -2280.f, HALF + 400, HALF + 400, 16, 128);
-        sea(-HALF - 400, -2280.f, -3420.f, HALF + 400, 16, 128);
+        sea(-HALF - 400, -2280.f, -5020.f, HALF + 400, 16, 128);
         b.build(waterMesh);
     }
     city.build(cityMesh);
@@ -1368,7 +1534,7 @@ void World::buildShrines() {
         if (h < waterLevel + 0.8f || roadDistAt(q.x, q.z) < 4.5f || inBox(q.x, q.z, 2.5f) || paddyAt(q.x, q.z) > 0.05f) return;
         if (normalAt(q.x, q.z).y < 0.85f) return;
         if (lakeTorii.y > -1e8f) {  // keep the view from the shore to the lake torii open
-            vec3 tw = normalize(vec3(lakeTorii.x - lakes.back().c.x, 0, lakeTorii.z - lakes.back().c.z));
+            vec3 tw = normalize(vec3(lakeTorii.x + 1950.f, 0, lakeTorii.z - 900.f));
             vec2 ab(tw.x * 110.f, tw.z * 110.f), ap(q.x - lakeTorii.x, q.z - lakeTorii.z);
             float u = clampf(dot(ap, ab) / dot(ab, ab), 0.f, 1.f);
             if (length(vec2(lakeTorii.x + ab.x * u - q.x, lakeTorii.z + ab.y * u - q.z)) < 16.f) return;
@@ -1380,6 +1546,15 @@ void World::buildShrines() {
         sakuraN++;
     };
     for (auto& q : sakuraSpots) sakura(q, sr.range(0.95f, 1.35f));
+    for (auto& q : sakuraClose) {  // the canal rows stand between the water and the bank roads
+        float h = heightAt(q.x, q.z);
+        if (h < waterLevel + 0.8f || roadDistAt(q.x, q.z) < 1.5f || inBox(q.x, q.z, 1.f)) continue;
+        vec3 tint = sr.f() < 0.25f ? vec3(1.f, sr.range(0.84f, 0.9f), sr.range(0.84f, 0.9f)) : vec3(1.f, sr.range(0.58f, 0.68f), sr.range(0.66f, 0.76f));
+        float sc = sr.range(1.0f, 1.3f);
+        leafInst.push_back({vec3(q.x, h - 0.3f, q.z), sc, tint * sr.range(1.02f, 1.14f), sr.range(0, 6.28f)});
+        addTrunk(q.x, q.z, 0.3f);
+        sakuraN++;
+    }
     for (auto& lk : lakes) {
         int n = std::max(12, int(6.2832f * lk.r / 15.f));
         for (int k = 0; k < n; k++) {
@@ -1403,6 +1578,29 @@ void World::buildShrines() {
 // with grey-blue tiled hip roofs right up against the road, concrete utility poles with sagging
 // wires, vending machines glowing by the doors; plus a five-storey pagoda looking across at Fuji.
 void World::buildJapan() {
+    // the canal's centre line, halfway between its two bank roads (height = bank level)
+    canalLine.clear();
+    {
+        const Road *rn = nullptr, *rs = nullptr;
+        for (auto& r : roads) { if (r.name == "Canal Road North") rn = &r; if (r.name == "Canal Road South") rs = &r; }
+        if (rn && rs) {
+            for (size_t i = 6; i + 6 < rn->pts.size(); i += 3) {
+                vec3 a = rn->pts[i];
+                float bd = 1e18f; vec3 bq;
+                for (auto& q : rs->pts) { float d = (q.x - a.x) * (q.x - a.x) + (q.z - a.z) * (q.z - a.z); if (d < bd) { bd = d; bq = q; } }
+                if (bd > 40.f * 40.f) continue;
+                vec3 mid = (a + bq) * 0.5f;
+                mid.y = std::min(a.y, bq.y) - 0.1f;
+                if (!canalLine.empty() && length(vec3(mid.x - canalLine.back().x, 0, mid.z - canalLine.back().z)) < 6.f) continue;
+                canalLine.push_back(mid);
+            }
+        }
+    }
+    auto nearCanal = [&](vec3 p, float r) {
+        for (size_t k = 0; k < canalLine.size(); k += 2)
+            if (std::fabs(canalLine[k].x - p.x) < r + 12.f && std::fabs(canalLine[k].z - p.z) < r + 12.f && std::hypot(canalLine[k].x - p.x, canalLine[k].z - p.z) < r) return true;
+        return false;
+    };
     Rng rng(4242);
     MeshBuilder& b = props;
     int houses = 0, poles = 0;
@@ -1655,6 +1853,7 @@ void World::buildJapan() {
     };
     auto clearSpot = [&](vec3 c, float rad) {
         if (heightAt(c.x, c.z) < waterLevel + 1.5f) return false;
+        if (nearCanal(c, rad + 11.f)) return false;
         if (urban(c.x, c.z, 20.f) || nearEstate(c.x, c.z, 50.f)) return false;
         if (std::hypot(c.x - hubPos.x, c.z - hubPos.z) < 110.f || std::hypot(c.x - festCenter.x, c.z - festCenter.z) < 300.f) return false;
         for (float a = 0; a < 6.28f; a += 0.785f)
@@ -2829,58 +3028,25 @@ void World::buildJapan() {
     // the town that no road crosses.
     for (int once = 0; once < 1; once++) {
         const float W = 4.6f;
-        float LEN = 0.f;
-        float bestCost = 1e9f;
-        vec3 bestA, bestD;
-        for (float tryLen : {850.f, 650.f, 480.f, 360.f}) {
-        if (bestCost < 1e8f) break;
-        LEN = tryLen;
-        for (float cx = -3200.f; cx <= 2600.f; cx += 80.f)
-            for (float cz = -2100.f; cz <= 2300.f; cz += 80.f) {
-                if (cx < -1250.f && cz < 520.f && cx > -3350.f && cz > -1450.f) continue;  // rice paddy country
-                for (int ai = 0; ai < 8; ai++) {
-                    float ang = ai / 8.f * PI;
-                    vec3 d(std::cos(ang), 0, std::sin(ang)), a0 = vec3(cx, 0, cz) - d * (LEN * 0.5f);
-                    float lo = 1e9f, hi = -1e9f;
-                    bool ok = true;
-                    for (int k = 0; k <= 40 && ok; k++) {
-                        vec3 q = a0 + d * (LEN * k / 40.f);
-                        float hh = heightAt(q.x, q.z);
-                        lo = std::min(lo, hh); hi = std::max(hi, hh);
-                        ok = hh > waterLevel + 4.f && hh < 140.f && roadDistAt(q.x, q.z) > 18.f && !urban(q.x, q.z, 40.f) && !inBox(q.x, q.z, 12.f) &&
-                             std::hypot(q.x - festCenter.x, q.z - festCenter.z) > 320.f && std::hypot(q.x - hubPos.x, q.z - hubPos.z) > 150.f;
-                        for (auto& cg : clearings) ok = ok && std::hypot(q.x - cg.x, q.z - cg.z) > cg.y + 10.f;
-                    }
-                    if (!ok) continue;
-                    if (hi - lo > 9.f) continue;
-                    float cost = (hi - lo) + std::hypot(cx + 1650.f, cz - 650.f) / 500.f;
-                    if (cost < bestCost) { bestCost = cost; bestA = a0; bestD = d; }
-                }
-            }
-        }
-        if (bestCost > 1e8f) { SDL_Log("Japan: no room for the canal"); break; }
+        if (canalLine.size() < 20) { SDL_Log("Japan: no canal roads"); break; }
         std::vector<vec3> cl;
         std::vector<float> bank;
-        float lo = 1e9f;
-        int NS = int(LEN / 12.f);
-        for (int k = 0; k <= NS; k++) {
-            vec3 q = bestA + bestD * (LEN * k / NS);
-            // a gentle meander
-            q = q + vec3(-bestD.z, 0, bestD.x) * (std::sin(k * 0.35f) * 6.f);
-            cl.push_back(q);
-            lo = std::min(lo, heightAt(q.x, q.z));
-        }
-        for (size_t k = 0; k < cl.size(); k++) bank.push_back(lo + 0.6f);
+        for (auto& q : canalLine) { cl.push_back(vec3(q.x, 0, q.z)); bank.push_back(q.y); }
+        float LEN = 0;
+        for (size_t k = 1; k < cl.size(); k++) LEN += length(cl[k] - cl[k - 1]);
         float sg = 1.f;
         int m = int(cl.size());
         if (m < 20) { SDL_Log("Japan: no room for the canal"); break; }
-        // water steps up in pools of ~60 m
+        // the water steps with the land: a pool runs on while the banks stay within 0.7 m, then a weir
         std::vector<float> water(m), bed(m);
-        for (int j0 = 0; j0 < m; j0 += 15) {
-            int j1 = std::min(m, j0 + 15);
-            float mn = 1e9f;
-            for (int j = j0; j < j1; j++) mn = std::min(mn, bank[j]);
-            for (int j = j0; j < j1; j++) { water[j] = mn - 0.85f; bed[j] = mn - 1.9f; }
+        canalPools.clear();
+        for (int j0 = 0; j0 < m;) {
+            float mn = bank[j0], mx = bank[j0];
+            int j1 = j0 + 1;
+            while (j1 < m && std::max(mx, bank[j1]) - std::min(mn, bank[j1]) < 0.7f) { mn = std::min(mn, bank[j1]); mx = std::max(mx, bank[j1]); j1++; }
+            for (int j = j0; j < j1; j++) { water[j] = mn - 0.8f; bed[j] = mn - 1.9f; }
+            canalPools.push_back({j0, j1 - 1});
+            j0 = j1;
         }
         std::vector<vec3> nrm(m);
         for (int j = 0; j < m; j++) {
@@ -2893,12 +3059,12 @@ void World::buildJapan() {
         {
             float x0f = 1e9f, x1f = -1e9f, z0f = 1e9f, z1f = -1e9f;
             for (auto& q : cl) { x0f = std::min(x0f, q.x); x1f = std::max(x1f, q.x); z0f = std::min(z0f, q.z); z1f = std::max(z1f, q.z); }
-            const float R = 30.f;
+            const float R = 11.f;
             int ix0 = std::max(0, int((x0f - R + HALF) / CELL)), ix1 = std::min(N - 1, int((x1f + R + HALF) / CELL) + 1);
             int iz0 = std::max(0, int((z0f - R + HALF) / CELL)), iz1 = std::min(N - 1, int((z1f + R + HALF) / CELL) + 1);
             for (int iz = iz0; iz <= iz1; iz++)
                 for (int ix = ix0; ix <= ix1; ix++) {
-                    if (roadDist[iz * N + ix] < 3.f) continue;
+                    if (roadDist[iz * N + ix] < 0.3f) continue;
                     float wx = -HALF + ix * CELL, wz = -HALF + iz * CELL;
                     float best = 1e9f, bk = 0, bd = 0, endK = 1.f;
                     for (int j = 0; j + 1 < m; j++) {
@@ -2914,10 +3080,7 @@ void World::buildJapan() {
                     if (best > R) continue;
                     float& h = height[iz * N + ix];
                     if (best < W + 1.6f && endK > 0.f) h = bd;  // the walls hide the step; a capstone strip covers the top
-                    else {
-                        float k = 1.f - smoothstepf(14.f, R, best);
-                        h = lerpf(h, bk, k);
-                    }
+                    else if (best < 10.f) h = bk;            // the strip between the wall and the bank road
                 }
         }
         vec4 stone(0.56f, 0.55f, 0.5f, 0), coping(0.66f, 0.65f, 0.6f, 0), foam(0.9f, 0.94f, 0.96f, 0);
@@ -2943,7 +3106,7 @@ void World::buildJapan() {
                 quad(vec3(pa.x, bank[j] + 0.06f, pa.z), vec3(pe.x, bank[j + 1] + 0.06f, pe.z), vec3(qe.x, bank[j + 1] + 0.06f, qe.z), vec3(qa.x, bank[j] + 0.06f, qa.z), up, coping);
             }
             if (j % 2 == 0)
-                for (int k = -1; k <= 1; k += 2) sakuraSpots.push_back(a + nrm[j] * (k * (W + 4.f + (j % 4 ? 1.5f : 0.f))));
+                for (int k = -1; k <= 1; k += 2) sakuraClose.push_back(a + nrm[j] * (k * (W + 3.0f)));
             if (j % 3 == 0) clearings.push_back(vec3(a.x, 17.f, a.z));
             canalPts.push_back(a);
         }
@@ -2956,9 +3119,27 @@ void World::buildJapan() {
             mat4 ex = basis(nrm[j], up, d, vec3(a.x, (bed[j] + bank[j]) * 0.5f, a.z));
             b.box(vec3(0, 0, 0), vec3(W + 0.3f, (bank[j] - bed[j]) * 0.5f + 0.2f, 0.3f), stone, &ex);
         }
-        // footpath along the town-side bank
-        for (int j = 0; j + 4 < m; j += 4)
-            pavedStrips.push_back({cl[j] - nrm[j] * (sg * -1.f) * 0.f + nrm[j] * (-sg * (W + 7.5f)), cl[j + 4] + nrm[j + 4] * (-sg * (W + 7.5f)), 1.3f});
+        // bridges: where another road crosses the canal, railings along it over the water
+        {
+            int lastRoad = -1, lastJ = -100;
+            for (int j = 0; j < m; j++) {
+                int ri, si;
+                if (!nearestRoad(cl[j], ri, si, W + 4.f)) continue;
+                if (roads[ri].name.rfind("Canal Road", 0) == 0) continue;
+                if (ri == lastRoad && j - lastJ < 6) continue;
+                lastRoad = ri; lastJ = j;
+                const Road& rr = roads[ri];
+                vec3 rp = rr.pts[si], rt = rr.tan[si], rs(-rt.z, 0, rt.x);
+                for (int k = -1; k <= 1; k += 2) {
+                    vec3 o = rp + rs * (k * (rr.width * 0.5f + 0.35f));
+                    vec3 e0 = o - rt * (W + 2.f), e1 = o + rt * (W + 2.f);
+                    e0.y = rp.y + 0.1f; e1.y = rp.y + 0.1f;
+                    b.box((e0 + e1) * 0.5f + vec3(0, 0.3f, 0), vec3(std::fabs(rt.x) * (W + 2.f) + std::fabs(rs.x) * 0.12f, 0.35f, std::fabs(rt.z) * (W + 2.f) + std::fabs(rs.z) * 0.12f), vec4(0.62f, 0.61f, 0.58f, 0));
+                    b.tube(e0 + vec3(0, 1.0f, 0), e1 + vec3(0, 1.0f, 0), 0.06f, 0.06f, 5, vec4(0.82f, 0.18f, 0.1f, 0));
+                    for (int q = 0; q <= 4; q++) b.tube(lerp(e0, e1, q / 4.f) + vec3(0, 0.6f, 0), lerp(e0, e1, q / 4.f) + vec3(0, 1.05f, 0), 0.05f, 0.05f, 5, vec4(0.82f, 0.18f, 0.1f, 0));
+                }
+            }
+        }
         // red arched bridge (taikobashi) halfway along
         {
             int j = m / 2;
@@ -2987,12 +3168,12 @@ void World::buildJapan() {
             int j = int(fu * (m - 1));
             vec3 a = cl[j], d = normalize(vec3(nrm[j].z, 0, -nrm[j].x));
             vec3 q(a.x, water[j] - 0.15f, a.z);
-            q = q + nrm[j] * 0.8f;
+            q = q + nrm[j] * 3.3f;
             mat4 bx = basis(nrm[j], up, d, q);
             { MeshBuilder rb; buildRiverboat(rb, false); b.append(rb, bx); }
             person(bx.transformPoint(vec3(0, 0.58f, -3.9f)) + up * 0.0f, std::atan2(d.x, d.z), 2, false);
         }
-        SDL_Log("Japan: canal, %.0f m, %d sections, middle (%.0f, %.0f)", LEN, m, cl[m / 2].x, cl[m / 2].z);
+        SDL_Log("Japan: canal, %.0f m, %d sections, %zu pools", LEN, m, canalPools.size());
         break;
     }
 
@@ -3022,7 +3203,9 @@ void World::buildJapan() {
             signFitted(b, xf.transformPoint(vec3(0, -0.95f, k * 0.23f)), fwd * (float)k, 0.3f, 0.58f, SV_SENGEN, true);
     };
     {
-        const Lake& lk = lakes.back();  // the lake below the pagoda
+        const Lake* lkp = &lakes[0];
+        for (auto& L : lakes) if (std::hypot(L.c.x + 1950.f, L.c.z - 900.f) < std::hypot(lkp->c.x + 1950.f, lkp->c.z - 900.f)) lkp = &L;
+        const Lake& lk = *lkp;  // the lake below the pagoda
         vec3 toward = normalize(vec3(-1730.f - lk.c.x, 0, 640.f - lk.c.z));
         vec3 shore = lk.c;
         for (float rr = 0; rr < lk.r * 1.6f; rr += 2.f) {
@@ -3049,6 +3232,130 @@ void World::buildJapan() {
             SDL_Log("Japan: sea torii at (%.0f, %.0f)", found.x, found.z);
             break;
         }
+    }
+
+    // ---- tea plantations: rounded hedge rows following the contours of the gentle western hills
+    {
+        int fields = 0;
+        Rng tr(4242);
+        vec4 tea(0.20f, 0.40f, 0.15f, 0), teaHi(0.32f, 0.52f, 0.2f, 0);
+        std::vector<vec3> tried;
+        for (auto& rd : roads) {
+            bool teaRoad = rd.name == "Chaba Lane" || rd.name == "Sea of Japan Road" || rd.name == "Five Lakes Road" || rd.name == "Canal Road South";
+            if (!teaRoad) continue;
+            for (size_t i = 20; i + 20 < rd.pts.size(); i += 30) {
+                vec3 t = rd.tan[i], side(-t.z, 0, t.x);
+                for (int sg2 = -1; sg2 <= 1; sg2 += 2) {
+                    vec3 c = rd.pts[i] + side * (sg2 * 48.f);
+                    bool near = false;
+                    for (auto& q : tried) near |= std::hypot(q.x - c.x, q.z - c.z) < 90.f;
+                    if (near) continue;
+                    // the whole patch must be open, dry, gently sloping ground
+                    bool ok = true;
+                    for (int k = 0; k < 9 && ok; k++) {
+                        vec3 q = c + vec3(((k % 3) - 1) * 30.f, 0, ((k / 3) - 1) * 22.f);
+                        float hh = heightAt(q.x, q.z);
+                        vec3 n = normalAt(q.x, q.z);
+                        ok = hh > waterLevel + 3.f && n.y > 0.86f && roadDistAt(q.x, q.z) > 7.f && !inBox(q.x, q.z, 4.f) && !urban(q.x, q.z, 10.f) &&
+                             paddyAt(q.x, q.z) < 0.05f && !nearCanal(q, 12.f) && std::hypot(q.x - festCenter.x, q.z - festCenter.z) > 330.f;
+                    }
+                    if (!ok) continue;
+                    tried.push_back(c);
+                    // rows run along the contour (perpendicular to the downhill direction)
+                    vec3 n = normalAt(c.x, c.z);
+                    vec3 down = normalize(vec3(n.x, 0, n.z) + vec3(1e-4f, 0, 0));
+                    vec3 along(-down.z, 0, down.x);
+                    for (int row = -11; row <= 11; row++) {
+                        vec3 prev;
+                        bool havePrev = false;
+                        for (int seg = -14; seg <= 14; seg++) {
+                            vec3 q = c + down * (row * 1.9f) + along * (seg * 2.2f + std::sin(row * 0.7f) * 1.2f);
+                            if (roadDistAt(q.x, q.z) < 3.f || inBox(q.x, q.z, 1.f)) { havePrev = false; continue; }
+                            q.y = heightAt(q.x, q.z) + 0.42f;
+                            if (havePrev) b.tube(prev, q, 0.58f, 0.58f, 7, ((row + seg) % 5 == 0) ? teaHi : tea);
+                            prev = q;
+                            havePrev = true;
+                        }
+                    }
+                    clearings.push_back(vec3(c.x, 48.f, c.z));
+                    fields++;
+                }
+            }
+        }
+        SDL_Log("Japan: %d tea plantations", fields);
+    }
+
+    // ---- a high-voltage line striding across the country on lattice pylons
+    {
+        std::vector<vec3> route = {vec3(-4700, 0, 2300), vec3(-2500, 0, 1850), vec3(-900, 0, 1700), vec3(700, 0, 1300), vec3(1700, 0, 600), vec3(2300, 0, -350)};
+        vec4 steelC(0.62f, 0.64f, 0.66f, 7), insul(0.75f, 0.55f, 0.35f, 0), wireC(0.08f, 0.08f, 0.09f, 0);
+        std::vector<std::array<vec3, 6>> towers;
+        float acc = 0;
+        int placed = 0;
+        bool gap = true;
+        for (size_t k = 0; k + 1 < route.size(); k++) {
+            vec3 a = route[k], e = route[k + 1];
+            float L = length(e - a);
+            vec3 d = (e - a) / L, sd(-d.z, 0, d.x);
+            for (; acc < L; acc += 340.f) {
+                vec3 c = a + d * acc;
+                c.y = heightAt(c.x, c.z);
+                bool ok = c.y > waterLevel + 2.f && roadDistAt(c.x, c.z) > 14.f && !inBox(c.x, c.z, 10.f) && !urban(c.x, c.z, 30.f) &&
+                          std::hypot(c.x - festCenter.x, c.z - festCenter.z) > 360.f && std::hypot(c.x - hubPos.x, c.z - hubPos.z) > 200.f &&
+                          !nearCanal(c, 20.f) && std::hypot(c.x - kFuji.x, c.z - kFuji.z) > 1400.f;
+                if (!ok) { gap = true; continue; }
+                const float H = 46.f, base = 4.2f, topW = 1.1f;
+                vec3 legs[4], tops[4];
+                for (int l = 0; l < 4; l++) {
+                    vec3 o = d * ((l & 1) ? 1.f : -1.f) + sd * ((l & 2) ? 1.f : -1.f);
+                    legs[l] = c + o * base;
+                    legs[l].y = heightAt(legs[l].x, legs[l].z) - 0.3f;
+                    tops[l] = c + o * topW + vec3(0, H, 0);
+                    b.tube(legs[l], tops[l], 0.16f, 0.1f, 5, steelC);
+                    pendingTrunks.push_back({legs[l].x, legs[l].z, 0.4f});
+                }
+                // cross bracing on all four faces, in five bays
+                for (int f2 = 0; f2 < 4; f2++) {
+                    int l0 = f2 == 0 ? 0 : f2 == 1 ? 1 : f2 == 2 ? 3 : 2, l1 = f2 == 0 ? 1 : f2 == 1 ? 3 : f2 == 2 ? 2 : 0;
+                    for (int bay = 0; bay < 5; bay++) {
+                        float u0 = bay / 5.f, u1 = (bay + 1) / 5.f;
+                        vec3 p00 = lerp(legs[l0], tops[l0], u0), p01 = lerp(legs[l0], tops[l0], u1), p10 = lerp(legs[l1], tops[l1], u0), p11 = lerp(legs[l1], tops[l1], u1);
+                        b.tube(p00, p11, 0.05f, 0.05f, 3, steelC);
+                        b.tube(p10, p01, 0.05f, 0.05f, 3, steelC);
+                        b.tube(p01, p11, 0.06f, 0.06f, 3, steelC);
+                    }
+                }
+                // three crossarms with hanging insulators; the conductor attachment points
+                std::array<vec3, 6> att;
+                for (int arm = 0; arm < 3; arm++) {
+                    float y = H - 3.f - arm * 7.5f, reach = 6.5f + (arm == 1 ? 1.5f : 0.f);
+                    vec3 mid = c + vec3(0, y, 0);
+                    b.tube(mid - sd * reach, mid + sd * reach, 0.18f, 0.18f, 4, steelC);
+                    for (int s2 = -1; s2 <= 1; s2 += 2) {
+                        vec3 tip = mid + sd * (s2 * reach * 0.92f);
+                        b.tube(tip, tip - vec3(0, 2.4f, 0), 0.16f, 0.16f, 6, insul);
+                        att[arm * 2 + (s2 > 0)] = tip - vec3(0, 2.4f, 0);
+                    }
+                }
+                b.tube(c + vec3(0, H, 0), c + vec3(0, H + 4.f, 0), 0.12f, 0.05f, 4, steelC);  // earth-wire peak
+                if (!gap && !towers.empty())
+                    for (int w = 0; w < 6; w++) {
+                        vec3 p0 = towers.back()[w], p1 = att[w];
+                        vec3 prev = p0;
+                        for (int sgm = 1; sgm <= 12; sgm++) {
+                            float u = sgm / 12.f;
+                            vec3 q = lerp(p0, p1, u) - vec3(0, 9.f * 4.f * u * (1.f - u), 0);
+                            b.tube(prev, q, 0.05f, 0.05f, 3, wireC);
+                            prev = q;
+                        }
+                    }
+                towers.push_back(att);
+                gap = false;
+                placed++;
+            }
+            acc -= L;
+        }
+        SDL_Log("Japan: %d pylons", placed);
     }
 
     // people in kimono strolling on Honcho-dori's pavements

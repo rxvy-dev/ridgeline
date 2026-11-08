@@ -13,7 +13,7 @@
 
 void World::erode(uint32_t seed) {
     Uint64 t0 = SDL_GetTicks();
-    const int M = (N - 1) / 2 + 1;        // 1601 x 1601, 5 m cells
+    const int M = (N - 1) / 2 + 1;        // 5 m cells
     const float SCALE = 250.f;            // metres per height unit for the simulation
     std::vector<float> hm(size_t(M) * M), orig;
     for (int z = 0; z < M; z++)
@@ -49,7 +49,7 @@ void World::erode(uint32_t seed) {
     const int maxSteps = 64;
     Rng rng(seed * 2654435761u + 17u);
     int drops = 0, tries = 0;
-    const int wantDrops = 900000;
+    const int wantDrops = int(900000.0 * (double(N) * N) / (3201.0 * 3201.0));  // same rain per km2 as the old 8 km map
     while (drops < wantDrops && tries < wantDrops * 6) {
         tries++;
         float px = rng.range(2.f, M - 3.f), pz = rng.range(2.f, M - 3.f);

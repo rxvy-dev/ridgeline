@@ -25,6 +25,8 @@ Written in C++17 with **SDL3** and OpenGL 3.3. No engine and no downloaded asset
   - little towns along the roads, a white castle, a five-storey pagoda, bamboo groves, rice paddies and a Fushimi Inari tunnel of torii,
   - **Daikoku Wharf**: container stacks, gantry cranes, warehouses and a container ship,
   - the **Wangan Highway** round the coast, the **Sea of Japan Road** up the west coast, the **Hakone Turnpike** ring in the valley, rice-country dirt lanes in the west,
+  - the **Sakura Canal**, 2.6 km from the Sea of Japan coast to the lake under the pagoda, with a road on each bank, weirs, bridges and riverboats poled up and down it,
+  - the **Fuji Five Lakes** in basins along Fuji's north foot, the Lakeshore Road, tea plantations in the western hills, a high-voltage line on lattice pylons, white guardrails,
   - cherry trees in full bloom round the shrines, the castle, the pagoda and the lakes, pines and autumn maples everywhere else,
   - real Japanese writing everywhere: shop signs, neon, festival stalls, shrine plaques, blue road signs, 止まれ painted on the road (atlas made by `tools/make_signs.py`).
 - **20+ race events** with AI drivers: circuits, sprints, touge, a downhill, drift zones, dirt scrambles and cross-country.

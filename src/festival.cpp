@@ -465,32 +465,43 @@ void Game::drawFestivalWorld(const Camera& cam_) {
         R.object.set("uModel", basis(ferrisAxis, vec3(0, 1, 0), fw, p));
         gondolaMesh.draw();
     }
-    // the riverboat is poled up the canal and back again (too long to turn between the walls)
+    // riverboats poled up and down the canal: one in each long pool between the weirs, some in
+    // pairs passing each other (they keep to the left, as boats do in Japan)
     const auto& path = world.canalPath;
     if (path.size() > 3) {
         std::vector<float> acc(path.size(), 0.f);
         for (size_t k = 1; k < path.size(); k++) acc[k] = acc[k - 1] + length(vec3(path[k].x - path[k - 1].x, 0, path[k].z - path[k - 1].z));
-        const float L = acc.back(), v = 1.3f, turn = 8.f, margin = 9.f;
-        float run = (L - 2 * margin) / v, cyc = 2 * (run + turn);
-        float tc = std::fmod(boatT, cyc);
-        float sPos, yawAdd = 0;  // yawAdd: kept for a boat that could turn
-        if (tc < run) sPos = margin + tc * v;
-        else if (tc < run + turn) sPos = L - margin;                     // a pause at the top, then poled back
-        else if (tc < 2 * run + turn) sPos = L - margin - (tc - run - turn) * v;
-        else sPos = margin;
-        size_t k = 1;
-        while (k + 1 < path.size() && acc[k] < sPos) k++;
-        float u = clampf((sPos - acc[k - 1]) / std::max(acc[k] - acc[k - 1], 1e-3f), 0.f, 1.f);
-        vec3 p = lerp(path[k - 1], path[k], u), d = path[k] - path[k - 1];
-        d.y = 0;
-        d = normalize(d);
-        vec3 side(-d.z, 0, d.x);
-        p = p - side * 1.9f;  // keep to the far side from the moored boats
-        float yaw = std::atan2(d.x, d.z) + yawAdd;
-        vec3 f(std::sin(yaw), 0, std::cos(yaw)), r(f.z, 0, -f.x);
-        p.y = path[k].y - 0.15f + std::sin(boatT * 1.3f) * 0.03f;
-        R.object.set("uModel", basis(r, vec3(0, 1, 0), f, p));
-        riverboatMesh.draw();
+        int boatN = 0;
+        for (size_t pi = 0; pi < world.canalPools.size() && boatN < 14; pi++) {
+            int j0 = world.canalPools[pi].first, j1 = world.canalPools[pi].second;
+            float s0 = acc[j0] + 9.f, s1 = acc[j1] - 9.f;
+            if (s1 - s0 < 50.f) continue;
+            int inPool = s1 - s0 > 220.f ? 2 : 1;
+            for (int bi = 0; bi < inPool; bi++, boatN++) {
+                const float v = 1.2f + 0.15f * (boatN % 3), pause = 6.f;
+                float run = (s1 - s0) / v, cyc = 2 * (run + pause);
+                float tc = std::fmod(boatT + boatN * 37.f + bi * run, cyc);
+                float sPos;
+                bool back;
+                if (tc < run) { sPos = s0 + tc * v; back = false; }
+                else if (tc < run + pause) { sPos = s1; back = false; }
+                else if (tc < 2 * run + pause) { sPos = s1 - (tc - run - pause) * v; back = true; }
+                else { sPos = s0; back = true; }
+                size_t k = size_t(j0) + 1;
+                while (k < size_t(j1) && acc[k] < sPos) k++;
+                float u = clampf((sPos - acc[k - 1]) / std::max(acc[k] - acc[k - 1], 1e-3f), 0.f, 1.f);
+                vec3 p = lerp(path[k - 1], path[k], u), d = path[k] - path[k - 1];
+                d.y = 0;
+                d = normalize(d);
+                vec3 side(-d.z, 0, d.x);
+                p = p + side * (((back ? 1 : 0) ^ bi) ? 0.1f : -2.4f);  // two lanes; the moored boats lie along the far wall
+                float yaw = std::atan2(d.x, d.z);  // poled, never turned: the bow always points up the canal
+                vec3 f(std::sin(yaw), 0, std::cos(yaw)), r(f.z, 0, -f.x);
+                p.y = path[k].y - 0.15f + std::sin(boatT * 1.3f + boatN) * 0.03f;
+                R.object.set("uModel", basis(r, vec3(0, 1, 0), f, p));
+                riverboatMesh.draw();
+            }
+        }
     }
     // swan boats paddling round the torii out in the lake
     if (world.lakeTorii.y > -1e8f)

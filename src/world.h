@@ -43,12 +43,13 @@ struct Estate {
 };
 
 struct World {
-    static constexpr float HALF = 4000.f;   // world spans [-HALF, HALF] on x and z (8 x 8 km)
-    static constexpr int N = 3201;          // heightmap vertices per side (2.5 m grid)
+    static constexpr float HALF = 5600.f;   // world spans [-HALF, HALF] on x and z (11.2 x 11.2 km)
+    static constexpr int N = 4481;   // 2.5 m grid
     static constexpr float CELL = 2 * HALF / (N - 1);
     float waterLevel = 6.f;
     struct Lake { vec3 c; float r; float seed; };
-    std::vector<Lake> lakes = {{vec3(380, 0, -300), 250.f, 1.f}, {vec3(-640, 0, -960), 230.f, 2.3f}, {vec3(980, 0, -880), 190.f, 4.1f}, {vec3(520, 0, 430), 80.f, 5.7f}, {vec3(-1950, 0, 900), 260.f, 6.2f}};
+    std::vector<Lake> lakes = {{vec3(380, 0, -300), 250.f, 1.f}, {vec3(-640, 0, -960), 230.f, 2.3f}, {vec3(980, 0, -880), 190.f, 4.1f}, {vec3(520, 0, 430), 80.f, 5.7f}, {vec3(-1950, 0, 900), 260.f, 6.2f},
+                               {vec3(-3300, 0, 4700), 330.f, 11.3f}, {vec3(-150, 0, 5000), 380.f, 12.7f}, {vec3(1500, 0, 4500), 240.f, 13.9f}};  // Fuji Five Lakes (north)
     vec3 hubPos;           // festival hub centre
     vec3 festCenter;       // the festival grounds, beside the hub
     void rebuildBoxGrid();
@@ -69,8 +70,17 @@ struct World {
     std::vector<std::vector<TreeTrunk>> trunkGrid;
 
     // GPU resources
-    struct Chunk { Mesh mesh; vec3 center; };
+    // terrain chunks are built on demand around the camera (a worker thread makes the vertices,
+    // the main thread uploads them) and dropped again far away; the far terrain covers the rest
+    struct Chunk { Mesh mesh; vec3 center, bmin, bmax; int state = 0; };  // state: 0 none, 1 queued, 2 resident
     std::vector<Chunk> chunks;
+    int chunkGrid = 0, chunkCells = 0;
+    void buildChunkData(int ci, std::vector<Vertex>& v, std::vector<uint32_t>& idx) const;
+    void streamChunks(vec3 cam, float keep, int maxUploads);   // call once a frame
+    void loadChunksNow(vec3 cam, float radius);                // synchronous, for spawns and teleports
+    void stopStreaming();
+    struct ChunkJob;
+    ChunkJob* job = nullptr;
     Mesh farTerrain;  // whole island at 20 m resolution, for the horizon beyond the chunks
     Mesh roadMesh, waterMesh, hubMesh, propsMesh, cityMesh, cityGlass;
     std::vector<Box> boxes;                       // solid buildings / containers
@@ -91,7 +101,7 @@ struct World {
     std::vector<GrassRing> grassRings;
     void drawGrass(struct Shader& sh, vec3 eye, int rings) const;
     void buildGrass();
-    static constexpr int MAP_RES = 1024;
+    static constexpr int MAP_RES = 1536;
 
     void generate(uint32_t seed);
     void buildGPU();
@@ -128,6 +138,9 @@ public:
     std::vector<vec3> sakuraSpots;
     std::vector<vec3> waterQuads;  // extra water surfaces (canals): 4 corners per quad
     std::vector<vec3> canalPts;
+    std::vector<vec3> canalLine;   // centre between the canal's bank roads (y = bank level)
+    std::vector<std::pair<int, int>> canalPools;  // index ranges of canalPath at one water level
+    std::vector<vec3> sakuraClose; // cherry trees allowed close to a road (the canal rows)
     std::vector<vec3> canalPath;   // canal centre at water height (the boat runs along it)
     vec3 lakeTorii{0, -1e9f, 0};   // torii standing in the lake (swan boats paddle round it)    // canal centre line (keeps grass off the canal bed)
     std::vector<vec3> clearings;  // (x, radius, z): no wild trees (temple grounds, castle park)
