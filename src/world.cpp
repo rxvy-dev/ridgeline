@@ -1553,7 +1553,7 @@ void World::buildShrines() {
         }
     };
     // Fushimi Inari: a tunnel of hundreds of vermilion gates along the forest trail
-    for (float f = 0.02f; f < 0.13f; f += 0.0042f) torii("Okutama Trail", f, false);
+    for (float f = 0.02f; f < 0.17f; f += 0.0031f) torii("Okutama Trail", f, false);  // senbon torii: the thousand gates
     torii("Akagi Touge", 0.04f);
     torii("Irohazaka", 0.05f);
     torii("Fuji Road", 0.93f);
@@ -1616,7 +1616,7 @@ void World::buildShrines() {
     }
     SDL_Log("Japan: %d sakura", sakuraN);
     for (auto& rd : roads)
-        if (rd.name == "Okutama Trail" && !rd.pts.empty()) { landmarks.push_back({"Fushimi Inari Torii", rd.pts[size_t(0.075f * (rd.pts.size() - 1))]}); break; }
+        if (rd.name == "Okutama Trail" && !rd.pts.empty()) { landmarks.push_back({"Senbon Torii", rd.pts[size_t(0.095f * (rd.pts.size() - 1))]}); break; }
 }
 
 // ---------------------------------------------------------------- Japan
@@ -2940,10 +2940,10 @@ void World::buildJapan() {
         people++;
     };
     // a big two-storey vermilion temple gate (Kiyomizu-dera's niomon); walk through along fwd
-    auto niomon = [&](vec3 c, vec3 fwd) {
+    auto niomon = [&](vec3 c, vec3 fwd, vec4 red = vec4(0.86f, 0.24f, 0.1f, 0)) {
         vec3 rt = normalize(cross(fwd, up));
         c.y = heightAt(c.x, c.z);
-        vec4 red(0.86f, 0.24f, 0.1f, 0), white(0.94f, 0.92f, 0.87f, 0), roofC(0.17f, 0.18f, 0.2f, 23), stone(0.55f, 0.54f, 0.5f, 0), gold(0.85f, 0.65f, 0.2f, 7);
+        vec4 white(0.94f, 0.92f, 0.87f, 0), roofC(0.17f, 0.18f, 0.2f, 23), stone(0.55f, 0.54f, 0.5f, 0), gold(0.85f, 0.65f, 0.2f, 7);
         mat4 xf = basis(rt, up, fwd, c);
         b.box(vec3(0, -0.2f, 0), vec3(7.4f, 0.5f, 3.6f), stone, &xf);
         for (float x : {-5.6f, -2.7f, 2.7f, 5.6f})
@@ -3422,7 +3422,7 @@ void World::buildJapan() {
     }
 
     // ---- real landmarks for the new land: the Great Buddha and the Golden Pavilion
-    auto findSite = [&](vec3 near, float searchR, float clearR, float rdMin, float rdMax) {
+    auto findSite = [&](vec3 near, float searchR, float clearR, float rdMin, float rdMax, float maxRange = 1e9f) {
         vec3 best(0, -1e9f, 0);
         float bestScore = 1e9f;
         for (float rr = 0; rr <= searchR; rr += 20.f)
@@ -3440,7 +3440,7 @@ void World::buildJapan() {
                     lo = std::min(lo, he); hi = std::max(hi, he);
                     ok = he > waterLevel + 1.5f && roadDistAt(e.x, e.z) > 3.f;
                 }
-                if (!ok) continue;
+                if (!ok || hi - lo > maxRange) continue;
                 float score = (hi - lo) + rr * 0.01f;
                 if (score < bestScore) { bestScore = score; best = vec3(q.x, hq, q.z); }
             }
@@ -3540,6 +3540,162 @@ void World::buildJapan() {
             for (int k = 0; k < 6; k++) { float a = k / 6.f * 6.2832f; toro(c + vec3(std::cos(a), 0, std::sin(a)) * 13.f - fw * 3.f); }
             landmarks.push_back({"Kinkaku-ji", c});
             SDL_Log("Japan: Kinkaku-ji at (%.0f, %.0f)", c.x, c.z);
+        }
+    }
+
+    // fox messengers of Inari: white stone, red bib, sitting up on a pedestal
+    auto kitsune = [&](vec3 q, vec3 fw) {
+        q.y = heightAt(q.x, q.z) - 0.05f;
+        vec3 rt = normalize(cross(fw, up));
+        vec4 stone(0.62f, 0.61f, 0.57f, 0), fox(0.88f, 0.86f, 0.8f, 0), red(0.85f, 0.12f, 0.1f, 0);
+        b.box(q + up * 0.7f, vec3(0.55f, 0.7f, 0.55f), stone);
+        b.box(q + up * 1.45f, vec3(0.62f, 0.06f, 0.62f), stone);
+        vec3 o = q + up * 1.5f;
+        b.sphere(o + up * 0.35f - fw * 0.1f, 0.38f, 1, fox);                      // haunches
+        b.tube(o + up * 0.4f, o + up * 1.15f + fw * 0.12f, 0.24f, 0.15f, 8, fox);   // chest and neck
+        b.cone(o + up * 0.85f + fw * 0.12f, 0.27f, 0.32f, 8, red);                  // bib
+        b.sphere(o + up * 1.25f + fw * 0.15f, 0.17f, 1, fox);
+        b.tube(o + up * 1.25f + fw * 0.2f, o + up * 1.18f + fw * 0.48f, 0.08f, 0.03f, 6, fox);  // muzzle
+        b.box(o + up * 1.2f + fw * 0.46f, vec3(0.03f, 0.03f, 0.12f) + rt * 0.08f, vec4(0.85f, 0.65f, 0.2f, 7));  // the key in its mouth
+        for (int k = -1; k <= 1; k += 2) b.cone(o + up * 1.36f + fw * 0.1f + rt * (k * 0.09f), 0.06f, 0.2f, 5, fox);  // ears
+        b.tube(o + up * 0.2f - fw * 0.35f, o + up * 1.0f - fw * 0.55f, 0.14f, 0.2f, 7, fox);  // tail curled up behind
+        pendingTrunks.push_back({q.x, q.z, 0.7f});
+    };
+    // ---- Fushimi Inari Taisha: the vermilion tower gate, the main hall and its foxes, where the
+    // thousand torii of the Okutama Trail begin
+    for (auto& rd : roads) {
+        if (rd.name != "Okutama Trail" || rd.pts.size() < 40) continue;
+        vec3 near = rd.pts[size_t(0.012f * (rd.pts.size() - 1))];
+        vec3 c = findSite(near, 260.f, 18.f, 9.f, 70.f);
+        if (c.y < -1e8f) break;
+        vec3 toRoad = faceRoad(c), away = -toRoad, rt = normalize(cross(away, up));
+        levelDisc(c + away * 14.f, 26.f, 40.f, c.y);
+        vec3 gate = c - away * 6.f;
+        niomon(gate, away);
+        for (int k = -1; k <= 1; k += 2) kitsune(gate - away * 5.f + rt * (k * 5.5f), toRoad);
+        // the main hall: vermilion posts, white walls, a long sweeping copper roof
+        vec3 hc = c + away * 26.f;
+        hc.y = heightAt(hc.x, hc.z);
+        mat4 xf = basis(rt, up, away, hc);
+        vec4 red(0.86f, 0.24f, 0.1f, 0), white(0.94f, 0.92f, 0.87f, 0), roofC(0.25f, 0.3f, 0.28f, 23), stone(0.58f, 0.57f, 0.53f, 0), gold(0.85f, 0.65f, 0.2f, 7);
+        b.box(vec3(0, 0.4f, 0), vec3(12.f, 0.6f, 8.f), stone, &xf);
+        b.box(vec3(0, 3.2f, 1.f), vec3(9.5f, 2.3f, 5.f), white, &xf);
+        for (float x = -10.f; x <= 10.01f; x += 2.5f)
+            for (float z : {-6.5f, 6.f}) {
+                vec3 q = xf.transformPoint(vec3(x, 1.f, z));
+                b.cylinder(q, 0.28f, 4.6f, 10, red);
+            }
+        b.box(vec3(0, 5.75f, 0), vec3(10.5f, 0.3f, 7.f), red, &xf);
+        b.box(vec3(0, 6.15f, 0), vec3(10.8f, 0.2f, 7.3f), vec4(0.55f, 0.13f, 0.06f, 0), &xf);
+        hipRoof(vec3(hc.x, 0, hc.z), away, rt, 11.f, 7.5f, hc.y + 6.3f, 3.8f, roofC);
+        for (int k = -2; k <= 2; k++) {  // lanterns hung along the front eave
+            vec3 l = xf.transformPoint(vec3(k * 3.5f, 5.0f, -7.6f));
+            b.tube(l + up * 0.9f, l + up * 0.35f, 0.01f, 0.01f, 3, gold);
+            b.sphere(l, 0.4f, 1, vec4(1.f, 0.3f, 0.12f, 15));
+        }
+        b.box(vec3(0, 4.6f, -6.6f), vec3(0.5f, 0.7f, 0.08f), vec4(0.06f, 0.06f, 0.07f, 0), &xf);
+        signFitted(b, xf.transformPoint(vec3(0, 4.6f, -6.7f)), -away, 0.45f, 0.65f, SV_INARI, true);
+        for (int k = -1; k <= 1; k += 2) kitsune(hc - away * 11.f + rt * (k * 6.f), toRoad);
+        boxes.push_back({hc.x - 10.f, hc.z - 10.f, hc.x + 10.f, hc.z + 10.f, hc.y + 10.f});
+        for (int k = 0; k < 8; k++) toro(c + away * (2.f + k * 3.f) + rt * ((k % 2) ? 4.5f : -4.5f));
+        for (int k = 0; k < 10; k++) { float a = k / 10.f * 6.2832f; redLamp(hc + vec3(std::cos(a), 0, std::sin(a)) * 15.f); }
+        clearings.push_back(vec3(hc.x, 40.f, hc.z));
+        canalPts.push_back(hc);
+        Rng pr(909);
+        for (int k = 0; k < 4; k++) person(c + away * pr.range(4.f, 16.f) + rt * pr.range(-3.f, 3.f), std::atan2(away.x, away.z), k + 2, k % 2 == 0);
+        landmarks.push_back({"Fushimi Inari Taisha", hc});
+        SDL_Log("Japan: Fushimi Inari Taisha at (%.0f, %.0f)", hc.x, hc.z);
+        break;
+    }
+    // ---- Todai-ji: the Great Buddha Hall, the biggest wooden building in the world, behind its
+    // Great South Gate, with the deer of Nara wandering the approach
+    {
+        vec3 c = findSite(vec3(-4150, 0, 2300), 1400.f, 45.f, 30.f, 150.f, 7.f);
+        if (c.y < -1e8f) c = findSite(vec3(-4150, 0, 2300), 2200.f, 45.f, 30.f, 200.f, 14.f);
+        if (c.y > -1e8f) {
+            float g = c.y;
+            levelDisc(c, 50.f, 80.f, g);
+            vec3 toRoad = faceRoad(c), rt = normalize(cross(toRoad, up));
+            vec4 wood(0.32f, 0.22f, 0.15f, 0), white(0.93f, 0.91f, 0.86f, 0), roofC(0.2f, 0.2f, 0.22f, 23), stone(0.6f, 0.59f, 0.55f, 0), gold(0.92f, 0.72f, 0.25f, 7);
+            mat4 xf = basis(rt, up, -toRoad, vec3(c.x, g, c.z));   // local -z faces the road (the front)
+            b.box(vec3(0, 0.6f, 0), vec3(26.f, 1.f, 21.f), stone, &xf);
+            // lower storey with its skirt roof
+            b.box(vec3(0, 6.f, 0), vec3(22.f, 4.5f, 17.f), white, &xf);
+            for (float x = -22.f; x <= 22.01f; x += 4.4f)
+                for (float z : {-17.1f, 17.1f}) b.box(vec3(x, 6.f, z), vec3(0.35f, 4.5f, 0.12f), wood, &xf);
+            for (float z = -17.f; z <= 17.01f; z += 4.25f)
+                for (float x : {-22.1f, 22.1f}) b.box(vec3(x, 6.f, z), vec3(0.12f, 4.5f, 0.35f), wood, &xf);
+            b.box(vec3(0, 10.4f, 0), vec3(22.2f, 0.25f, 17.2f), wood, &xf);
+            hipRoof(vec3(c.x, 0, c.z), -toRoad, rt, 23.5f, 18.5f, g + 10.6f, 2.0f, roofC);
+            // upper storey and the great hip-and-gable roof
+            b.box(vec3(0, 15.5f, 0), vec3(18.5f, 4.f, 14.f), white, &xf);
+            for (float x = -18.5f; x <= 18.51f; x += 3.7f) b.box(vec3(x, 15.5f, -14.1f), vec3(0.3f, 4.f, 0.12f), wood, &xf);
+            b.box(vec3(0, 19.6f, 0), vec3(18.8f, 0.35f, 14.3f), wood, &xf);
+            hipRoof(vec3(c.x, 0, c.z), -toRoad, rt, 21.f, 16.5f, g + 19.9f, 9.5f, roofC);
+            // the golden shibi on the ridge ends
+            for (int k = -1; k <= 1; k += 2) {
+                vec3 sp = xf.transformPoint(vec3(k * 9.3f, 29.6f, 0));
+                b.tube(sp, sp + up * 2.4f + rt * (k * 0.5f), 0.9f, 0.35f, 8, gold);
+                b.tube(sp + up * 1.0f, sp + up * 2.0f - rt * (k * 1.0f), 0.4f, 0.15f, 6, gold);
+            }
+            // the curved karahafu gable over the front window
+            for (int k = 0; k < 12; k++) {
+                float a0 = k / 12.f * PI, a1 = (k + 1) / 12.f * PI;
+                vec3 p0 = xf.transformPoint(vec3(std::cos(a0) * 6.5f, 19.f + std::sin(a0) * 2.6f, -18.f));
+                vec3 p1 = xf.transformPoint(vec3(std::cos(a1) * 6.5f, 19.f + std::sin(a1) * 2.6f, -18.f));
+                b.tube(p0, p1, 0.45f, 0.45f, 6, roofC);
+                b.tube(p0 + (xf.transformPoint(vec3(0, 0, 0)) - xf.transformPoint(vec3(0, 0, -1))) * 3.f, p1 + (xf.transformPoint(vec3(0, 0, 0)) - xf.transformPoint(vec3(0, 0, -1))) * 3.f, 0.45f, 0.45f, 6, roofC);
+            }
+            b.box(vec3(0, 16.f, -14.15f), vec3(4.5f, 2.2f, 0.06f), vec4(0.08f, 0.07f, 0.06f, 0), &xf);   // the window the Buddha's face shows through
+            b.box(vec3(0, 16.f, -14.2f), vec3(4.7f, 0.12f, 0.06f), gold, &xf);
+            b.box(vec3(0, 4.f, -17.15f), vec3(4.f, 3.5f, 0.06f), vec4(0.1f, 0.08f, 0.06f, 0), &xf);      // great doors
+            // the bronze octagonal lantern in front
+            vec3 lp = xf.transformPoint(vec3(0, 0, -30.f));
+            lp.y = heightAt(lp.x, lp.z);
+            vec4 bronze(0.3f, 0.36f, 0.3f, 7);
+            b.cylinder(lp, 1.2f, 1.2f, 8, stone);
+            b.cylinder(lp + up * 1.2f, 0.35f, 1.6f, 8, bronze);
+            b.cylinder(lp + up * 2.8f, 1.1f, 1.8f, 8, vec4(1.f, 0.82f, 0.55f, 15));
+            b.cone(lp + up * 4.6f, 1.6f, 1.2f, 8, bronze);
+            b.sphere(lp + up * 6.f, 0.35f, 1, bronze);
+            pendingTrunks.push_back({lp.x, lp.z, 1.3f});
+            // the Great South Gate, unpainted wood, on the approach
+            vec3 ng = xf.transformPoint(vec3(0, 0, -62.f));
+            if (roadDistAt(ng.x, ng.z) > 10.f) niomon(ng, -toRoad, vec4(0.4f, 0.29f, 0.2f, 0));
+            vec3 front = xf.transformPoint(vec3(0, 0, -22.f)), approach = xf.transformPoint(vec3(0, 0, -75.f));
+            front.y = g; approach.y = heightAt(approach.x, approach.z);
+            carveLine(approach, front, 4.f, 6.f);
+            pavedStrips.push_back({approach, front, 4.f});
+            // the deer
+            Rng dr(77);
+            vec4 coat(0.55f, 0.38f, 0.22f, 0), belly(0.85f, 0.8f, 0.7f, 0), hoof(0.1f, 0.08f, 0.07f, 0);
+            for (int k = 0; k < 14; k++) {
+                vec3 q = xf.transformPoint(vec3(dr.range(-20.f, 20.f), 0, dr.range(-70.f, -26.f)));
+                if (roadDistAt(q.x, q.z) < 4.f || inBox(q.x, q.z, 1.f)) continue;
+                q.y = heightAt(q.x, q.z);
+                float yaw = dr.range(0.f, 6.28f);
+                vec3 f(std::sin(yaw), 0, std::cos(yaw)), r(f.z, 0, -f.x);
+                vec3 body = q + up * 0.95f;
+                b.tube(body - f * 0.45f, body + f * 0.45f, 0.24f, 0.22f, 8, coat);
+                b.tube(body - f * 0.3f - up * 0.12f, body + f * 0.3f - up * 0.12f, 0.15f, 0.15f, 6, belly);
+                for (int l = 0; l < 4; l++) {
+                    vec3 hip = body + f * ((l & 1) ? 0.35f : -0.35f) + r * ((l & 2) ? 0.12f : -0.12f) - up * 0.1f;
+                    b.tube(hip, vec3(hip.x, q.y, hip.z), 0.05f, 0.03f, 4, coat);
+                    b.sphere(vec3(hip.x, q.y + 0.03f, hip.z), 0.04f, 1, hoof);
+                }
+                bool grazing = dr.f() < 0.4f;
+                vec3 nk = body + f * 0.45f + up * 0.1f, hd = grazing ? nk + f * 0.35f - up * 0.75f : nk + f * 0.15f + up * 0.55f;
+                b.tube(nk, hd, 0.1f, 0.07f, 6, coat);
+                b.tube(hd, hd + f * 0.25f - up * 0.05f, 0.09f, 0.05f, 6, coat);
+                for (int e2 = -1; e2 <= 1; e2 += 2) b.cone(hd + r * (e2 * 0.08f) + up * 0.05f, 0.05f, 0.14f, 4, coat);
+                b.tube(body - f * 0.45f + up * 0.1f, body - f * 0.55f + up * 0.2f, 0.05f, 0.03f, 4, belly);  // tail
+            }
+            boxes.push_back({c.x - 25.f, c.z - 25.f, c.x + 25.f, c.z + 25.f, g + 30.f});
+            clearings.push_back(vec3(c.x, 85.f, c.z));
+            canalPts.push_back(c);
+            for (int k = 0; k < 16; k++) { float a = k / 16.f * 6.2832f; sakuraSpots.push_back(c + vec3(std::cos(a), 0, std::sin(a)) * 46.f); }
+            landmarks.push_back({"Todai-ji", c});
+            SDL_Log("Japan: Todai-ji at (%.0f, %.0f) ground %.0f front (%.2f, %.2f)", c.x, c.z, g, toRoad.x, toRoad.z);
         }
     }
 

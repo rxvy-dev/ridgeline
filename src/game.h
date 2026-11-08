@@ -390,6 +390,7 @@ private:
     int nearHome = -1;                // estate the player is parked at
     int garageHome = -1;              // garage opened from this estate (-1 = festival hub)
     int gpsEstate = -1;
+    int gpsLandmark = -1;
     bool ownsEstate(int i) const { return std::find(ownedEstates.begin(), ownedEstates.end(), i) != ownedEstates.end(); }
     void updateHomes();
     bool homeInteract();

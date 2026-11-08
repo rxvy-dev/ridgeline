@@ -1243,12 +1243,33 @@ void Game::handleAction(Action a) {
         }
         case ST_MAP: {
             int ne = int(events.size());
-            int n = ne + 1 + int(world.estates.size());
+            int nh = int(world.estates.size());
+            int n = ne + 1 + nh + int(world.landmarks.size());
             nav(subSel, n);
             int home = subSel - ne - 1;
+            int lmk = subSel - ne - 1 - nh;
             if (a == A_BACK || a == A_MAP || a == A_PAUSE) state = ST_FREEROAM;
+            else if (a == A_TOGGLE && lmk >= 0) {
+                gpsEvent = -1; gpsHub = false; gpsEstate = -1; gpsLandmark = lmk;
+                toast("GPS route set: " + world.landmarks[lmk].name, vec4(0.8f, 0.45f, 1, 1));
+                gpsTimer = 0;
+                updateGps(0);
+            }
+            else if (a == A_CONFIRM && lmk >= 0) {
+                // fast travel to the nearest road, facing the landmark
+                vec3 lp = world.landmarks[lmk].pos;
+                int ri, si;
+                if (world.nearestRoad(lp, ri, si, 2000.f)) {
+                    vec3 rp = world.roads[ri].pts[si];
+                    vec3 d = lp - rp;
+                    float yaw = std::atan2(d.x, d.z);
+                    enterFreeRoam(rp, yaw);
+                    camYaw = yaw;
+                    toast("Fast travelled to " + world.landmarks[lmk].name, ACCENT);
+                }
+            }
             else if (a == A_TOGGLE) {
-                gpsEvent = -1; gpsHub = false; gpsEstate = -1;
+                gpsEvent = -1; gpsHub = false; gpsEstate = -1; gpsLandmark = -1;
                 if (subSel < ne) { gpsEvent = subSel; toast("GPS route set: " + events[subSel].name, vec4(0.8f, 0.45f, 1, 1)); }
                 else if (home < 0) { gpsHub = true; toast("GPS route set: Festival Hub", vec4(0.8f, 0.45f, 1, 1)); }
                 else { gpsEstate = home; toast("GPS route set: " + world.estates[home].name, vec4(0.8f, 0.45f, 1, 1)); }
@@ -2772,6 +2793,7 @@ void Game::updateGps(float dt) {
     int target = -1;
     if (gpsHub) { to = world.hubPos; target = -2; }
     else if (gpsEstate >= 0 && gpsEstate < int(world.estates.size())) { to = world.estates[gpsEstate].spawn; target = -3; }
+    else if (gpsLandmark >= 0 && gpsLandmark < int(world.landmarks.size())) { to = world.landmarks[gpsLandmark].pos; target = -4; }
     else if (gpsEvent >= 0 && gpsEvent < int(events.size())) { to = events[gpsEvent].markerPos; target = gpsEvent; }
     else {
         // auto: nearest event not yet won
@@ -2785,10 +2807,11 @@ void Game::updateGps(float dt) {
         if (target < 0) { gps.path.clear(); gpsShown = -1; return; }
     }
     vec3 d = to - from;
-    if (d.x * d.x + d.z * d.z < 30.f * 30.f) {
-        if (gpsHub || gpsEvent >= 0 || gpsEstate >= 0) toast("Destination reached", vec4(0.8f, 0.45f, 1, 1));
+    if (d.x * d.x + d.z * d.z < (target == -4 ? 70.f * 70.f : 30.f * 30.f)) {
+        if (gpsHub || gpsEvent >= 0 || gpsEstate >= 0 || gpsLandmark >= 0) toast("Destination reached", vec4(0.8f, 0.45f, 1, 1));
         gpsHub = false;
         gpsEstate = -1;
+        gpsLandmark = -1;
         gpsEvent = -1;
         gps.path.clear();
         gpsShown = -1;
@@ -3414,10 +3437,12 @@ void Game::drawMap() {
         vec2 lab = toMap(cp[cp.size() / 2]);
         hud.text(lab.x, lab.y + 8 * u, 13 * u, "Sakura Canal", vec4(0.75f, 0.9f, 1.f, 0.95f), 1, false);
     }
-    // landmarks: a small gold diamond and the name
-    for (auto& lm : world.landmarks) {
+    // landmarks: a small gold diamond and the name (bigger when picked in the list)
+    for (int li = 0; li < int(world.landmarks.size()); li++) {
+        const auto& lm = world.landmarks[li];
         vec2 q = toMap(lm.pos);
-        float d = 5.f * u;
+        bool lsel = subSel == int(events.size()) + 1 + int(world.estates.size()) + li;
+        float d = (lsel ? 9.f : 5.f) * u;
         hud.triangle(q + vec2(0, -d - u), q + vec2(d + u, 0), q + vec2(-d - u, 0), vec4(0, 0, 0, 0.8f));
         hud.triangle(q + vec2(0, d + u), q + vec2(-d - u, 0), q + vec2(d + u, 0), vec4(0, 0, 0, 0.8f));
         hud.triangle(q + vec2(0, -d), q + vec2(d, 0), q + vec2(-d, 0), vec4(1.f, 0.82f, 0.35f, 1));
@@ -3448,6 +3473,32 @@ void Game::drawMap() {
         hud.triangle(vec2(q.x - s * 0.98f, q.y - s * 0.3f), vec2(q.x + s * 0.98f, q.y - s * 0.3f), vec2(q.x, q.y - s * 1.2f), c);
         if (sel) hud.text(q.x + 16 * u, q.y - 12 * u, 16 * u, world.estates[i].name, WHITE);
     }
+    // legend: what each colour on the map means
+    {
+        float gx = mx + 14 * u, gy = my + S - 14 * u - 9 * 22 * u, rowH = 22 * u;
+        hud.rect(gx - 8 * u, gy - 10 * u, 200 * u, 9 * rowH + 12 * u, vec4(0, 0, 0, 0.55f));
+        auto dotRow = [&](int k, vec4 col, const char* label) {
+            hud.circle(vec2(gx + 6 * u, gy + k * rowH + 8 * u), 6 * u, vec4(0.05f, 0.05f, 0.05f, 1), 12);
+            hud.circle(vec2(gx + 6 * u, gy + k * rowH + 8 * u), 4.5f * u, col, 12);
+            hud.text(gx + 20 * u, gy + k * rowH, 14 * u, label, WHITE, 0, false);
+        };
+        dotRow(0, eventColor(EV_CIRCUIT), "Circuit race");
+        dotRow(1, eventColor(EV_SPRINT), "Sprint race");
+        dotRow(2, eventColor(EV_CROSS), "Cross country");
+        dotRow(3, eventColor(EV_DRIFT), "Drift zone");
+        dotRow(4, vec4(1.f, 0.25f, 0.55f, 1), "Festival hub");
+        dotRow(5, saleCol, "House for sale");
+        dotRow(6, homeCol, "Your house");
+        {
+            vec2 q(gx + 6 * u, gy + 7 * rowH + 8 * u);
+            float dd = 6 * u;
+            hud.triangle(q + vec2(0, -dd), q + vec2(dd, 0), q + vec2(-dd, 0), vec4(1.f, 0.82f, 0.35f, 1));
+            hud.triangle(q + vec2(0, dd), q + vec2(-dd, 0), q + vec2(dd, 0), vec4(1.f, 0.82f, 0.35f, 1));
+            hud.text(gx + 20 * u, gy + 7 * rowH, 14 * u, "Landmark", WHITE, 0, false);
+        }
+        hud.line(vec2(gx, gy + 8 * rowH + 8 * u), vec2(gx + 13 * u, gy + 8 * rowH + 8 * u), 5 * u, vec4(0.25f, 0.55f, 0.75f, 1.f));
+        hud.text(gx + 20 * u, gy + 8 * rowH, 14 * u, "Water / canal", WHITE, 0, false);
+    }
     // player
     vec2 pp = toMap(player.car.pos);
     vec2 f(std::sin(player.car.yaw), -std::cos(player.car.yaw));
@@ -3458,7 +3509,7 @@ void Game::drawMap() {
     float lx = mx + S + 40 * u, lw = hud.w - lx - 40 * u;
     hud.text(lx, my, 30 * u, "WORLD MAP", WHITE);
     hud.rect(lx, my + 40 * u, 70 * u, 3 * u, ACCENT);
-    int total = int(events.size()) + 1 + int(world.estates.size());
+    int total = int(events.size()) + 1 + int(world.estates.size()) + int(world.landmarks.size());
     int rows = std::max(4, int((S - 190 * u) / (34 * u)));
     int first = std::clamp(subSel - rows / 2, 0, std::max(0, total - rows));
     if (first > 0) hud.text(lx + lw * 0.5f, my + 46 * u - 16 * u, 12 * u, "^", DIM, 1, false);
@@ -3467,7 +3518,15 @@ void Game::drawMap() {
         float ry = my + 50 * u + (i - first) * 34 * u;
         bool sel = i == subSel;
         if (sel) hud.rect(lx - 10 * u, ry - 4 * u, lw, 32 * u, vec4(ACCENT.x, ACCENT.y, ACCENT.z, 0.85f));
-        if (i > int(events.size())) {
+        if (i > int(events.size()) + int(world.estates.size())) {
+            const World::Landmark& lm = world.landmarks[i - int(events.size()) - 1 - int(world.estates.size())];
+            vec2 q(lx + 4 * u, ry + 11 * u);
+            float dd = 6 * u;
+            hud.triangle(q + vec2(0, -dd), q + vec2(dd, 0), q + vec2(-dd, 0), vec4(1.f, 0.82f, 0.35f, 1));
+            hud.triangle(q + vec2(0, dd), q + vec2(-dd, 0), q + vec2(dd, 0), vec4(1.f, 0.82f, 0.35f, 1));
+            hud.text(lx + 18 * u, ry, 17 * u, lm.name, WHITE, 0, false);
+            hud.text(lx + lw - 20 * u, ry, 15 * u, "LANDMARK", vec4(1.f, 0.82f, 0.35f, 1), 2, false);
+        } else if (i > int(events.size())) {
             int h = i - int(events.size()) - 1;
             const Estate& e = world.estates[h];
             bool own = ownsEstate(h);
@@ -3491,6 +3550,10 @@ void Game::drawMap() {
         std::snprintf(buf, sizeof(buf), "%s  |  %.1f km  |  1st prize CR %s", eventTypeName(e.type), e.totalLength() / 1000.f, fmtThousands(e.prize[0]).c_str());
         hud.text(lx, iy, 15 * u, buf, ACCENT, 0, false);
         hud.text(lx, iy + 24 * u, 15 * u, e.blurb, DIM, 0, false);
+    } else if (subSel > int(events.size()) + int(world.estates.size())) {
+        float iy = my + 60 * u + (std::min(total, rows) + 1) * 34 * u;
+        hud.text(lx, iy, 15 * u, "LANDMARK", vec4(1.f, 0.82f, 0.35f, 1), 0, false);
+        hud.text(lx, iy + 24 * u, 15 * u, "ENTER to fast travel there, X for a GPS route.", DIM, 0, false);
     } else if (subSel > int(events.size())) {
         int h = subSel - int(events.size()) - 1;
         float iy = my + 60 * u + (std::min(total, rows) + 1) * 34 * u;

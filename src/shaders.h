@@ -66,12 +66,21 @@ float petalCover(vec3 p, float speckScale){
     if (m < 0.01) return 0.0;
     // a soft carpet where the blossom is thickest, and loose petals scattered round it:
     // one petal per small cell, at a random spot, round and soft-edged
-    vec2 q = p.xz * speckScale;
-    vec2 id = floor(q), f = fract(q);
-    vec3 h3 = fract(vec3(id.xyx) * 0.1031); h3 += dot(h3, h3.yzx + 33.33);
-    vec2 r = fract((h3.xx + h3.yz) * h3.zy);
-    float d = length((f - (0.2 + 0.6 * r)) * vec2(1.0, 1.6));
-    float petal = (1.0 - smoothstep(0.14, 0.26, d)) * step(0.3, fract(r.x * 7.31 + r.y * 3.17));
+    // two staggered layers of petals, each cell holding one at a random spot, size and tilt,
+    // so they scatter loosely instead of lining up in a grid
+    float petal = 0.0;
+    for (int L = 0; L < 2; L++) {
+        vec2 q = p.xz * speckScale * (L == 0 ? 1.0 : 1.37) + (L == 0 ? vec2(0.0) : vec2(0.37, 0.71));
+        vec2 id = floor(q), f = fract(q);
+        vec3 h3 = fract(vec3(id.xyx) * 0.1031 + float(L) * 0.37); h3 += dot(h3, h3.yzx + 33.33);
+        vec2 r = fract((h3.xx + h3.yz) * h3.zy);
+        float ang = r.x * 6.2832, cs = cos(ang), sn2 = sin(ang);
+        vec2 d = f - (0.15 + 0.7 * r);
+        d = vec2(cs * d.x - sn2 * d.y, sn2 * d.x + cs * d.y) * vec2(1.0, 1.7);
+        float size = 0.1 + 0.14 * fract(r.y * 13.7);
+        float here = step(0.45, fract(r.x * 7.31 + r.y * 3.17));
+        petal = max(petal, (1.0 - smoothstep(size * 0.6, size, length(d))) * here);
+    }
     float far = smoothstep(18.0, 45.0, length(p - uCamPos));
     float speck = mix(petal, 0.4, far);  // far away the dots blend into an even blush
     return clamp(smoothstep(0.25, 0.9, m) * 0.7 + m * speck, 0.0, 1.0);
@@ -599,7 +608,7 @@ void main(){
         spec = mix(spec, 0.7, w); gloss = mix(gloss, 160.0, w);
         gloss = mix(gloss, 1200.0, puddle);
     }
-    c = mix(c, kPetal, petalCover(p, 7.0) * 0.7);  // petals blown across the asphalt
+    c = mix(c, kPetal, petalCover(p, 7.0) * 0.9);  // petals blown across the asphalt
     vec3 col = lighting(c, nn, sh);
     vec3 H = normalize(V + uSunDir);
     col += uSunColor * pow(max(dot(nn, H), 0.0), gloss) * spec * sh;
