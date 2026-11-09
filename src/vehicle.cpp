@@ -196,7 +196,8 @@ void Vehicle::update(float dt, const World& w, const Controls& in) {
             // traction control: keep the driven tyres just under their grip limit,
             // and back off further when the tyres are already working hard sideways
             float latF = std::fabs(tyreCurve(alphaF)), latR = std::fabs(tyreCurve(alphaR));
-            float capF = muF * effF * (0.92f - 0.45f * latF), capR = muR * effR * (0.92f - 0.45f * latR);
+            float drifting = smoothstepf(0.12f, 0.3f, std::fabs(alphaR)) * smoothstepf(0.3f, 0.7f, throttle);
+            float capF = muF * effF * (0.92f - 0.45f * latF), capR = muR * effR * (0.92f - 0.45f * latR * (1.f - drifting));
             float pre = std::fabs(driveF) + std::fabs(driveR);
             driveF = clampf(driveF, -capF, capF);
             if (handbrake < 0.1f) driveR = clampf(driveR, -capR, capR);
@@ -226,13 +227,20 @@ void Vehicle::update(float dt, const World& w, const Controls& in) {
         float FyF = -maxF * tyreCurve(alphaF);
         float FyR = -maxR * tyreCurve(alphaR);
         float availF = std::sqrt(std::max(maxF * maxF - FxF * FxF, 0.f));
-        float availR = std::sqrt(std::max(maxR * maxR - FxR * FxR * 0.85f, 0.f));
         FyF = clampf(FyF, -availF, availF);
-        FyR = clampf(FyR, -availR, availR);
-
-        // a sliding (locked or spinning) tyre has much less sideways grip
-        if (spinF > 0.02f) FyF *= 0.55f;
-        if (spinR > 0.02f) FyR *= 0.6f;
+        if (spinF > 0.02f) FyF *= 0.55f;  // a locked or spinning front washes out
+        // rears: one friction circle shared between drive and side grip. When they spin (throttle in a
+        // drift) the force follows the slip of the contact patch - mostly forward along the car, the
+        // rest against the slide - so holding the throttle drives the car out along its nose
+        {
+            float demX = (FxR + (spinR > 0.f ? FxR * spinR : 0.f)) / std::max(maxR, 1.f);   // asked-for drive, spin included
+            float demY = -tyreCurve(alphaR);
+            float len = std::sqrt(demX * demX + demY * demY);
+            float k = spinR > 0.02f ? 0.92f : 1.f;   // kinetic friction is a touch below peak
+            if (len > 1.f) { demX /= len; demY /= len; }
+            FxR = demX * maxR * k;
+            FyR = demY * maxR * k;
+        }
         float cd = std::cos(delta), sd = std::sin(delta);
         float FxFc = FxF * cd - FyF * sd;
         float FyFc = FxF * sd + FyF * cd;
@@ -265,6 +273,21 @@ void Vehicle::update(float dt, const World& w, const Controls& in) {
     absLight = std::max(0.f, absLight - dt * 3.f);
     scLight = std::max(0.f, scLight - dt * 3.f);
     vec3 accel = fwd * (FxTot / m) + rgt * (FyTot / m);
+    if (grounded && throttle > 0.05f && gear > 0) {
+        vec3 vh2(vel.x, 0, vel.z);
+        float sp = length(vh2);
+        float vF2 = dot(vh2, fwd), vR2 = dot(vh2, rgt);
+        float sa = std::atan2(vR2, std::max(std::fabs(vF2), 0.1f));
+        if (sp > 4.f && vF2 > 0.f && std::fabs(sa) > 0.08f) {
+            float driveK = s.drive == FWD ? 1.5f : s.drive == AWD ? 1.25f : 1.f;
+            float rate = 1.6f * throttle * driveK * clampf(mu / 1.1f, 0.4f, 1.2f) * contact;   // radians per second
+            float turn = std::min(std::fabs(sa), rate * dt) * -signf(sa);
+            float cs = std::cos(turn), sn = std::sin(turn);
+            // rotate the horizontal velocity towards where the car is pointing
+            vec3 nf = fwd * (vF2 * cs - vR2 * sn) + rgt * (vF2 * sn + vR2 * cs);
+            vel.x = nf.x; vel.z = nf.z;
+        }
+    }
     vel.x += accel.x * dt;
     vel.z += accel.z * dt;
     yawRate += torque / inertia * dt;
